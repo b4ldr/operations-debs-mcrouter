@@ -1,0 +1,5 @@
+mcrouter (0.24.0-1) unstable; urgency=medium
+
+  * Initial release (Closes: #nnnn)  <nnnn is the bug number of your ITP>
+
+ -- Giuseppe Lavagetto <glavagetto@wikimedia.org>  Fri, 06 May 2016 12:08:32 +0200

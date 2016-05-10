@@ -1,0 +1,2 @@
+statically-link-fb-libraries.patch
+use-gnu++14-std.patch
