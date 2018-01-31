@@ -1,3 +1,9 @@
+mcrouter (0.24.0-2) unstable; urgency=medium
+
+  * Move "file:" prefix into CONFIG_FILE itself to avoid interpolation problems
+
+ -- Aaron Schulz <aschulz@wikimedia.org>  Tue, 30 Jan 2018 22:12:41 -0800
+
 mcrouter (0.24.0-1) unstable; urgency=medium
 
   * Initial release (Closes: #nnnn)  <nnnn is the bug number of your ITP>
