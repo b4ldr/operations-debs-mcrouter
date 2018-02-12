@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2014-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,30 +16,25 @@
 
 #include <thrift/lib/cpp/transport/THeader.h>
 
+#include <folly/compression/Compression.h>
 #include <folly/io/IOBuf.h>
 #include <folly/io/Cursor.h>
 #include <folly/Conv.h>
+#include <folly/ExceptionString.h>
 #include <folly/String.h>
+#include <folly/Format.h>
 #include <thrift/lib/cpp/TApplicationException.h>
 #include <thrift/lib/cpp/protocol/TProtocolTypes.h>
 #include <thrift/lib/cpp/transport/TBufferTransports.h>
 #include <thrift/lib/cpp/util/VarintUtils.h>
 #include <thrift/lib/cpp/concurrency/Thread.h>
-#include "snappy.h"
 #include <thrift/lib/cpp/protocol/TBinaryProtocol.h>
 #include <thrift/lib/cpp/protocol/TCompactProtocol.h>
 #include <thrift/lib/cpp/util/THttpParser.h>
 
-#ifdef HAVE_QUICKLZ
-extern "C" {
-#include <quicklz.h> // nolint
-}
-#endif
-
 #include <algorithm>
 #include <cassert>
 #include <string>
-#include <zlib.h>
 
 using std::map;
 using std::shared_ptr;
@@ -63,7 +58,7 @@ const string THeader::PRIORITY_HEADER = "thrift_priority";
 const string& THeader::CLIENT_TIMEOUT_HEADER = *(new string("client_timeout"));
 const string THeader::QUEUE_TIMEOUT_HEADER = "queue_timeout";
 
-static const string THRIFT_AUTH_HEADER = "thrift_auth";
+static constexpr StringPiece THRIFT_AUTH_HEADER = "thrift_auth";
 
 THeader::THeader(int options)
   : queue_(new folly::IOBufQueue)
@@ -97,11 +92,15 @@ template<template <class BaseProt> class ProtocolClass,
 unique_ptr<IOBuf> THeader::removeUnframed(
     IOBufQueue* queue,
     size_t& needed) {
-  const_cast<IOBuf*>(queue->front())->coalesce();
+  auto buf = queue->move();
+  auto range = buf->coalesce();
+  queue->append(std::move(buf));
 
   // Test skip using the protocol to detect the end of the message
-  TMemoryBuffer memBuffer(const_cast<uint8_t*>(queue->front()->data()),
-                          queue->front()->length(), TMemoryBuffer::OBSERVE);
+  TMemoryBuffer memBuffer(
+      const_cast<uint8_t*>(range.begin()),
+      range.size(),
+      TMemoryBuffer::OBSERVE);
   protoId_ = ProtocolID;
   ProtocolClass<TBufferBase> proto(&memBuffer);
   uint32_t msgSize = 0;
@@ -137,7 +136,7 @@ unique_ptr<IOBuf> THeader::removeHttpClient(IOBufQueue* queue, size_t& needed) {
   parser.setDataBuffer(&memBuffer);
   const IOBuf* headBuf = queue->front();
   const IOBuf* nextBuf = headBuf;
-  bool success = false;
+  uint32_t bytesParsed = 0;
   do {
     auto remainingDataLen = nextBuf->length();
     size_t offset = 0;
@@ -146,26 +145,23 @@ unique_ptr<IOBuf> THeader::removeHttpClient(IOBufQueue* queue, size_t& needed) {
       void* parserBuf;
       size_t parserBufLen;
       parser.getReadBuffer(&parserBuf, &parserBufLen);
-      size_t toCopyLen = std::min(parserBufLen, remainingDataLen);
+      size_t toCopyLen = std::min(parserBufLen, size_t(remainingDataLen));
       memcpy(parserBuf, ioBufData + offset, toCopyLen);
-      success |= parser.readDataAvailable(toCopyLen);
+      bytesParsed += toCopyLen;
+      if (parser.readDataAvailable(toCopyLen)) {
+        queue->trimStart(bytesParsed - parser.getUnparsedDataLen());
+        readHeaders_ = parser.moveReadHeaders();
+        return memBuffer.cloneBufferAsIOBuf();
+      }
       remainingDataLen -= toCopyLen;
       offset += toCopyLen;
     } while (remainingDataLen > 0);
     nextBuf = nextBuf->next();
   } while (nextBuf != headBuf);
-  if (!success) {
-    // We don't have full data yet and we don't know how many bytes we need,
-    // but it is at least 1.
-    needed = parser.getMinBytesRequired();
-    return nullptr;
-  }
-
-  // Empty the queue
-  queue->move();
-  readHeaders_ = parser.moveReadHeaders();
-
-  return memBuffer.cloneBufferAsIOBuf();
+  // We don't have full data yet and we don't know how many bytes we need,
+  // but it is at least 1.
+  needed = parser.getMinBytesRequired();
+  return nullptr;
 }
 
 unique_ptr<IOBuf> THeader::removeFramed(uint32_t sz, IOBufQueue* queue) {
@@ -175,7 +171,8 @@ unique_ptr<IOBuf> THeader::removeFramed(uint32_t sz, IOBufQueue* queue) {
 }
 
 folly::Optional<CLIENT_TYPE> THeader::analyzeFirst32bit(uint32_t w) {
-  if ((w & TBinaryProtocol::VERSION_MASK) == TBinaryProtocol::VERSION_1) {
+  if ((w & TBinaryProtocol::VERSION_MASK) ==
+      static_cast<uint32_t>(TBinaryProtocol::VERSION_1)) {
     return THRIFT_UNFRAMED_DEPRECATED;
   } else if (compactFramed(w)) {
     return THRIFT_UNFRAMED_COMPACT_DEPRECATED;
@@ -190,7 +187,8 @@ folly::Optional<CLIENT_TYPE> THeader::analyzeFirst32bit(uint32_t w) {
 }
 
 CLIENT_TYPE THeader::analyzeSecond32bit(uint32_t w) {
-  if ((w & TBinaryProtocol::VERSION_MASK) == TBinaryProtocol::VERSION_1) {
+  if ((w & TBinaryProtocol::VERSION_MASK) ==
+      static_cast<uint32_t>(TBinaryProtocol::VERSION_1)) {
     return THRIFT_FRAMED_DEPRECATED;
   }
   if (compactFramed(w)) {
@@ -253,6 +251,10 @@ unique_ptr<IOBuf> THeader::removeHeader(
   IOBufQueue* queue,
   size_t& needed,
   StringToStringMap& persistentReadHeaders) {
+  if (!queue || queue->empty()) {
+    needed = 4;
+    return nullptr;
+  }
   Cursor c(queue->front());
   size_t remaining = queue->front()->computeChainDataLength();
   size_t frameSizeBytes = 4;
@@ -369,7 +371,7 @@ unique_ptr<IOBuf> THeader::removeHeader(
   buf = readHeaderFormat(queue->split(sz), persistentReadHeaders);
 
   // auth client?
-  auto auth_header = getHeaders().find(THRIFT_AUTH_HEADER);
+  auto auth_header = getHeaders().find(THRIFT_AUTH_HEADER.str());
 
   // Correct client type if needed
   if (auth_header != getHeaders().end()) {
@@ -384,9 +386,13 @@ unique_ptr<IOBuf> THeader::removeHeader(
 }
 
 static string getString(RWPrivateCursor& c, size_t sz) {
-  char strdata[sz];
-  c.pull(strdata, sz);
-  string str(strdata, sz);
+  if (!c.canAdvance(sz)) {
+   throw TTransportException(TTransportException::CORRUPTED_DATA,
+     folly::stringPrintf("String size %zu is larger than available %zu bytes",
+       sz, c.totalLength()));
+  }
+  string str(sz, '\0');
+  c.pull(&str[0], sz);
   return str;
 }
 
@@ -500,117 +506,62 @@ unique_ptr<IOBuf> THeader::readHeaderFormat(
   return buf;
 }
 
+static unique_ptr<IOBuf> decompressCodec(
+    IOBuf const& buf,
+    folly::io::CodecType codec) {
+  try {
+    return folly::io::getCodec(codec)->uncompress(&buf);
+  } catch (std::exception const& e) {
+    throw TApplicationException(
+        TApplicationException::MISSING_RESULT,
+        folly::exceptionStr(e).toStdString());
+  }
+}
+
 unique_ptr<IOBuf> THeader::untransform(
   unique_ptr<IOBuf> buf, std::vector<uint16_t>& readTrans) {
   for (vector<uint16_t>::const_reverse_iterator it = readTrans.rbegin();
        it != readTrans.rend(); ++it) {
+    using folly::io::CodecType;
     const uint16_t transId = *it;
 
-    if (transId == ZLIB_TRANSFORM) {
-      size_t bufSize = 1024;
-      unique_ptr<IOBuf> out;
-
-      z_stream stream;
-      int err;
-
-      // Setting these to 0 means use the default free/alloc functions
-      stream.zalloc = (alloc_func)0;
-      stream.zfree = (free_func)0;
-      stream.opaque = (voidpf)0;
-      err = inflateInit(&stream);
-      if (err != Z_OK) {
+    switch (transId) {
+      case ZLIB_TRANSFORM:
+        buf = decompressCodec(*buf, CodecType::ZLIB);
+        break;
+      case SNAPPY_TRANSFORM:
+        if (THRIFT_HAVE_LIBSNAPPY > 0) {
+          assert(folly::io::hasCodec(CodecType::SNAPPY));
+          buf = decompressCodec(*buf, CodecType::SNAPPY);
+        }
+        break;
+      case ZSTD_TRANSFORM:
+        buf = decompressCodec(*buf, CodecType::ZSTD);
+        break;
+      case QLZ_TRANSFORM:
         throw TApplicationException(TApplicationException::MISSING_RESULT,
-                                    "Error while zlib inflate Init");
-      }
-      {
-        SCOPE_EXIT { err = inflateEnd(&stream); };
-        do {
-          if (nullptr == buf) {
-            throw TApplicationException(TApplicationException::MISSING_RESULT,
-                "Not enough zlib data in message");
-          }
-          stream.next_in = buf->writableData();
-          stream.avail_in = buf->length();
-          do {
-            unique_ptr<IOBuf> tmp(IOBuf::create(bufSize));
-
-            stream.next_out = tmp->writableData();
-            stream.avail_out = bufSize;
-            err = inflate(&stream, Z_NO_FLUSH);
-            if (err == Z_STREAM_ERROR ||
-                err == Z_DATA_ERROR ||
-                err == Z_MEM_ERROR) {
-              throw TApplicationException(TApplicationException::MISSING_RESULT,
-                  "Error while zlib inflate");
-            }
-            tmp->append(bufSize - stream.avail_out);
-            if (out) {
-              // Add buffer to end (circular list, same as prepend)
-              out->prependChain(std::move(tmp));
-            } else {
-              out = std::move(tmp);
-            }
-          } while (stream.avail_out == 0);
-          // try the next buffer
-          buf = buf->pop();
-        } while (err != Z_STREAM_END);
-      }
-      if (err != Z_OK) {
+                                    "QuickLZ is not supported anymore due to a"
+                                    " critical flaw in the library");
+      default:
         throw TApplicationException(TApplicationException::MISSING_RESULT,
-                                    "Error while zlib inflateEnd");
-      }
-      buf = std::move(out);
-    } else if (transId == SNAPPY_TRANSFORM) {
-      buf->coalesce(); // required for snappy uncompression
-      size_t uncompressed_sz;
-      bool result = snappy::GetUncompressedLength((char*)buf->data(),
-                                                  buf->length(),
-                                                  &uncompressed_sz);
-      unique_ptr<IOBuf> out(IOBuf::create(uncompressed_sz));
-      out->append(uncompressed_sz);
-
-      result = snappy::RawUncompress((char*)buf->data(), buf->length(),
-                                     (char*)out->writableData());
-      if (!result) {
-        throw TApplicationException(TApplicationException::MISSING_RESULT,
-                                    "snappy uncompress failure");
-      }
-
-      buf = std::move(out);
-    } else if (transId == QLZ_TRANSFORM) {
-      buf->coalesce(); // probably needed for uncompression
-      const char *src = (const char *)buf->data();
-      size_t length = buf->length();
-#ifdef HAVE_QUICKLZ
-      // according to QLZ spec, the size info is stored in first 9 bytes
-      if (length < 9 || qlz_size_compressed(src) != length) {
-        throw TApplicationException(TApplicationException::MISSING_RESULT,
-                                    "Error in qlz decompress: bad size");
-      }
-
-      size_t uncompressed_sz = qlz_size_decompressed(src);
-      const unique_ptr<qlz_state_decompress> state(new qlz_state_decompress);
-
-      unique_ptr<IOBuf> out(IOBuf::create(uncompressed_sz));
-      out->append(uncompressed_sz);
-
-      bool success = (qlz_decompress(src,
-                                     out->writableData(),
-                                     state.get()) == uncompressed_sz);
-      if (!success) {
-        throw TApplicationException(TApplicationException::MISSING_RESULT,
-                                    "Error in qlz decompress");
-      }
-      buf = std::move(out);
-#endif
-
-    } else {
-      throw TApplicationException(TApplicationException::MISSING_RESULT,
-                                "Unknown transform");
+                              folly::sformat("Unknown transform: {}", transId));
     }
   }
 
   return buf;
+}
+
+static unique_ptr<IOBuf> compressCodec(
+    IOBuf const& buf,
+    folly::io::CodecType codec,
+    int level = folly::io::COMPRESSION_LEVEL_DEFAULT) {
+  try {
+    return folly::io::getCodec(codec, level)->compress(&buf);
+  } catch (std::exception const& e) {
+    throw TTransportException(
+        TTransportException::CORRUPTED_DATA,
+        folly::exceptionStr(e).toStdString());
+  }
 }
 
 unique_ptr<IOBuf> THeader::transform(unique_ptr<IOBuf> buf,
@@ -620,131 +571,39 @@ unique_ptr<IOBuf> THeader::transform(unique_ptr<IOBuf> buf,
 
   for (vector<uint16_t>::iterator it = writeTrans.begin();
        it != writeTrans.end(); ) {
+    using folly::io::CodecType;
     const uint16_t transId = *it;
 
-    if (transId == ZLIB_TRANSFORM) {
-      if (dataSize < minCompressBytes) {
-        it = writeTrans.erase(it);
-        continue;
-      }
-      size_t bufSize = 1024;
-      unique_ptr<IOBuf> out;
-
-      z_stream stream;
-      int err;
-
-      stream.next_in = (unsigned char*)buf->data();
-      stream.avail_in = buf->length();
-
-      stream.zalloc = (alloc_func)0;
-      stream.zfree = (free_func)0;
-      stream.opaque = (voidpf)0;
-      err = deflateInit(&stream, Z_DEFAULT_COMPRESSION);
-      if (err != Z_OK) {
-        throw TTransportException(TTransportException::CORRUPTED_DATA,
-                                  "Error while zlib deflateInit");
-      }
-
-      // Loop until deflate() tells us it's done writing all output
-      while (err != Z_STREAM_END) {
-        // Create a new output chunk
-        unique_ptr<IOBuf> tmp(IOBuf::create(bufSize));
-        stream.next_out = tmp->writableData();
-        stream.avail_out = bufSize;
-
-        // Loop while the current output chunk still has space, call deflate to
-        // try and fill it
-        while (stream.avail_out > 0) {
-          // When providing the last bit of input data and thereafter, pass
-          // Z_FINISH to tell zlib it should flush out remaining compressed
-          // data and finish up with an end marker at the end of the output
-          // stream
-          int flush = (buf && buf->isChained()) ? Z_NO_FLUSH : Z_FINISH;
-          err = deflate(&stream, flush);
-          if (err == Z_STREAM_ERROR) {
-            throw TTransportException(TTransportException::CORRUPTED_DATA,
-                                      "Error while zlib deflate");
-          }
-
-          if (stream.avail_in == 0) {
-            if (buf) {
-              buf = buf->pop();
-            }
-            if (!buf) {
-              // No more input chunks left
-              break;
-            }
-            // Prvoide the next input chunk to zlib
-            stream.next_in = (unsigned char*) buf->data();
-            stream.avail_in = buf->length();
-          }
+    switch (transId) {
+      case ZLIB_TRANSFORM:
+        if (dataSize < minCompressBytes) {
+          it = writeTrans.erase(it);
+          continue;
         }
-
-        // Tell the tmp IOBuf we wrote some data into it
-        tmp->append(bufSize - stream.avail_out);
-        if (out) {
-          // Add the IOBuf to the end of the chain
-          out->prependChain(std::move(tmp));
-        } else {
-          // This is the first IOBuf, so start the chain
-          out = std::move(tmp);
+        buf = compressCodec(*buf, CodecType::ZLIB);
+        break;
+      case SNAPPY_TRANSFORM:
+        if (THRIFT_HAVE_LIBSNAPPY <= 0 || dataSize < minCompressBytes) {
+          it = writeTrans.erase(it);
+          continue;
         }
-      }
-
-      err = deflateEnd(&stream);
-      if (err != Z_OK) {
+        assert(folly::io::hasCodec(CodecType::SNAPPY));
+        buf = compressCodec(*buf, CodecType::SNAPPY);
+        break;
+      case ZSTD_TRANSFORM:
+        if (dataSize < minCompressBytes) {
+          it = writeTrans.erase(it);
+          continue;
+        }
+        buf = compressCodec(*buf, CodecType::ZSTD, 1);
+        break;
+      case QLZ_TRANSFORM:
         throw TTransportException(TTransportException::CORRUPTED_DATA,
-                                  "Error while zlib deflateEnd");
-      }
-
-      buf = std::move(out);
-    } else if (transId == SNAPPY_TRANSFORM) {
-      if (dataSize < minCompressBytes) {
-        it = writeTrans.erase(it);
-        continue;
-      }
-
-      buf->coalesce(); // required for snappy compression
-
-      // Check that we have enough space
-      size_t maxCompressedLength = snappy::MaxCompressedLength(buf->length());
-      unique_ptr<IOBuf> out(IOBuf::create(maxCompressedLength));
-
-      size_t compressed_sz;
-      snappy::RawCompress((char*)buf->data(), buf->length(),
-                          (char*)out->writableData(), &compressed_sz);
-      out->append(compressed_sz);
-      buf = std::move(out);
-    } else if (transId == QLZ_TRANSFORM) {
-      if (dataSize < minCompressBytes) {
-        it = writeTrans.erase(it);
-        continue;
-      }
-
-      // max is 400B greater than uncompressed size based on QuickLZ spec
-      size_t maxCompressedLength = buf->length() + 400;
-      unique_ptr<IOBuf> out(IOBuf::create(maxCompressedLength));
-
-#ifdef HAVE_QUICKLZ
-      const unique_ptr<qlz_state_compress> state(new qlz_state_compress);
-
-      const char *src = (const char *)buf->data();
-      char *dst = (char *)out->writableData();
-
-      size_t compressed_sz = qlz_compress(
-        src, dst, buf->length(), state.get());
-
-      if (compressed_sz > maxCompressedLength) {
+                                  "QuickLZ is not supported anymore due to a"
+                                  " critical flaw in the library");
+      default:
         throw TTransportException(TTransportException::CORRUPTED_DATA,
-                                  "Error in qlz compress");
-      }
-
-      out->append(compressed_sz);
-#endif
-      buf = std::move(out);
-    } else {
-      throw TTransportException(TTransportException::CORRUPTED_DATA,
-                                "Unknown transform");
+                              folly::sformat("Unknown transform: {}", transId));
     }
     ++it;
   }
@@ -753,7 +612,7 @@ unique_ptr<IOBuf> THeader::transform(unique_ptr<IOBuf> buf,
 }
 
 std::unique_ptr<THeader> THeader::clone() {
-  auto clone = folly::make_unique<THeader>();
+  auto clone = std::make_unique<THeader>();
   clone->setProtocolId(protoId_);
   clone->setTransforms(writeTrans_);
   clone->setMinCompressBytes(minCompressBytes_);
@@ -811,6 +670,10 @@ void THeader::setHeader(const string& key, const string& value) {
   writeHeaders_[key] = value;
 }
 
+void THeader::setHeader(const string& key, string&& value) {
+  writeHeaders_[key] = std::move(value);
+}
+
 void THeader::setHeader(const char* key,
                         size_t keyLength,
                         const char* value,
@@ -826,6 +689,10 @@ void THeader::setHeaders(THeader::StringToStringMap&& headers) {
 
 void THeader::setReadHeaders(THeader::StringToStringMap&& headers) {
   readHeaders_ = std::move(headers);
+}
+
+void THeader::eraseReadHeader(const std::string& key) {
+  readHeaders_.erase(key);
 }
 
 static size_t getInfoHeaderSize(const THeader::StringToStringMap &headers) {
@@ -976,7 +843,7 @@ unique_ptr<IOBuf> THeader::addHeader(unique_ptr<IOBuf> buf,
     for (int i = 0; i < padding; i++) {
       *(pkt++) = 0x00;
     }
-    assert(pkt - pktStart <= header->capacity());
+    assert(pkt - pktStart <= static_cast<ptrdiff_t>(header->capacity()));
 
     // Pkt size
     szHbo = headerSize + chainSize           // thrift header + payload
@@ -1037,6 +904,9 @@ unique_ptr<IOBuf> THeader::addHeader(unique_ptr<IOBuf> buf,
 
 apache::thrift::concurrency::PRIORITY
 THeader::getCallPriority() {
+  if (priority_) {
+    return *priority_;
+  }
   const auto& map = getHeaders();
   auto iter = map.find(PRIORITY_HEADER);
   if (iter != map.end()) {
@@ -1070,16 +940,55 @@ std::chrono::milliseconds THeader::getTimeoutFromHeader(
 }
 
 std::chrono::milliseconds THeader::getClientTimeout() const {
-  return getTimeoutFromHeader(CLIENT_TIMEOUT_HEADER);
+  if (clientTimeout_) {
+    return *clientTimeout_;
+  } else {
+    return getTimeoutFromHeader(CLIENT_TIMEOUT_HEADER);
+  }
 }
 
 std::chrono::milliseconds THeader::getClientQueueTimeout() const {
-  return getTimeoutFromHeader(QUEUE_TIMEOUT_HEADER);
+  if (queueTimeout_) {
+    return *queueTimeout_;
+  } else {
+    return getTimeoutFromHeader(QUEUE_TIMEOUT_HEADER);
+  }
 }
 
 void THeader::setHttpClientParser(shared_ptr<THttpClientParser> parser) {
   CHECK(clientType == THRIFT_HTTP_CLIENT_TYPE);
   httpClientParser_ = parser;
+}
+
+void THeader::setClientTimeout(std::chrono::milliseconds timeout) {
+  clientTimeout_ = timeout;
+}
+
+void THeader::setClientQueueTimeout(std::chrono::milliseconds timeout) {
+  queueTimeout_ = timeout;
+}
+
+void THeader::setCallPriority(apache::thrift::concurrency::PRIORITY priority) {
+  priority_ = priority;
+}
+
+static constexpr folly::StringPiece TRANSFORMS_STRING_LIST[] = {
+  folly::StringPiece("none"),
+  folly::StringPiece("zlib"),
+  folly::StringPiece("hmac"),
+  folly::StringPiece("snappy"),
+  folly::StringPiece("qlz"),
+  folly::StringPiece("zstd"),
+};
+
+const folly::StringPiece THeader::getStringTransform(
+    const TRANSFORMS transform) {
+  constexpr const std::size_t num_string_transforms =
+    sizeof(TRANSFORMS_STRING_LIST)/sizeof(folly::StringPiece);
+  static_assert(
+    num_string_transforms == THeader::TRANSFORMS::TRANSFORM_LAST_FIELD,
+    "TRANSFORMS enum and TRANSFORMS_STRING_LIST mismatch");
+  return TRANSFORMS_STRING_LIST[transform];
 }
 
 }}} // apache::thrift::transport

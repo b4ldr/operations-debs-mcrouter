@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Facebook, Inc.
+ * Copyright 2016-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include <thrift/lib/cpp2/server/BaseThriftServer.h>
 
 #include <folly/Conv.h>
@@ -21,17 +20,12 @@
 #include <folly/Random.h>
 #include <folly/Logging.h>
 #include <folly/ScopeGuard.h>
+#include <folly/portability/Sockets.h>
 
+#include <fcntl.h>
 #include <iostream>
 #include <random>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <netdb.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <assert.h>
-#include <signal.h>
+#include <thread>
 
 namespace apache {
 namespace thrift {
@@ -43,8 +37,8 @@ using namespace apache::thrift::async;
 using namespace std;
 using std::shared_ptr;
 
-const int BaseThriftServer::T_ASYNC_DEFAULT_WORKER_THREADS =
-    sysconf(_SC_NPROCESSORS_ONLN);
+const size_t BaseThriftServer::T_ASYNC_DEFAULT_WORKER_THREADS =
+    std::thread::hardware_concurrency();
 
 const std::chrono::milliseconds BaseThriftServer::DEFAULT_TASK_EXPIRE_TIME =
     std::chrono::milliseconds(5000);
@@ -98,9 +92,21 @@ bool BaseThriftServer::getTaskExpireTimeForRequest(
     const apache::thrift::transport::THeader& requestHeader,
     std::chrono::milliseconds& queueTimeout,
     std::chrono::milliseconds& taskTimeout) const {
+  return getTaskExpireTimeForRequest(
+      requestHeader.getClientQueueTimeout(),
+      requestHeader.getClientTimeout(),
+      queueTimeout,
+      taskTimeout);
+}
+
+bool BaseThriftServer::getTaskExpireTimeForRequest(
+    std::chrono::milliseconds clientQueueTimeoutMs,
+    std::chrono::milliseconds clientTimeoutMs,
+    std::chrono::milliseconds& queueTimeout,
+    std::chrono::milliseconds& taskTimeout) const {
   taskTimeout = getTaskExpireTime();
 
-  queueTimeout = requestHeader.getClientQueueTimeout();
+  queueTimeout = clientQueueTimeoutMs;
   if (queueTimeout == std::chrono::milliseconds(0)) {
     queueTimeout = getQueueTimeout();
   }
@@ -109,8 +115,8 @@ bool BaseThriftServer::getTaskExpireTimeForRequest(
     // we add 10% to the client timeout so that the request is much more likely
     // to timeout on the client side than to read the timeout from the server
     // as a TApplicationException (which can be confusing)
-    taskTimeout = std::chrono::milliseconds(
-        (uint32_t)(requestHeader.getClientTimeout().count() * 1.1));
+    taskTimeout =
+        std::chrono::milliseconds((uint32_t)(clientTimeoutMs.count() * 1.1));
   }
   // Queue timeout shouldn't be greater than task timeout
   if (taskTimeout < queueTimeout &&

@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #pragma once
@@ -69,14 +75,15 @@ template <class H>
 PipelineBase& PipelineBase::removeHelper(H* handler, bool checkEqual) {
   typedef typename ContextType<H>::type Context;
   bool removed = false;
-  for (auto it = ctxs_.begin(); it != ctxs_.end(); it++) {
+
+  auto it = ctxs_.begin();
+  while (it != ctxs_.end()) {
     auto ctx = std::dynamic_pointer_cast<Context>(*it);
     if (ctx && (!checkEqual || ctx->getHandler() == handler)) {
       it = removeAt(it);
       removed = true;
-      if (it == ctxs_.end()) {
-        break;
-      }
+    } else {
+      it++;
     }
   }
 

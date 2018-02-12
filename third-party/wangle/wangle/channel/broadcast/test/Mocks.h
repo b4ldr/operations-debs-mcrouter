@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #pragma once
 
@@ -59,8 +65,8 @@ class MockServerPool : public ServerPool<std::string> {
       : ServerPool(), addr_(addr) {}
 
   folly::Future<DefaultPipeline*> connect(
-      ClientBootstrap<DefaultPipeline>* client,
-      const std::string& routingData) noexcept override {
+      BaseClientBootstrap<DefaultPipeline>* client,
+      const std::string& /* routingData */) noexcept override {
     return failConnect_ ? folly::makeFuture<DefaultPipeline*>(std::exception())
                         : client->connect(*addr_);
   }
@@ -74,7 +80,11 @@ class MockServerPool : public ServerPool<std::string> {
 
 class MockBroadcastPool : public BroadcastPool<int, std::string> {
  public:
-  MockBroadcastPool() : BroadcastPool<int, std::string>(nullptr, nullptr) {}
+  MockBroadcastPool()
+      : BroadcastPool<int, std::string>(
+            nullptr,
+            nullptr,
+            std::make_shared<ClientBootstrapFactory>()) {}
 
   MOCK_METHOD1_T(
       mockGetHandler,
@@ -126,7 +136,7 @@ class MockBroadcastPipelineFactory
     return pipeline;
   }
 
-  virtual BroadcastHandler<int, std::string>* getBroadcastHandler(
+  BroadcastHandler<int, std::string>* getBroadcastHandler(
       DefaultPipeline* pipeline) noexcept override {
     return pipeline->getHandler<BroadcastHandler<int, std::string>>(2);
   }
@@ -144,10 +154,10 @@ class MockObservingPipelineFactory
       : ObservingPipelineFactory(serverPool, broadcastPipelineFactory) {}
 
   ObservingPipeline<int>::Ptr newPipeline(
-      std::shared_ptr<folly::AsyncSocket> socket,
+      std::shared_ptr<folly::AsyncSocket>,
       const std::string& routingData,
-      RoutingDataHandler<std::string>* routingHandler,
-      std::shared_ptr<TransportInfo> transportInfo) override {
+      RoutingDataHandler<std::string>*,
+      std::shared_ptr<TransportInfo>) override {
     auto pipeline = ObservingPipeline<int>::create();
     pipeline->addBack(std::make_shared<wangle::BytesToBytesHandler>());
     pipeline->addBack(std::make_shared<MockMessageToByteEncoder<int>>());

@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include <wangle/acceptor/ConnectionManager.h>
@@ -20,7 +26,7 @@ namespace wangle {
 
 ConnectionManager::ConnectionManager(folly::EventBase* eventBase,
     milliseconds timeout, Callback* callback)
-  : connTimeouts_(new HHWheelTimer(eventBase)),
+  : connTimeouts_(HHWheelTimer::newTimer(eventBase)),
     callback_(callback),
     eventBase_(eventBase),
     drainIterator_(conns_.end()),
@@ -241,14 +247,22 @@ ConnectionManager::DrainHelper::idleGracefulTimeoutExpired() {
   }
 }
 
+void ConnectionManager::stopDrainingForShutdown() {
+  drainHelper_.setShutdownState(ShutdownState::CLOSE_WHEN_IDLE_COMPLETE);
+  drainHelper_.cancelTimeout();
+}
+
 void
 ConnectionManager::dropAllConnections() {
   DestructorGuard g(this);
 
-  drainHelper_.setShutdownState(ShutdownState::CLOSE_WHEN_IDLE_COMPLETE);
+  // Signal the drain helper in case that has not happened before.
+  stopDrainingForShutdown();
+
   // Iterate through our connection list, and drop each connection.
-  VLOG(3) << "connections to drop: " << conns_.size();
-  drainHelper_.cancelTimeout();
+  VLOG_IF(4, conns_.empty()) << "no connections to drop";
+  VLOG_IF(2, !conns_.empty()) << "connections to drop: " << conns_.size();
+
   unsigned i = 0;
   while (!conns_.empty()) {
     ManagedConnection& conn = conns_.front();
@@ -269,6 +283,22 @@ ConnectionManager::dropAllConnections() {
 
   if (callback_) {
     callback_->onEmpty(*this);
+  }
+}
+
+void
+ConnectionManager::dropConnections(double pct) {
+  DestructorGuard g(this);
+
+  // Signal the drain helper in case that has not happened before.
+  stopDrainingForShutdown();
+
+  const size_t N = conns_.size();
+  const size_t numToDrop = std::max<size_t>(0, std::min<size_t>(N, N * pct));
+  for (size_t i = 0; i < numToDrop && !conns_.empty(); i++) {
+    ManagedConnection& conn = conns_.front();
+    removeConnection(&conn);
+    conn.dropConnection();
   }
 }
 
@@ -323,7 +353,7 @@ ConnectionManager::dropIdleConnections(size_t num) {
     }
     ManagedConnection& conn = *it;
     idleIterator_++;
-    conn.timeoutExpired();
+    conn.dropConnection();
     count++;
   }
 

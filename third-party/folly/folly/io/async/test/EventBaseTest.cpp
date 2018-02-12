@@ -1,32 +1,33 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements. See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership. The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License. You may obtain a copy of the License at
+ * Copyright 2014-present Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
  *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
+
 #include <folly/Memory.h>
+#include <folly/ScopeGuard.h>
 
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/io/async/EventHandler.h>
 #include <folly/io/async/test/SocketPair.h>
 #include <folly/io/async/test/Util.h>
+#include <folly/portability/Unistd.h>
+
+#include <folly/futures/Promise.h>
 
 #include <atomic>
 #include <iostream>
-#include <unistd.h>
 #include <memory>
 #include <thread>
 
@@ -43,6 +44,8 @@ using std::chrono::milliseconds;
 using std::chrono::microseconds;
 using std::chrono::duration_cast;
 
+using namespace std::chrono_literals;
+
 using namespace folly;
 
 ///////////////////////////////////////////////////////////////////////////
@@ -53,9 +56,10 @@ enum { BUF_SIZE = 4096 };
 
 ssize_t writeToFD(int fd, size_t length) {
   // write an arbitrary amount of data to the fd
-  char buf[length];
-  memset(buf, 'a', sizeof(buf));
-  ssize_t rc = write(fd, buf, sizeof(buf));
+  auto bufv = vector<char>(length);
+  auto buf = bufv.data();
+  memset(buf, 'a', length);
+  ssize_t rc = write(fd, buf, length);
   CHECK_EQ(rc, length);
   return rc;
 }
@@ -79,8 +83,8 @@ size_t writeUntilFull(int fd) {
 
 ssize_t readFromFD(int fd, size_t length) {
   // write an arbitrary amount of data to the fd
-  char buf[length];
-  return read(fd, buf, sizeof(buf));
+  auto buf = vector<char>(length);
+  return read(fd, buf.data(), length);
 }
 
 size_t readUntilEmpty(int fd) {
@@ -1111,11 +1115,18 @@ void runInThreadTestFunc(RunInThreadArg* arg) {
 }
 
 TEST(EventBaseTest, RunInThread) {
-  uint32_t numThreads = 50;
-  uint32_t opsPerThread = 100;
+  constexpr uint32_t numThreads = 50;
+  constexpr uint32_t opsPerThread = 100;
   RunInThreadData data(numThreads, opsPerThread);
 
   deque<std::thread> threads;
+  SCOPE_EXIT {
+    // Wait on all of the threads.
+    for (auto& thread : threads) {
+      thread.join();
+    }
+  };
+
   for (uint32_t i = 0; i < numThreads; ++i) {
     threads.emplace_back([i, &data] {
         for (int n = 0; n < data.opsPerThread; ++n) {
@@ -1164,11 +1175,6 @@ TEST(EventBaseTest, RunInThread) {
   for (uint32_t n = 0; n < numThreads; ++n) {
     ASSERT_EQ(expectedValues[n], opsPerThread);
   }
-
-  // Wait on all of the threads.
-  for (auto& thread: threads) {
-    thread.join();
-  }
 }
 
 //  This test simulates some calls, and verifies that the waiting happens by
@@ -1179,26 +1185,25 @@ TEST(EventBaseTest, RunInEventBaseThreadAndWait) {
   vector<unique_ptr<atomic<size_t>>> atoms(c);
   for (size_t i = 0; i < c; ++i) {
     auto& atom = atoms.at(i);
-    atom = make_unique<atomic<size_t>>(0);
+    atom = std::make_unique<atomic<size_t>>(0);
   }
-  vector<thread> threads(c);
+  vector<thread> threads;
   for (size_t i = 0; i < c; ++i) {
-    auto& atom = *atoms.at(i);
-    auto& th = threads.at(i);
-    th = thread([&atom] {
-        EventBase eb;
-        auto ebth = thread([&]{ eb.loopForever(); });
-        eb.waitUntilRunning();
-        eb.runInEventBaseThreadAndWait([&] {
-          size_t x = 0;
-          atom.compare_exchange_weak(
-              x, 1, std::memory_order_release, std::memory_order_relaxed);
-        });
+    threads.emplace_back([&atoms, i] {
+      EventBase eb;
+      auto& atom = *atoms.at(i);
+      auto ebth = thread([&] { eb.loopForever(); });
+      eb.waitUntilRunning();
+      eb.runInEventBaseThreadAndWait([&] {
         size_t x = 0;
         atom.compare_exchange_weak(
-            x, 2, std::memory_order_release, std::memory_order_relaxed);
-        eb.terminateLoopSoon();
-        ebth.join();
+            x, 1, std::memory_order_release, std::memory_order_relaxed);
+      });
+      size_t x = 0;
+      atom.compare_exchange_weak(
+          x, 2, std::memory_order_release, std::memory_order_relaxed);
+      eb.terminateLoopSoon();
+      ebth.join();
     });
   }
   for (size_t i = 0; i < c; ++i) {
@@ -1206,7 +1211,9 @@ TEST(EventBaseTest, RunInEventBaseThreadAndWait) {
     th.join();
   }
   size_t sum = 0;
-  for (auto& atom : atoms) sum += *atom;
+  for (auto& atom : atoms) {
+    sum += *atom;
+  }
   EXPECT_EQ(c, sum);
 }
 
@@ -1342,6 +1349,21 @@ TEST(EventBaseTest, RunInLoopStopLoop) {
   ASSERT_LE(c1.getCount(), 11);
 }
 
+TEST(EventBaseTest, messageAvailableException) {
+  auto deadManWalking = [] {
+    EventBase eventBase;
+    std::thread t([&] {
+      // Call this from another thread to force use of NotificationQueue in
+      // runInEventBaseThread
+      eventBase.runInEventBaseThread(
+          []() { throw std::runtime_error("boom"); });
+    });
+    t.join();
+    eventBase.loopForever();
+  };
+  EXPECT_DEATH(deadManWalking(), ".*");
+}
+
 TEST(EventBaseTest, TryRunningAfterTerminate) {
   EventBase eventBase;
   CountedLoopCallback c1(&eventBase, 1,
@@ -1392,7 +1414,7 @@ TEST(EventBaseTest, CancelRunInLoop) {
   // Run the loop
   eventBase.loop();
 
-  // cancelC1 and cancelC3 should have both fired after 10 iterations and
+  // cancelC1 and cancelC2 should have both fired after 10 iterations and
   // stopped re-installing themselves
   ASSERT_EQ(cancelC1.getCount(), 0);
   ASSERT_EQ(cancelC2.getCount(), 0);
@@ -1518,11 +1540,11 @@ class IdleTimeTimeoutSeries : public AsyncTimeout {
     timeouts_(0),
     timeout_(timeout) {
       scheduleTimeout(1);
-    }
+  }
 
-    ~IdleTimeTimeoutSeries() override {}
+  ~IdleTimeTimeoutSeries() override {}
 
-    void timeoutExpired() noexcept override {
+  void timeoutExpired() noexcept override {
     ++timeouts_;
 
     if(timeout_.empty()){
@@ -1557,52 +1579,53 @@ class IdleTimeTimeoutSeries : public AsyncTimeout {
  */
 TEST(EventBaseTest, IdleTime) {
   EventBase eventBase;
-  eventBase.setLoadAvgMsec(1000);
-  eventBase.resetLoadAvg(5900.0);
   std::deque<uint64_t> timeouts0(4, 8080);
   timeouts0.push_front(8000);
   timeouts0.push_back(14000);
   IdleTimeTimeoutSeries tos0(&eventBase, timeouts0);
   std::deque<uint64_t> timeouts(20, 20);
   std::unique_ptr<IdleTimeTimeoutSeries> tos;
-  int64_t testStart = duration_cast<microseconds>(
-    std::chrono::steady_clock::now().time_since_epoch()).count();
   bool hostOverloaded = false;
 
+  // Loop once before starting the main test.  This will run NotificationQueue
+  // callbacks that get automatically installed when the EventBase is first
+  // created.  We want to make sure they don't interfere with the timing
+  // operations below.
+  eventBase.loopOnce(EVLOOP_NONBLOCK);
+  eventBase.setLoadAvgMsec(1000ms);
+  eventBase.resetLoadAvg(5900.0);
+  auto testStart = std::chrono::steady_clock::now();
+
   int latencyCallbacks = 0;
-  eventBase.setMaxLatency(6000, [&]() {
+  eventBase.setMaxLatency(6000us, [&]() {
     ++latencyCallbacks;
-
-    switch (latencyCallbacks) {
-    case 1:
-      if (tos0.getTimeouts() < 6) {
-        // This could only happen if the host this test is running
-        // on is heavily loaded.
-        int64_t maxLatencyReached = duration_cast<microseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
-        ASSERT_LE(43800, maxLatencyReached - testStart);
-        hostOverloaded = true;
-        break;
-      }
-      ASSERT_EQ(6, tos0.getTimeouts());
-      ASSERT_GE(6100, eventBase.getAvgLoopTime() - 1200);
-      ASSERT_LE(6100, eventBase.getAvgLoopTime() + 1200);
-      tos.reset(new IdleTimeTimeoutSeries(&eventBase, timeouts));
-      break;
-
-    default:
+    if (latencyCallbacks != 1) {
       FAIL() << "Unexpected latency callback";
-      break;
     }
+
+    if (tos0.getTimeouts() < 6) {
+      // This could only happen if the host this test is running
+      // on is heavily loaded.
+      int64_t usElapsed = duration_cast<microseconds>(
+                              std::chrono::steady_clock::now() - testStart)
+                              .count();
+      EXPECT_LE(43800, usElapsed);
+      hostOverloaded = true;
+      return;
+    }
+    EXPECT_EQ(6, tos0.getTimeouts());
+    EXPECT_GE(6100, eventBase.getAvgLoopTime() - 1200);
+    EXPECT_LE(6100, eventBase.getAvgLoopTime() + 1200);
+    tos = std::make_unique<IdleTimeTimeoutSeries>(&eventBase, timeouts);
   });
 
-  // Kick things off with an "immedite" timeout
+  // Kick things off with an "immediate" timeout
   tos0.scheduleTimeout(1);
 
   eventBase.loop();
 
   if (hostOverloaded) {
-    return;
+    SKIP() << "host too heavily loaded to execute test";
   }
 
   ASSERT_EQ(1, latencyCallbacks);
@@ -1647,7 +1670,7 @@ TEST(EventBaseTest, EventBaseThreadLoop) {
   });
   base.loop();
 
-  ASSERT_EQ(true, ran);
+  ASSERT_TRUE(ran);
 }
 
 TEST(EventBaseTest, EventBaseThreadName) {
@@ -1686,7 +1709,7 @@ TEST(EventBaseTest, RunBeforeLoopWait) {
 }
 
 class PipeHandler : public EventHandler {
-public:
+ public:
   PipeHandler(EventBase* eventBase, int fd)
     : EventHandler(eventBase, fd) {}
 
@@ -1733,10 +1756,11 @@ TEST(EventBaseTest, LoopKeepAlive) {
   EventBase evb;
 
   bool done = false;
-  std::thread t([&, loopKeepAlive = evb.loopKeepAlive() ] {
+  std::thread t([&, loopKeepAlive = evb.getKeepAliveToken() ]() mutable {
     /* sleep override */ std::this_thread::sleep_for(
         std::chrono::milliseconds(100));
-    evb.runInEventBaseThread([&] { done = true; });
+    evb.runInEventBaseThread(
+        [&done, loopKeepAlive = std::move(loopKeepAlive) ] { done = true; });
   });
 
   evb.loop();
@@ -1753,10 +1777,11 @@ TEST(EventBaseTest, LoopKeepAliveInLoop) {
   std::thread t;
 
   evb.runInEventBaseThread([&] {
-    t = std::thread([&, loopKeepAlive = evb.loopKeepAlive() ] {
+    t = std::thread([&, loopKeepAlive = evb.getKeepAliveToken() ]() mutable {
       /* sleep override */ std::this_thread::sleep_for(
           std::chrono::milliseconds(100));
-      evb.runInEventBaseThread([&] { done = true; });
+      evb.runInEventBaseThread(
+          [&done, loopKeepAlive = std::move(loopKeepAlive) ] { done = true; });
     });
   });
 
@@ -1765,4 +1790,174 @@ TEST(EventBaseTest, LoopKeepAliveInLoop) {
   ASSERT_TRUE(done);
 
   t.join();
+}
+
+TEST(EventBaseTest, LoopKeepAliveWithLoopForever) {
+  std::unique_ptr<EventBase> evb = std::make_unique<EventBase>();
+
+  bool done = false;
+
+  std::thread evThread([&] {
+    evb->loopForever();
+    evb.reset();
+    done = true;
+  });
+
+  {
+    auto* ev = evb.get();
+    Executor::KeepAlive keepAlive;
+    ev->runInEventBaseThreadAndWait(
+        [&ev, &keepAlive] { keepAlive = ev->getKeepAliveToken(); });
+    ASSERT_FALSE(done) << "Loop finished before we asked it to";
+    ev->terminateLoopSoon();
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    ASSERT_FALSE(done) << "Loop terminated early";
+    ev->runInEventBaseThread([keepAlive = std::move(keepAlive)]{});
+  }
+
+  evThread.join();
+  ASSERT_TRUE(done);
+}
+
+TEST(EventBaseTest, LoopKeepAliveShutdown) {
+  auto evb = std::make_unique<EventBase>();
+
+  bool done = false;
+
+  std::thread t([
+    &done,
+    loopKeepAlive = evb->getKeepAliveToken(),
+    evbPtr = evb.get()
+  ]() mutable {
+    /* sleep override */ std::this_thread::sleep_for(
+        std::chrono::milliseconds(100));
+    evbPtr->runInEventBaseThread(
+        [&done, loopKeepAlive = std::move(loopKeepAlive) ] { done = true; });
+  });
+
+  evb.reset();
+
+  ASSERT_TRUE(done);
+
+  t.join();
+}
+
+TEST(EventBaseTest, LoopKeepAliveAtomic) {
+  auto evb = std::make_unique<EventBase>();
+
+  static constexpr size_t kNumThreads = 100;
+  static constexpr size_t kNumTasks = 100;
+
+  std::vector<std::thread> ts;
+  std::vector<std::unique_ptr<Baton<>>> batons;
+  size_t done{0};
+
+  for (size_t i = 0; i < kNumThreads; ++i) {
+    batons.emplace_back(std::make_unique<Baton<>>());
+  }
+
+  for (size_t i = 0; i < kNumThreads; ++i) {
+    ts.emplace_back([ evbPtr = evb.get(), batonPtr = batons[i].get(), &done ] {
+      std::vector<Executor::KeepAlive> keepAlives;
+      for (size_t j = 0; j < kNumTasks; ++j) {
+        keepAlives.emplace_back(evbPtr->getKeepAliveToken());
+      }
+
+      batonPtr->post();
+
+      /* sleep override */ std::this_thread::sleep_for(std::chrono::seconds(1));
+
+      for (auto& keepAlive : keepAlives) {
+        evbPtr->runInEventBaseThread(
+            [&done, keepAlive = std::move(keepAlive) ]() { ++done; });
+      }
+    });
+  }
+
+  for (auto& baton : batons) {
+    baton->wait();
+  }
+
+  evb.reset();
+
+  EXPECT_EQ(kNumThreads * kNumTasks, done);
+
+  for (auto& t : ts) {
+    t.join();
+  }
+}
+
+TEST(EventBaseTest, DrivableExecutorTest) {
+  folly::Promise<bool> p;
+  auto f = p.getFuture();
+  EventBase base;
+  bool finished = false;
+
+  std::thread t([&] {
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::microseconds(10));
+    finished = true;
+    base.runInEventBaseThread([&]() { p.setValue(true); });
+  });
+
+  // Ensure drive does not busy wait
+  base.drive(); // TODO: fix notification queue init() extra wakeup
+  base.drive();
+  EXPECT_TRUE(finished);
+
+  folly::Promise<bool> p2;
+  auto f2 = p2.getFuture();
+  // Ensure waitVia gets woken up properly, even from
+  // a separate thread.
+  base.runAfterDelay([&]() { p2.setValue(true); }, 10);
+  f2.waitVia(&base);
+  EXPECT_TRUE(f2.isReady());
+
+  t.join();
+}
+
+TEST(EventBaseTest, RequestContextTest) {
+  EventBase evb;
+  auto defaultCtx = RequestContext::get();
+  std::weak_ptr<RequestContext> rctx_weak_ptr;
+
+  {
+    RequestContextScopeGuard rctx;
+    rctx_weak_ptr = RequestContext::saveContext();
+    auto context = RequestContext::get();
+    EXPECT_NE(defaultCtx, context);
+    evb.runInLoop([context] { EXPECT_EQ(context, RequestContext::get()); });
+    evb.loop();
+  }
+
+  // Ensure that RequestContext created for the scope has been released and
+  // deleted.
+  EXPECT_EQ(rctx_weak_ptr.expired(), true);
+
+  EXPECT_EQ(defaultCtx, RequestContext::get());
+}
+
+TEST(EventBaseTest, CancelLoopCallbackRequestContextTest) {
+  EventBase evb;
+  CountedLoopCallback c(&evb, 1);
+
+  auto defaultCtx = RequestContext::get();
+  EXPECT_EQ(defaultCtx, RequestContext::get());
+  std::weak_ptr<RequestContext> rctx_weak_ptr;
+
+  {
+    RequestContextScopeGuard rctx;
+    rctx_weak_ptr = RequestContext::saveContext();
+    auto context = RequestContext::get();
+    EXPECT_NE(defaultCtx, context);
+    evb.runInLoop(&c);
+    c.cancelLoopCallback();
+  }
+
+  // Ensure that RequestContext created for the scope has been released and
+  // deleted.
+  EXPECT_EQ(rctx_weak_ptr.expired(), true);
+
+  EXPECT_EQ(defaultCtx, RequestContext::get());
 }

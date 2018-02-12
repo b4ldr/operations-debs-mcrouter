@@ -1,4 +1,6 @@
 /*
+ * Copyright 2017-present Facebook, Inc.
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements. See the NOTICE file
  * distributed with this work for additional information
@@ -16,7 +18,6 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-
 #include <thrift/compiler/generate/t_java_generator.h>
 
 #include <sstream>
@@ -26,7 +27,6 @@
 #include <vector>
 #include <cctype>
 
-#include <sys/stat.h>
 #include <stdexcept>
 
 #include <thrift/compiler/platform.h>
@@ -41,7 +41,7 @@ using namespace std;
  */
 void t_java_generator::init_generator() {
   // Make output directory
-  MKDIR(get_out_dir().c_str());
+  make_dir(get_out_dir().c_str());
   package_name_ = program_->get_namespace("java");
 
   string dir = package_name_;
@@ -49,12 +49,12 @@ void t_java_generator::init_generator() {
   string::size_type loc;
   while ((loc = dir.find(".")) != string::npos) {
     subdir = subdir + "/" + dir.substr(0, loc);
-    MKDIR(subdir.c_str());
+    make_dir(subdir.c_str());
     dir = dir.substr(loc+1);
   }
   if (dir.size() > 0) {
     subdir = subdir + "/" + dir;
-    MKDIR(subdir.c_str());
+    make_dir(subdir.c_str());
   }
 
   package_dir_ = subdir;
@@ -278,8 +278,13 @@ void t_java_generator::generate_consts(std::vector<t_const*> consts) {
  * is NOT performed in this function as it is always run beforehand using the
  * validate_types method in main.cc
  */
-void t_java_generator::print_const_value(std::ostream& out, string name,
-    t_type* type, t_const_value* value, bool in_static, bool defval) {
+void t_java_generator::print_const_value(
+    std::ostream& out,
+    string name,
+    t_type* type,
+    const t_const_value* value,
+    bool in_static,
+    bool defval) {
   type = get_true_type(type);
 
   indent(out);
@@ -371,8 +376,11 @@ void t_java_generator::print_const_value(std::ostream& out, string name,
   }
 }
 
-string t_java_generator::render_const_value(ostream& out, string /*name*/,
-    t_type* type, t_const_value* value) {
+string t_java_generator::render_const_value(
+    ostream& out,
+    string /* unused */,
+    t_type* type,
+    const t_const_value* value) {
   type = get_true_type(type);
   std::ostringstream render;
   if (type->is_base_type()) {
@@ -1908,7 +1916,7 @@ void t_java_generator::generate_java_struct_tostring(ofstream& out,
       indent(out) << "  }" << endl;
       indent(out) << "  if (" << field_getter << ".length > 128) sb.append(\" ...\");" << endl;
     } else if(ftype->is_enum()) {
-      indent(out) << "String " << fname << "_name = " << get_enum_class_name(ftype) << ".VALUES_TO_NAMES.get(this." << fname << ");"<< endl;
+      indent(out) << "String " << fname << "_name = " << get_enum_class_name(ftype) << ".VALUES_TO_NAMES.get(" << field_getter << ");"<< endl;
       indent(out) << "if (" << fname << "_name != null) {" << endl;
       indent(out) << "  sb.append(" << fname << "_name);" << endl;
       indent(out) << "  sb.append(\" (\");" << endl;
@@ -2013,16 +2021,16 @@ std::string t_java_generator::get_java_type_string(t_type* type) {
     return get_java_type_string(((t_typedef*)type)->get_type());
   } else if (type->is_base_type()) {
     switch (((t_base_type*)type)->get_base()) {
-      case t_base_type::TYPE_VOID   : return      "TType.VOID"; break;
-      case t_base_type::TYPE_STRING : return    "TType.STRING"; break;
-      case t_base_type::TYPE_BOOL   : return      "TType.BOOL"; break;
-      case t_base_type::TYPE_BYTE   : return      "TType.BYTE"; break;
-      case t_base_type::TYPE_I16    : return       "TType.I16"; break;
-      case t_base_type::TYPE_I32    : return       "TType.I32"; break;
-      case t_base_type::TYPE_I64    : return       "TType.I64"; break;
-      case t_base_type::TYPE_DOUBLE : return    "TType.DOUBLE"; break;
-      case t_base_type::TYPE_FLOAT  : return     "TType.FLOAT"; break;
-      default : throw std::runtime_error("Unknown thrift type \"" + type->get_name() + "\" passed to t_java_generator::get_java_type_string!"); break; // This should never happen!
+      case t_base_type::TYPE_VOID   : return      "TType.VOID";
+      case t_base_type::TYPE_STRING : return    "TType.STRING";
+      case t_base_type::TYPE_BOOL   : return      "TType.BOOL";
+      case t_base_type::TYPE_BYTE   : return      "TType.BYTE";
+      case t_base_type::TYPE_I16    : return       "TType.I16";
+      case t_base_type::TYPE_I32    : return       "TType.I32";
+      case t_base_type::TYPE_I64    : return       "TType.I64";
+      case t_base_type::TYPE_DOUBLE : return    "TType.DOUBLE";
+      case t_base_type::TYPE_FLOAT  : return     "TType.FLOAT";
+      default : throw std::runtime_error("Unknown thrift type \"" + type->get_name() + "\" passed to t_java_generator::get_java_type_string!"); // This should never happen!
     }
   } else {
     throw std::runtime_error("Unknown thrift type \"" + type->get_name() + "\" passed to t_java_generator::get_java_type_string!"); // This should never happen!
@@ -2043,7 +2051,7 @@ void t_java_generator::generate_field_value_meta_data(std::ofstream& out, t_type
       generate_field_value_meta_data(out, elem_type);
     } else if (type->is_set()){
       indent(out) << "new SetMetaData(TType.SET, ";
-      t_type* elem_type = ((t_list*)type)->get_elem_type();
+      t_type* elem_type = ((t_set*)type)->get_elem_type();
       generate_field_value_meta_data(out, elem_type);
     } else{ // map
       indent(out) << "new MapMetaData(TType.MAP, ";
@@ -2325,10 +2333,12 @@ void t_java_generator::generate_service_client(t_service* tservice) {
       string resultname = (*f_iter)->get_name() + "_result";
 
       t_struct noargs(program_);
-      t_function recv_function((*f_iter)->get_returntype(),
-                               string("recv_") + (*f_iter)->get_name(),
-                               &noargs,
-                               (*f_iter)->get_xceptions());
+      t_function recv_function(
+          (*f_iter)->get_returntype(),
+          string("recv_") + (*f_iter)->get_name(),
+          &noargs,
+          (*f_iter)->get_xceptions(),
+          nullptr /* client exceptions */);
       // Open the recv function
       indent(f_service_) <<
         "public " << function_signature(&recv_function) << endl;
@@ -2708,17 +2718,17 @@ void t_java_generator::generate_process_function(t_service* tservice,
 
   string argsname = tfunction->get_name() + "_args";
   string resultname = tfunction->get_name() + "_result";
-  string pservice_func_name = "\"" + tservice->get_name() + "." + tfunction->get_name() + "\"";
+  string pservice_fn_name = "\"" + tservice->get_name() + "." + tfunction->get_name() + "\"";
   f_service_ <<
     indent() << "Object handler_ctx = event_handler_.getContext("
-             << pservice_func_name << ", server_ctx);" << endl <<
+             << pservice_fn_name << ", server_ctx);" << endl <<
     indent() << argsname << " args = new " << argsname << "();" << endl <<
     indent() << "event_handler_.preRead(handler_ctx, "
-             << pservice_func_name << ");" << endl <<
+             << pservice_fn_name << ");" << endl <<
     indent() << "args.read(iprot);" << endl <<
     indent() << "iprot.readMessageEnd();" << endl <<
     indent() << "event_handler_.postRead(handler_ctx, "
-             << pservice_func_name << ", args);" << endl;
+             << pservice_fn_name << ", args);" << endl;
 
   t_struct* xs = tfunction->get_xceptions();
   const std::vector<t_field*>& xceptions = xs->get_members();
@@ -2819,16 +2829,16 @@ void t_java_generator::generate_process_function(t_service* tservice,
     return;
   }
 
-  //string pservice_func_name = "\"" + tservice->get_name() + "." + tfunction->get_name() + "\"";
+  //string pservice_fn_name = "\"" + tservice->get_name() + "." + tfunction->get_name() + "\"";
   f_service_ <<
     indent() << "event_handler_.preWrite(handler_ctx, "
-             << pservice_func_name << ", result);" << endl <<
+             << pservice_fn_name << ", result);" << endl <<
     indent() << "oprot.writeMessageBegin(new TMessage(\"" << tfunction->get_name() << "\", TMessageType.REPLY, seqid));" << endl <<
     indent() << "result.write(oprot);" << endl <<
     indent() << "oprot.writeMessageEnd();" << endl <<
     indent() << "oprot.getTransport().flush();" << endl <<
     indent() << "event_handler_.postWrite(handler_ctx, "
-             << pservice_func_name << ", result);" << endl;
+             << pservice_fn_name << ", result);" << endl;
 
   // Close function
   scope_down(f_service_);
@@ -2876,7 +2886,6 @@ void t_java_generator::generate_deserialize_field(ofstream& out,
       case t_base_type::TYPE_VOID:
         throw "compiler error: cannot serialize void field in a struct: " +
           name;
-        break;
       case t_base_type::TYPE_STRING:
         if (((t_base_type*)type)->is_binary()) {
           out << "readBinary();";
@@ -3113,7 +3122,6 @@ void t_java_generator::generate_serialize_field(ofstream& out,
       case t_base_type::TYPE_VOID:
         throw
           "compiler error: cannot serialize void field in a struct: " + name;
-        break;
       case t_base_type::TYPE_STRING:
         if (((t_base_type*)type)->is_binary()) {
           out << "writeBinary(" << name << ");";
@@ -3326,7 +3334,7 @@ string t_java_generator::type_name(t_type* ttype, bool in_container, bool in_ini
   }
 
   // Check for namespacing
-  t_program* program = ttype->get_program();
+  const t_program* program = ttype->get_program();
   if (program != nullptr && program != program_) {
     string package = program->get_namespace("java");
     if (!package.empty()) {
@@ -3684,7 +3692,7 @@ void t_java_generator::generate_isset_set(ofstream& out, t_field* field) {
 
 std::string t_java_generator::get_enum_class_name(t_type* type) {
   string package = "";
-  t_program* program = type->get_program();
+  const t_program* program = type->get_program();
   if (program != nullptr && program != program_) {
     package = program->get_namespace("java") + ".";
   }

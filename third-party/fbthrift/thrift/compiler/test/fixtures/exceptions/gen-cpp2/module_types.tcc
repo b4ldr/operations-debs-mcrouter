@@ -6,52 +6,59 @@
  */
 #pragma once
 
-#include "thrift/compiler/test/fixtures/exceptions/gen-cpp2/module_types.h"
-#include <thrift/lib/cpp/TApplicationException.h>
-#include <folly/io/IOBuf.h>
-#include <folly/io/IOBufQueue.h>
-#include <thrift/lib/cpp/transport/THeader.h>
-#include <thrift/lib/cpp2/server/Cpp2ConnContext.h>
-#include <thrift/lib/cpp2/GeneratedCodeHelper.h>
+#include "src/gen-cpp2/module_types.h"
+
+#include <thrift/lib/cpp2/GeneratedSerializationCodeHelper.h>
 
 #include <thrift/lib/cpp2/protocol/BinaryProtocol.h>
 #include <thrift/lib/cpp2/protocol/CompactProtocol.h>
+#include <thrift/lib/cpp2/protocol/ProtocolReaderStructReadState.h>
+
 namespace cpp2 {
 
 template <class Protocol_>
-uint32_t Banal::read(Protocol_* iprot) {
-  uint32_t xfer = 0;
-  std::string fname;
-  apache::thrift::protocol::TType ftype;
-  int16_t fid;
+void Banal::readNoXfer(Protocol_* iprot) {
+  apache::thrift::detail::ProtocolReaderStructReadState<Protocol_> _readState;
 
-  xfer += iprot->readStructBegin(fname);
+  _readState.readStructBegin(iprot);
 
   using apache::thrift::TProtocolException;
 
 
-  while (true) {
-    xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == apache::thrift::protocol::T_STOP) {
-      break;
-    }
-    if (fid == std::numeric_limits<int16_t>::min()) {}
-    switch (fid) {
-      default:
-      {
-        xfer += iprot->skip(ftype);
-        break;
-      }
-    }
-    xfer += iprot->readFieldEnd();
+  if (UNLIKELY(!_readState.advanceToNextField(
+          iprot,
+          0,
+          0,
+          apache::thrift::protocol::T_STOP))) {
+    goto _loop;
   }
-  xfer += iprot->readStructEnd();
 
-  return xfer;
+_end:
+  _readState.readStructEnd(iprot);
+
+  return;
+
+_loop:
+  if (_readState.fieldType == apache::thrift::protocol::T_STOP) {
+    goto _end;
+  }
+  if (iprot->kUsesFieldNames()) {
+    this->translateFieldName(_readState.fieldName(), _readState.fieldId, _readState.fieldType);
+  }
+
+  switch (_readState.fieldId) {
+    default:
+    {
+      iprot->skip(_readState.fieldType);
+      _readState.readFieldEnd(iprot);
+      _readState.readFieldBeginNoInline(iprot);
+      goto _loop;
+    }
+  }
 }
 
 template <class Protocol_>
-uint32_t Banal::serializedSize(Protocol_* prot_) const {
+uint32_t Banal::serializedSize(Protocol_ const* prot_) const {
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("Banal");
   xfer += prot_->serializedSizeStop();
@@ -59,7 +66,7 @@ uint32_t Banal::serializedSize(Protocol_* prot_) const {
 }
 
 template <class Protocol_>
-uint32_t Banal::serializedSizeZC(Protocol_* prot_) const {
+uint32_t Banal::serializedSizeZC(Protocol_ const* prot_) const {
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("Banal");
   xfer += prot_->serializedSizeStop();
@@ -76,64 +83,77 @@ uint32_t Banal::write(Protocol_* prot_) const {
 }
 
 } // cpp2
-namespace apache { namespace thrift {
-
-}} // apache::thrift
 namespace cpp2 {
 
 template <class Protocol_>
-uint32_t Fiery::read(Protocol_* iprot) {
-  uint32_t xfer = 0;
-  std::string fname;
-  apache::thrift::protocol::TType ftype;
-  int16_t fid;
+void Fiery::readNoXfer(Protocol_* iprot) {
+  apache::thrift::detail::ProtocolReaderStructReadState<Protocol_> _readState;
 
-  xfer += iprot->readStructBegin(fname);
+  _readState.readStructBegin(iprot);
 
   using apache::thrift::TProtocolException;
 
   bool isset_message = false;
 
-  while (true) {
-    xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == apache::thrift::protocol::T_STOP) {
-      break;
-    }
-    if (fid == std::numeric_limits<int16_t>::min()) {
-      if (fname == "message") {
-        fid = 1;
-        ftype = apache::thrift::protocol::T_STRING;
-      }
-    }
-    switch (fid) {
-      case 1:
-      {
-        if (ftype == apache::thrift::protocol::T_STRING) {
-          xfer += iprot->readString(this->message);
-          isset_message = true;
-        } else {
-          xfer += iprot->skip(ftype);
-        }
-        break;
-      }
-      default:
-      {
-        xfer += iprot->skip(ftype);
-        break;
-      }
-    }
-    xfer += iprot->readFieldEnd();
+  if (UNLIKELY(!_readState.advanceToNextField(
+          iprot,
+          0,
+          1,
+          apache::thrift::protocol::T_STRING))) {
+    goto _loop;
   }
-  xfer += iprot->readStructEnd();
+_readField_message:
+  {
+    iprot->readString(this->message);
+    isset_message = true;
+  }
+
+  if (UNLIKELY(!_readState.advanceToNextField(
+          iprot,
+          1,
+          0,
+          apache::thrift::protocol::T_STOP))) {
+    goto _loop;
+  }
+
+_end:
+  _readState.readStructEnd(iprot);
 
   if (!isset_message) {
-    throw TProtocolException(TProtocolException::MISSING_REQUIRED_FIELD, "Required field 'message' was not found in serialized data! Struct: Fiery");
+    TProtocolException::throwMissingRequiredField("message", "Fiery");
   }
-  return xfer;
+  return;
+
+_loop:
+  if (_readState.fieldType == apache::thrift::protocol::T_STOP) {
+    goto _end;
+  }
+  if (iprot->kUsesFieldNames()) {
+    this->translateFieldName(_readState.fieldName(), _readState.fieldId, _readState.fieldType);
+  }
+
+  switch (_readState.fieldId) {
+    case 1:
+    {
+      if (LIKELY(_readState.fieldType == apache::thrift::protocol::T_STRING)) {
+        goto _readField_message;
+      } else {
+        goto _skip;
+      }
+    }
+    default:
+    {
+_skip:
+      iprot->skip(_readState.fieldType);
+      _readState.readFieldEnd(iprot);
+      _readState.readFieldBeginNoInline(iprot);
+      goto _loop;
+    }
+  }
 }
 
 template <class Protocol_>
-uint32_t Fiery::serializedSize(Protocol_* prot_) const {
+uint32_t Fiery::serializedSize(Protocol_ const* prot_) const {
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("Fiery");
   xfer += prot_->serializedFieldSize("message", apache::thrift::protocol::T_STRING, 1);
@@ -143,7 +163,7 @@ uint32_t Fiery::serializedSize(Protocol_* prot_) const {
 }
 
 template <class Protocol_>
-uint32_t Fiery::serializedSizeZC(Protocol_* prot_) const {
+uint32_t Fiery::serializedSizeZC(Protocol_ const* prot_) const {
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("Fiery");
   xfer += prot_->serializedFieldSize("message", apache::thrift::protocol::T_STRING, 1);
@@ -163,11 +183,5 @@ uint32_t Fiery::write(Protocol_* prot_) const {
   xfer += prot_->writeStructEnd();
   return xfer;
 }
-
-} // cpp2
-namespace apache { namespace thrift {
-
-}} // apache::thrift
-namespace cpp2 {
 
 } // cpp2

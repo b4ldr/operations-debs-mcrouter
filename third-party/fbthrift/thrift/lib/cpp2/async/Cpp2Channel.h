@@ -1,4 +1,6 @@
 /*
+ * Copyright 2017-present Facebook, Inc.
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements. See the NOTICE file
  * distributed with this work for additional information
@@ -137,11 +139,18 @@ class Cpp2Channel
     return protectionHandler_.get();
   }
 
-  void setReadBufferSize(uint32_t readBufferSize) {
-    framingHandler_->setReadBufferSize(readBufferSize);
+  /**
+   * Set read buffer size.
+   *
+   * @param readBufferSize   The read buffer size to set
+   * @param strict           True means given size will always be used; false
+   *                         means given size may not be used if it is too small
+   */
+  void setReadBufferSize(uint32_t readBufferSize, bool strict = false) {
+    framingHandler_->setReadBufferSize(readBufferSize, strict);
   }
 
-private:
+ private:
   std::shared_ptr<apache::thrift::async::TAsyncTransport> transport_;
   std::unique_ptr<folly::IOBufQueue> queue_;
   std::deque<SendCallback*> sendCallbacks_;
@@ -151,6 +160,7 @@ private:
 
   std::unique_ptr<RecvCallback::sample> sample_;
 
+  std::shared_ptr<wangle::OutputBufferingHandler> outputBufferingHandler_;
   std::shared_ptr<ProtectionHandler> protectionHandler_;
   std::shared_ptr<FramingHandler> framingHandler_;
   std::shared_ptr<SaslNegotiationHandler> saslNegotiationHandler_;

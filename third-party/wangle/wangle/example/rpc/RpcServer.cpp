@@ -1,17 +1,22 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include <gflags/gflags.h>
 
 #include <wangle/service/Service.h>
-#include <wangle/service/ExpiringFilter.h>
 #include <wangle/service/ExecutorFilter.h>
 #include <wangle/service/ServerDispatcher.h>
 #include <wangle/bootstrap/ServerBootstrap.h>
@@ -19,7 +24,7 @@
 #include <wangle/codec/LengthFieldBasedFrameDecoder.h>
 #include <wangle/codec/LengthFieldPrepender.h>
 #include <wangle/channel/EventBaseHandler.h>
-#include <wangle/concurrent/CPUThreadPoolExecutor.h>
+#include <folly/executors/CPUThreadPoolExecutor.h>
 
 #include <wangle/example/rpc/ServerSerializeHandler.h>
 
@@ -35,7 +40,7 @@ DEFINE_int32(port, 8080, "test server port");
 
 class RpcService : public Service<Bonk, Xtruct> {
  public:
-  virtual Future<Xtruct> operator()(Bonk request) override {
+  Future<Xtruct> operator()(Bonk request) override {
     // Oh no, we got Bonked!  Quick, Bonk back
     printf("Bonk: %s, %i\n", request.message.c_str(), request.type);
 
@@ -56,7 +61,7 @@ class RpcService : public Service<Bonk, Xtruct> {
 class RpcPipelineFactory : public PipelineFactory<SerializePipeline> {
  public:
   SerializePipeline::Ptr newPipeline(
-      std::shared_ptr<AsyncTransportWrapper> sock) {
+      std::shared_ptr<AsyncTransportWrapper> sock) override {
     auto pipeline = SerializePipeline::create();
     pipeline->addBack(AsyncSocketHandler(sock));
     // ensure we can write from any thread
@@ -81,7 +86,7 @@ class RpcPipelineFactory : public PipelineFactory<SerializePipeline> {
 };
 
 int main(int argc, char** argv) {
-  google::ParseCommandLineFlags(&argc, &argv, true);
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
 
   ServerBootstrap<SerializePipeline> server;
   server.childPipeline(std::make_shared<RpcPipelineFactory>());

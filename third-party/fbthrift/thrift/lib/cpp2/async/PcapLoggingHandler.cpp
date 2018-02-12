@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2016-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,12 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include <thrift/lib/cpp2/async/PcapLoggingHandler.h>
-#include <thrift/lib/cpp/async/TAsyncSSLSocket.h>
+#include <folly/FBVector.h>
 #include <folly/FileUtil.h>
 #include <folly/MPMCQueue.h>
-#include <folly/FBVector.h>
+#include <folly/Random.h>
+#include <thrift/lib/cpp/async/TAsyncSSLSocket.h>
 
 #include <net/ethernet.h>
 #include <netinet/ip.h>
@@ -28,6 +28,7 @@
 #include <time.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <gflags/gflags.h>
 
 // For reallllly old systems, sigh
 #ifndef O_CLOEXEC
@@ -40,6 +41,10 @@
 
 DEFINE_bool(thrift_pcap_logging_prohibit, false,
     "Don't allow pcap logging to be enabled");
+
+#ifndef __APPLE__
+#define THRIFT_PCAP_LOGGING_SUPPORTED 1
+#endif
 
 namespace apache { namespace thrift {
 
@@ -100,10 +105,12 @@ class Headers {
   bool is6_;
   struct HeaderStruct {
     ether_header ether;
+#ifdef THRIFT_PCAP_LOGGING_SUPPORTED
     union {
       iphdr ip4;
       ip6_hdr ip6;
     };
+#endif
     tcphdr tcp;
   } read_, write_;
   PcapRecordHeader pcapHeader_;
@@ -118,6 +125,7 @@ class Headers {
 Headers::Headers(const folly::SocketAddress& local,
     const folly::SocketAddress& remote,
     PcapLoggingHandler::Peer peer) {
+#ifdef THRIFT_PCAP_LOGGING_SUPPORTED
   using std::swap;
   DCHECK(local.getFamily() == remote.getFamily() &&
       (local.getFamily() == AF_INET || local.getFamily() == AF_INET6));
@@ -182,9 +190,11 @@ Headers::Headers(const folly::SocketAddress& local,
 
   swap(read_.tcp.source, read_.tcp.dest);
   swap(read_.ether.ether_shost, read_.ether.ether_dhost);
+#endif
 }
 
 void Headers::setTcpFlagsImpl(tcphdr* tcp, Headers::TcpFlags flags) {
+#ifdef THRIFT_PCAP_LOGGING_SUPPORTED
   tcp->syn = tcp->ack = tcp->fin = tcp->rst = 0;
   switch (flags) {
   case SYN: tcp->syn = 1; break;
@@ -193,6 +203,7 @@ void Headers::setTcpFlagsImpl(tcphdr* tcp, Headers::TcpFlags flags) {
   case FIN: tcp->fin = tcp->ack = 1; break;
   case RST: tcp->rst = tcp->ack = 1; break;
   }
+#endif
 }
 
 void Headers::setTcpFlags(TcpFlags flags) {
@@ -207,6 +218,7 @@ void Headers::appendToIov(
     uint16_t capturedLen,
     uint16_t dataLen,
     PcapLoggingHandler::EncryptionType encryptionType) {
+#ifdef THRIFT_PCAP_LOGGING_SUPPORTED
 
   uint32_t ipsize = (is6_ ? sizeof(ip6_hdr) : sizeof(iphdr));
   uint32_t len = ipsize + sizeof(tcphdr) + dataLen;
@@ -247,6 +259,7 @@ void Headers::appendToIov(
     tcpAck_ += seqNumInc;
   }
   iov->push_back({&h->tcp, sizeof(tcphdr)});
+#endif
 }
 
 class RotatingFile {
@@ -630,7 +643,8 @@ class LoggingThread {
       dumpPacket(key, connData, packet);
     } else {
       if (numMessagesConnEnd_ > 0) {
-        if (connData.packets.size() >= numMessagesConnEnd_) {
+        if (connData.packets.size() >=
+            static_cast<size_t>(numMessagesConnEnd_)) {
           connData.packets.pop_front();
         }
         connData.packets.push_back(std::move(packet));
@@ -669,6 +683,7 @@ void PcapLoggingHandler::transportActive(Context* ctx) {
     return;
   }
 
+#ifdef THRIFT_PCAP_LOGGING_SUPPORTED
   if (config->sampleConnectionPct() != 100) {
     int rnd = folly::Random::rand32(100);
     if (rnd >= config->sampleConnectionPct()) {
@@ -693,6 +708,7 @@ void PcapLoggingHandler::transportActive(Context* ctx) {
   Message msg(Message::Type::CONN_OPEN, clock::now(), Direction::READ,
       local_, remote_, peer_);
   LoggingThread::get().addMessage(std::move(msg));
+#endif
 }
 
 void PcapLoggingHandler::maybeCheckSsl(Context* ctx) {
@@ -707,78 +723,89 @@ void PcapLoggingHandler::maybeCheckSsl(Context* ctx) {
 folly::Future<folly::Unit> PcapLoggingHandler::write(
     Context* ctx,
     std::unique_ptr<folly::IOBuf> buf) {
-
+#ifdef THRIFT_PCAP_LOGGING_SUPPORTED
   if (enabled_) {
     maybeCheckSsl(ctx);
     folly::IOBufQueue q(folly::IOBufQueue::cacheChainLength());
     q.append(buf->clone());
     size_t origLength = q.chainLength();
-    if (origLength > snaplen_) {
+    if (origLength > static_cast<size_t>(snaplen_)) {
       q.trimEnd(origLength - snaplen_);
     }
     Message msg(clock::now(), Direction::WRITE, local_, remote_, peer_,
         std::move(q), origLength, getEncryptionType());
     LoggingThread::get().addMessage(std::move(msg));
   }
+#endif
 
   return ctx->fireWrite(std::move(buf));
 }
 
 void PcapLoggingHandler::read(Context* ctx, folly::IOBufQueue& q) {
+#ifdef THRIFT_PCAP_LOGGING_SUPPORTED
   if (enabled_) {
     maybeCheckSsl(ctx);
     folly::IOBufQueue copy(folly::IOBufQueue::cacheChainLength());
     copy.append(q.front()->clone());
     size_t origLength = copy.chainLength();
-    if (origLength > snaplen_) {
+    if (origLength > static_cast<size_t>(snaplen_)) {
       copy.trimEnd(origLength - snaplen_);
     }
     Message msg(clock::now(), Direction::READ, local_, remote_, peer_,
        std::move(copy), origLength, getEncryptionType());
     LoggingThread::get().addMessage(std::move(msg));
   }
+#endif
 
   ctx->fireRead(q);
 }
 
 folly::Future<folly::Unit> PcapLoggingHandler::close(Context* ctx) {
+#ifdef THRIFT_PCAP_LOGGING_SUPPORTED
   if (enabled_) {
     Message msg(Message::Type::CONN_CLOSE, clock::now(), Direction::WRITE,
         local_, remote_, peer_);
     LoggingThread::get().addMessage(std::move(msg));
   }
+#endif
 
   return ctx->fireClose();
 }
 
 void PcapLoggingHandler::readEOF(Context* ctx) {
+#ifdef THRIFT_PCAP_LOGGING_SUPPORTED
   if (enabled_) {
     Message msg(Message::Type::CONN_CLOSE, clock::now(), Direction::READ,
         local_, remote_, peer_);
     LoggingThread::get().addMessage(std::move(msg));
   }
+#endif
 
   return ctx->fireReadEOF();
 }
 
 void PcapLoggingHandler::readException(Context* ctx,
     folly::exception_wrapper e) {
+#ifdef THRIFT_PCAP_LOGGING_SUPPORTED
   if (enabled_) {
     Message msg(Message::Type::CONN_ERROR, clock::now(), Direction::READ,
         local_, remote_, peer_);
     LoggingThread::get().addMessage(std::move(msg));
   }
+#endif
 
   return ctx->fireReadException(std::move(e));
 }
 
 folly::Future<folly::Unit> PcapLoggingHandler::writeException(Context* ctx,
     folly::exception_wrapper e) {
+#ifdef THRIFT_PCAP_LOGGING_SUPPORTED
   if (enabled_) {
     Message msg(Message::Type::CONN_ERROR, clock::now(), Direction::WRITE,
         local_, remote_, peer_);
     LoggingThread::get().addMessage(std::move(msg));
   }
+#endif
 
   return ctx->fireWriteException(std::move(e));
 }
@@ -788,11 +815,13 @@ void PcapLoggingConfig::set(std::shared_ptr<const PcapLoggingConfig> config) {
     return;
   }
 
+#ifdef THRIFT_PCAP_LOGGING_SUPPORTED
   LoggingThread::get().setConfig(config);
   auto p = config_.try_get();
   if (p) {
     *p = *config;
   }
+#endif
 }
 
 folly::Singleton<PcapLoggingConfig> PcapLoggingConfig::config_;

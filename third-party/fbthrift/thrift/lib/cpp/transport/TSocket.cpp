@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Facebook, Inc.
+ * Copyright 2015-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,29 +13,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include <thrift/lib/cpp/transport/TSocket.h>
+
+#include <folly/portability/Fcntl.h>
+#include <folly/portability/Sockets.h>
+#include <folly/portability/Unistd.h>
 
 #include <thrift/lib/cpp/thrift_config.h>
 #include <thrift/lib/cpp/util/PausableTimer.h>
 #include <cstring>
 #include <sstream>
-#include <sys/socket.h>
-#include <sys/poll.h>
 #include <sys/types.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <netdb.h>
-#include <unistd.h>
 #include <errno.h>
-#include <fcntl.h>
 
 #include <thrift/lib/cpp/transport/TTransportException.h>
+
 
 namespace apache { namespace thrift { namespace transport {
 
 using namespace std;
+
+namespace fsp = folly::portability::sockets;
 
 // Global var to track total socket sys calls
 uint32_t g_socket_syscalls = 0;
@@ -72,21 +70,23 @@ TSocket::TSocket(string host, int port) :
   maxRecvRetries_(5) {
 }
 
-TSocket::TSocket(const folly::SocketAddress* address) :
-  host_(address->getAddressStr()),
-  port_(address->getPort()),
-  socket_(-1),
-  maxRecvRetries_(5) {
+TSocket::TSocket(const folly::SocketAddress* address)
+    : host_(address->isFamilyInet() ? address->getAddressStr() : ""),
+      port_(address->isFamilyInet() ? address->getPort() : 0),
+      path_(address->isFamilyInet() ? "" : address->getPath()),
+      socket_(-1),
+      maxRecvRetries_(5) {
   // For convenience with the existing code that resolves hostnames,
   // we just store the IP address as a string in host_, and convert it back to
   // an address in connect()
 }
 
-TSocket::TSocket(const folly::SocketAddress& address) :
-  host_(address.getAddressStr()),
-  port_(address.getPort()),
-  socket_(-1),
-  maxRecvRetries_(5) {
+TSocket::TSocket(const folly::SocketAddress& address)
+    : host_(address.isFamilyInet() ? address.getAddressStr() : ""),
+      port_(address.isFamilyInet() ? address.getPort() : 0),
+      path_(address.isFamilyInet() ? "" : address.getPath()),
+      socket_(-1),
+      maxRecvRetries_(5) {
   // For convenience with the existing code that resolves hostnames,
   // we just store the IP address as a string in host_, and convert it back to
   // an address in connect()
@@ -156,9 +156,9 @@ void TSocket::openConnection(struct addrinfo *res) {
   }
 
   if (!path_.empty()) {
-    socket_ = socket(PF_UNIX, SOCK_STREAM, IPPROTO_IP);
+    socket_ = fsp::socket(PF_UNIX, SOCK_STREAM, IPPROTO_IP);
   } else {
-    socket_ = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    socket_ = fsp::socket(res->ai_family, res->ai_socktype, res->ai_protocol);
   }
   if (socket_ == -1) {
     int errno_copy = errno;
@@ -429,7 +429,7 @@ uint32_t TSocket::read(uint8_t* buf, uint32_t len) {
   // we stop retrying on EINTR.  Note that we might still exceed the
   // timeout, but by at most a factor of 2.
   pausableTimer.start();
-  int got = folly::to<int>(recv(socket_, buf, len, 0));
+  int got = folly::to<int>(recv(socket_, buf, size_t(len), 0));
   int errno_after_recv = errno; // gettimeofday, used by PausableTimer, can change errno
   pausableTimer.stop();
   ++g_socket_syscalls;
@@ -558,7 +558,7 @@ uint32_t TSocket::write_partial(const uint8_t* buf, uint32_t len) {
   flags |= MSG_NOSIGNAL;
 #endif // ifdef MSG_NOSIGNAL
 
-  int b = folly::to<int>(send(socket_, buf + sent, len - sent, flags));
+  int b = folly::to<int>(send(socket_, buf + sent, size_t(len - sent), flags));
   ++g_socket_syscalls;
 
   if (b < 0) {
@@ -647,7 +647,6 @@ TSocket::Options TSocket::getCurrentSocketOptions() {
   size_t bufSize;
   struct linger l;
   int ret = 0;
-  int errno_copy;
 
   // ConnTimeout
   ro.connTimeout = options_.connTimeout;
@@ -658,7 +657,7 @@ TSocket::Options TSocket::getCurrentSocketOptions() {
   *optlen = sizeof(s);
   ret = getsockopt(socket_, SOL_SOCKET, SO_SNDTIMEO, &s, optlen);
   if (ret == -1) {
-    errno_copy = errno;  // Copy errno because we're allocating memory.
+    int errno_copy = errno;  // Copy errno because we're allocating memory.
     GlobalOutput.perror("TSocket::SendTimeout getsockopt() " +
         getSocketInfo(), errno_copy);
   } else {
@@ -671,7 +670,7 @@ TSocket::Options TSocket::getCurrentSocketOptions() {
   *optlen = sizeof(s);
   ret = getsockopt(socket_, SOL_SOCKET, SO_RCVTIMEO, &s, optlen);
   if (ret == -1) {
-    errno_copy = errno;  // Copy errno because we're allocating memory.
+    int errno_copy = errno;  // Copy errno because we're allocating memory.
     GlobalOutput.perror("TSocket::RecvTimeout getsockopt() " +
         getSocketInfo(), errno_copy);
   } else {

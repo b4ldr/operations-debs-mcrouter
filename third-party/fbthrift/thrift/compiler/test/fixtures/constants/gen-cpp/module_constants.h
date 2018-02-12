@@ -25,9 +25,26 @@ struct module_constants {
   static constexpr double y() { return y_; }
   static constexpr double const z_ = 1e+09;
   static constexpr double z() { return z_; }
+  static constexpr double const zeroDoubleValue_ = 0;
+  static constexpr double zeroDoubleValue() { return zeroDoubleValue_; }
+  static constexpr double const longDoubleValue_ = 2.59961e-05;
+  static constexpr double longDoubleValue() { return longDoubleValue_; }
   static Internship const& instagram();
   static std::vector<Range>  const& kRanges();
   static std::vector<Internship>  const& internList();
+  static struct1 const& pod_0();
+  static struct1 const& pod_1();
+  static struct2 const& pod_2();
+  static struct3 const& pod_3();
+  static union1 const& u_1_1();
+  static union1 const& u_1_2();
+  static union1 const& u_1_3();
+  static union2 const& u_2_1();
+  static union2 const& u_2_2();
+  static union2 const& u_2_3();
+  static union2 const& u_2_4();
+  static union2 const& u_2_5();
+  static union2 const& u_2_6();
   // consider using folly::StringPiece instead of std::string whenever possible
   // to referencing this statically allocated string constant, in order to
   // prevent unnecessary allocations
@@ -84,43 +101,6 @@ struct module_constants {
   static std::map<std::string, std::string>  const& empty_string_string_map();
 };
 
-class __attribute__((__deprecated__("moduleConstants suffers from the 'static initialization order fiasco' (https://isocpp.org/wiki/faq/ctors#static-init-order) and may CRASH your program. Instead, use module_constants::CONSTANT_NAME()"))) moduleConstants {
-public:
-  moduleConstants();
-
-  int32_t myInt;
-  std::string name;
-  std::vector<std::map<std::string, int32_t> >  states;
-  double x;
-  double y;
-  double z;
-  Internship instagram;
-  std::vector<Range>  kRanges;
-  std::vector<Internship>  internList;
-  std::string apostrophe;
-  std::string tripleApostrophe;
-  std::string quotationMark;
-  std::string backslash;
-  std::string escaped_a;
-  std::map<std::string, int32_t>  char2ascii;
-  std::vector<std::string>  escaped_strings;
-  bool false_c;
-  bool true_c;
-  int8_t zero_byte;
-  int16_t zero16;
-  int32_t zero32;
-  int64_t zero64;
-  double zero_dot_zero;
-  std::string empty_string;
-  std::vector<int32_t>  empty_int_list;
-  std::vector<std::string>  empty_string_list;
-  std::set<int32_t>  empty_int_set;
-  std::set<std::string>  empty_string_set;
-  std::map<int32_t, int32_t>  empty_int_int_map;
-  std::map<int32_t, std::string>  empty_int_string_map;
-  std::map<std::string, int32_t>  empty_string_int_map;
-  std::map<std::string, std::string>  empty_string_string_map;
-};
 
 
 

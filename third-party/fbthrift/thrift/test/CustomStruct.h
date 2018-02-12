@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2014-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #pragma once
 
 #include <folly/Conv.h>
@@ -96,7 +95,7 @@ inline uint32_t Cpp2Ops< ::thrift::test::MyCustomStruct>::write(
 template <>
 template <class Protocol>
 inline uint32_t Cpp2Ops< ::thrift::test::MyCustomStruct>::serializedSize(
-    Protocol* p,
+    Protocol const* p,
     const ::thrift::test::MyCustomStruct* obj) {
   uint32_t xfer = 0;
   assert(obj->data_.size() >= sizeof(int));
@@ -114,57 +113,55 @@ inline uint32_t Cpp2Ops< ::thrift::test::MyCustomStruct>::serializedSize(
 template <>
 template <class Protocol>
 inline uint32_t Cpp2Ops< ::thrift::test::MyCustomStruct>::serializedSizeZC(
-    Protocol* p,
+    Protocol const* p,
     const ::thrift::test::MyCustomStruct* obj) {
   return Cpp2Ops< ::thrift::test::MyCustomStruct>::serializedSize(p, obj);
 }
 
 template <>
 template <class Protocol>
-inline uint32_t Cpp2Ops< ::thrift::test::MyCustomStruct>::read(
+inline void Cpp2Ops<::thrift::test::MyCustomStruct>::read(
     Protocol* iprot,
     ::thrift::test::MyCustomStruct* obj) {
-  uint32_t xfer = 0;
   std::string fname;
   protocol::TType ftype;
   int16_t fid;
   std::string suffix;
   int prefix;
 
-  xfer += iprot->readStructBegin(fname);
+  iprot->readStructBegin(fname);
 
   while (true) {
-    xfer += iprot->readFieldBegin(fname, ftype, fid);
+    iprot->readFieldBegin(fname, ftype, fid);
     if (ftype == apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid) {
       case 1:
         if (ftype == apache::thrift::protocol::T_STRING) {
-          xfer += iprot->readString(suffix);
+          iprot->readString(suffix);
         } else {
-          xfer += iprot->skip(ftype);
+          iprot->skip(ftype);
         }
         break;
       case 2:
         if (ftype == apache::thrift::protocol::T_I32) {
-          xfer += iprot->readI32(prefix);
+          iprot->readI32(prefix);
         } else {
-          xfer += iprot->skip(ftype);
+          iprot->skip(ftype);
         }
         break;
       default:
-        xfer += iprot->skip(ftype);
+        iprot->skip(ftype);
         break;
     }
-    xfer += iprot->readFieldEnd();
+    iprot->readFieldEnd();
   }
-  xfer += iprot->readStructEnd();
+  iprot->readStructEnd();
 
   obj->data_ = std::string(reinterpret_cast<const char*>(&prefix),
                            sizeof(int)) +
                suffix;
-  return xfer;
 }
 
 template <>
@@ -206,7 +203,7 @@ inline uint32_t Cpp2Ops< ::thrift::test::MyCustomUnion>::write(
 template <>
 template <class Protocol>
 inline uint32_t Cpp2Ops< ::thrift::test::MyCustomUnion>::serializedSize(
-    Protocol* p,
+    Protocol const* p,
     const ::thrift::test::MyCustomUnion* obj) {
   uint32_t xfer = 0;
   xfer += p->serializedStructSize("MyStruct");
@@ -225,54 +222,52 @@ inline uint32_t Cpp2Ops< ::thrift::test::MyCustomUnion>::serializedSize(
 template <>
 template <class Protocol>
 inline uint32_t Cpp2Ops< ::thrift::test::MyCustomUnion>::serializedSizeZC(
-    Protocol* p,
+    Protocol const* p,
     const ::thrift::test::MyCustomUnion* obj) {
   return Cpp2Ops< ::thrift::test::MyCustomUnion>::serializedSize(p, obj);
 }
 
 template <>
 template <class Protocol>
-inline uint32_t Cpp2Ops< ::thrift::test::MyCustomUnion>::read(
+inline void Cpp2Ops<::thrift::test::MyCustomUnion>::read(
     Protocol* iprot,
     ::thrift::test::MyCustomUnion* obj) {
-  uint32_t xfer = 0;
   std::string fname;
   protocol::TType ftype;
   int16_t fid;
 
-  xfer += iprot->readStructBegin(fname);
+  iprot->readStructBegin(fname);
 
-  xfer += iprot->readFieldBegin(fname, ftype, fid);
+  iprot->readFieldBegin(fname, ftype, fid);
   if (ftype != apache::thrift::protocol::T_STOP) {
     switch (fid) {
       case 1:
         if (ftype == apache::thrift::protocol::T_STRING) {
-          xfer += iprot->readString(obj->data_);
+          iprot->readString(obj->data_);
 
         } else {
-          xfer += iprot->skip(ftype);
+          iprot->skip(ftype);
         }
         break;
       case 2:
         if (ftype == apache::thrift::protocol::T_I32) {
           int i;
-          xfer += iprot->readI32(i);
+          iprot->readI32(i);
           obj->data_ = folly::to<std::string>(i);
         } else {
-          xfer += iprot->skip(ftype);
+          iprot->skip(ftype);
         }
         break;
       default:
-        xfer += iprot->skip(ftype);
+        iprot->skip(ftype);
         break;
     }
-    xfer += iprot->readFieldEnd();
-    xfer += iprot->readFieldBegin(fname, ftype, fid);
-    xfer += iprot->readFieldEnd();
+    iprot->readFieldEnd();
+    iprot->readFieldBegin(fname, ftype, fid);
+    iprot->readFieldEnd();
   }
 
-  xfer += iprot->readStructEnd();
-  return xfer;
+  iprot->readStructEnd();
 }
 
 template <>

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Facebook, Inc.
+ * Copyright 2004-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,22 +15,75 @@
  */
 #pragma once
 
-#include <folly/futures/Future.h>
-#include <folly/Traits.h>
-#include <thrift/lib/cpp2/async/AsyncProcessor.h>
-#include <thrift/lib/cpp2/Thrift.h>
 #include <type_traits>
 
-namespace folly {
-class IOBufQueue;
-namespace io {
-class QueueAppender;
-} // io
-} // folly
+#include <folly/Format.h>
+#include <folly/Traits.h>
+#include <folly/futures/Future.h>
+#include <thrift/lib/cpp2/FrozenTApplicationException.h>
+#include <thrift/lib/cpp2/GeneratedHeaderHelper.h>
+#include <thrift/lib/cpp2/SerializationSwitch.h>
+#include <thrift/lib/cpp2/Thrift.h>
+#include <thrift/lib/cpp2/async/AsyncProcessor.h>
+#include <thrift/lib/cpp2/async/RequestChannel.h>
+#include <thrift/lib/cpp2/frozen/Frozen.h>
+#include <thrift/lib/cpp2/protocol/Frozen2Protocol.h>
+#include <thrift/lib/cpp2/util/Frozen2ViewHelpers.h>
+
+#include <thrift/lib/cpp2/protocol/Cpp2Ops.tcc>
 
 namespace apache { namespace thrift {
 
 namespace detail {
+
+class container_traits {
+ public:
+  template <typename ...>
+  static std::false_type has_insert(...);
+
+  template <
+    typename T,
+    typename V = typename T::value_type,
+    typename = decltype(std::declval<T&>().insert(std::declval<V&&>()))>
+  static std::true_type has_insert(T*);
+
+  template <typename ...>
+  static std::false_type has_op_brace(...);
+
+  template <
+    typename T,
+    typename K = typename T::key_type,
+    typename = decltype(std::declval<T>()[std::declval<K>()])>
+  static std::true_type has_op_brace(T*);
+
+  template <typename T>
+  using is_map_or_set = decltype(has_insert(static_cast<T*>(nullptr)));
+
+  template <typename T>
+  using is_map_not_set = decltype(has_op_brace(static_cast<T*>(nullptr)));
+
+  template <typename ...>
+  static std::false_type has_push_back(...);
+
+  template <
+    typename T,
+    typename V = typename T::value_type,
+    typename = decltype(std::declval<T&>().push_back(std::declval<V&&>()))>
+  static std::true_type has_push_back(T*);
+
+  template <typename T>
+  using is_map = std::integral_constant<bool, is_map_not_set<T>::value>;
+
+  template <typename T>
+  using is_set = std::integral_constant<bool,
+        is_map_or_set<T>::value && !is_map_not_set<T>::value>;
+
+  template <typename T>
+  using is_vector = std::integral_constant<bool,
+        !is_map_or_set<T>::value &&
+        decltype(has_push_back(static_cast<T*>(nullptr)))::value>;
+};
+
 template <int N, int Size, class F, class Tuple>
 struct ForEachImpl {
   static uint32_t forEach(Tuple&& tuple, F&& f) {
@@ -54,11 +107,35 @@ uint32_t forEach(Tuple&& tuple, F&& f) {
       forEach(std::forward<Tuple>(tuple), std::forward<F>(f));
 }
 
+template <int N, int Size, class F, class Tuple>
+struct ForEachVoidImpl {
+  static void forEach(Tuple&& tuple, F&& f) {
+    f(std::get<N>(tuple), N);
+    ForEachVoidImpl<N + 1, Size, F, Tuple>::forEach(
+        std::forward<Tuple>(tuple), std::forward<F>(f));
+  }
+};
+template <int Size, class F, class Tuple>
+struct ForEachVoidImpl<Size, Size, F, Tuple> {
+  static void forEach(Tuple&& /*tuple*/, F&& /*f*/) {}
+};
+
+template <int N = 0, class F, class Tuple>
+void forEachVoid(Tuple&& tuple, F&& f) {
+  ForEachVoidImpl<
+      N,
+      std::tuple_size<typename std::remove_reference<Tuple>::type>::value,
+      F,
+      Tuple>::forEach(std::forward<Tuple>(tuple), std::forward<F>(f));
+}
+
 template <typename Protocol, typename IsSet>
 struct Writer {
   Writer(Protocol* prot, const IsSet& isset) : prot_(prot), isset_(isset) {}
   template <typename FieldData>
   uint32_t operator()(const FieldData& fieldData, int index) {
+    using Ops = Cpp2Ops<typename FieldData::ref_type>;
+
     if (!isset_.getIsSet(index)) {
       return 0;
     }
@@ -67,8 +144,8 @@ struct Writer {
     const auto& ex = fieldData.ref();
 
     uint32_t xfer = 0;
-    xfer += prot_->writeFieldBegin("", Cpp2Ops<typename FieldData::ref_type>::thriftType(), fid);
-    xfer += Cpp2Ops<typename FieldData::ref_type>::write(prot_, &ex);
+    xfer += prot_->writeFieldBegin("", Ops::thriftType(), fid);
+    xfer += Ops::write(prot_, &ex);
     xfer += prot_->writeFieldEnd();
     return xfer;
   }
@@ -82,6 +159,8 @@ struct Sizer {
   Sizer(Protocol* prot, const IsSet& isset) : prot_(prot), isset_(isset) {}
   template <typename FieldData>
   uint32_t operator()(const FieldData& fieldData, int index) {
+    using Ops = Cpp2Ops<typename FieldData::ref_type>;
+
     if (!isset_.getIsSet(index)) {
       return 0;
     }
@@ -90,8 +169,8 @@ struct Sizer {
     const auto& ex = fieldData.ref();
 
     uint32_t xfer = 0;
-    xfer += prot_->serializedFieldSize("", Cpp2Ops<typename FieldData::ref_type>::thriftType(), fid);
-    xfer += Cpp2Ops<typename FieldData::ref_type>::serializedSize(prot_, &ex);
+    xfer += prot_->serializedFieldSize("", Ops::thriftType(), fid);
+    xfer += Ops::serializedSize(prot_, &ex);
     return xfer;
   }
  private:
@@ -104,6 +183,8 @@ struct SizerZC {
   SizerZC(Protocol* prot, const IsSet& isset) : prot_(prot), isset_(isset) {}
   template <typename FieldData>
   uint32_t operator()(const FieldData& fieldData, int index) {
+    using Ops = Cpp2Ops<typename FieldData::ref_type>;
+
     if (!isset_.getIsSet(index)) {
       return 0;
     }
@@ -112,8 +193,8 @@ struct SizerZC {
     const auto& ex = fieldData.ref();
 
     uint32_t xfer = 0;
-    xfer += prot_->serializedFieldSize("", Cpp2Ops<typename FieldData::ref_type>::thriftType(), fid);
-    xfer += Cpp2Ops<typename FieldData::ref_type>::serializedSizeZC(prot_, &ex);
+    xfer += prot_->serializedFieldSize("", Ops::thriftType(), fid);
+    xfer += Ops::serializedSizeZC(prot_, &ex);
     return xfer;
   }
  private:
@@ -127,20 +208,22 @@ struct Reader {
     : prot_(prot), isset_(isset), fid_(fid), ftype_(ftype), success_(success)
   {}
   template <typename FieldData>
-  uint32_t operator()(FieldData& fieldData, int index) {
-    if (ftype_ != Cpp2Ops<typename FieldData::ref_type>::thriftType()) {
-      return 0;
+  void operator()(FieldData& fieldData, int index) {
+    using Ops = Cpp2Ops<typename FieldData::ref_type>;
+
+    if (ftype_ != Ops::thriftType()) {
+      return;
     }
 
     int16_t myfid = FieldData::fid;
     auto& ex = fieldData.ref();
     if (myfid != fid_) {
-      return 0;
+      return;
     }
 
     success_ = true;
     isset_.setIsSet(index);
-    return Cpp2Ops<typename FieldData::ref_type>::read(prot_, &ex);
+    Ops::read(prot_, &ex);
   }
  private:
   Protocol* prot_;
@@ -155,53 +238,6 @@ T& maybe_remove_pointer(T& x) { return x; }
 
 template <typename T>
 T& maybe_remove_pointer(T* x) { return *x; }
-
-FOLLY_CREATE_HAS_MEMBER_FN_TRAITS(push_back_checker, push_back);
-FOLLY_CREATE_HAS_MEMBER_FN_TRAITS(insert_checker, insert);
-FOLLY_CREATE_HAS_MEMBER_FN_TRAITS(op_bracket_checker, operator[]);
-FOLLY_CREATE_HAS_MEMBER_FN_TRAITS(reserve_checker, reserve);
-
-// The std::vector<bool> specialization in gcc provides a push_back(bool)
-// method, rather than a push_back(bool&&) like the generic std::vector<T>
-template <class C>
-using is_vector_like = std::integral_constant<bool,
-    push_back_checker<C, void(typename C::value_type&&)>::value ||
-    push_back_checker<C, void(typename C::value_type)>::value>;
-
-template <class C>
-using op_bracket_of_key_signature =
-    typename C::mapped_type&(const typename C::key_type&);
-
-template <class C>
-using has_op_bracket_of_key = std::integral_constant<bool,
-      op_bracket_checker<C, op_bracket_of_key_signature<C>>::value>;
-
-template <class C>
-using has_insert = insert_checker<C,
-      std::pair<typename C::iterator, bool>(typename C::value_type&&)>;
-
-template <class C>
-using is_set_like = std::integral_constant<bool,
-      has_insert<C>::value &&
-      std::is_same<typename C::key_type, typename C::value_type>::value>;
-
-template <class C>
-using is_map_like = has_op_bracket_of_key<C>;
-
-template <class T, class = void>
-struct Reserver {
-  static void reserve(T& container, typename T::size_type size) {}
-};
-
-template <class C>
-using has_reserve = reserve_checker<C, void(typename C::size_type)>;
-
-template <class T>
-struct Reserver<T, typename std::enable_if<has_reserve<T>::value>::type> {
-  static void reserve(T& container, typename T::size_type size) {
-    container.reserve(size);
-  }
-};
 
 template <bool hasIsSet, size_t count>
 struct IsSetHelper {
@@ -237,7 +273,9 @@ class ThriftPresult : private std::tuple<Field...>,
   // to employ the empty base class optimization when they are empty
   typedef std::tuple<Field...> Fields;
   typedef detail::IsSetHelper<hasIsSet, sizeof...(Field)> CurIsSetHelper;
+
  public:
+  using size = std::tuple_size<Fields>;
 
   CurIsSetHelper& isSet() { return *this; }
   const CurIsSetHelper& isSet() const { return *this; }
@@ -255,29 +293,31 @@ class ThriftPresult : private std::tuple<Field...>,
 
   template <class Protocol>
   uint32_t read(Protocol* prot) {
-    uint32_t xfer = 0;
+    auto xfer = prot->getCurrentPosition().getCurrentPosition();
     std::string fname;
     apache::thrift::protocol::TType ftype;
     int16_t fid;
 
-    xfer += prot->readStructBegin(fname);
+    prot->readStructBegin(fname);
 
     while (true) {
-      xfer += prot->readFieldBegin(fname, ftype, fid);
+      prot->readFieldBegin(fname, ftype, fid);
       if (ftype == apache::thrift::protocol::T_STOP) {
         break;
       }
       bool readSomething = false;
-      xfer += detail::forEach(fields(), detail::Reader<Protocol, CurIsSetHelper>(
-          prot, isSet(), fid, ftype, readSomething));
+      detail::forEachVoid(
+          fields(),
+          detail::Reader<Protocol, CurIsSetHelper>(
+              prot, isSet(), fid, ftype, readSomething));
       if (!readSomething) {
-        xfer += prot->skip(ftype);
+        prot->skip(ftype);
       }
-      xfer += prot->readFieldEnd();
+      prot->readFieldEnd();
     }
-    xfer += prot->readStructEnd();
+    prot->readStructEnd();
 
-    return xfer;
+    return prot->getCurrentPosition().getCurrentPosition() - xfer;
   }
 
   template <class Protocol>
@@ -312,6 +352,252 @@ class ThriftPresult : private std::tuple<Field...>,
   }
 };
 
+namespace frozen {
+
+template <bool hasIsSet, typename... Fields>
+struct ViewHelper<ThriftPresult<hasIsSet, Fields...>> {
+  using ViewType = ThriftPresult<hasIsSet, Fields...>;
+  using ObjectType = ThriftPresult<hasIsSet, Fields...>;
+
+  static ObjectType thaw(ViewType v) {
+    return v;
+  }
+};
+
+template <bool hasIsSet, typename... Args>
+class Layout<
+    ThriftPresult<hasIsSet, Args...>,
+    std::enable_if_t<
+        !folly::IsTriviallyCopyable<ThriftPresult<hasIsSet, Args...>>::value>>
+    : public LayoutBase, private std::tuple<Field<typename Args::ref_type>...> {
+ public:
+  using Base = LayoutBase;
+
+  using LayoutSelf = Layout;
+
+  using T = ThriftPresult<hasIsSet, Args...>;
+
+  using Tuple = std::tuple<Field<typename Args::ref_type>...>;
+
+  Layout()
+      : LayoutBase(typeid(T)),
+        Tuple(Field<typename Args::ref_type>{Args::fid,
+                                             typeid(Args).name()}...) {}
+
+  FieldPosition maximize() {
+    FieldPosition pos = startFieldPosition();
+    forEachElement(MaximizeTupleAccessor(pos));
+    return pos;
+  }
+  FieldPosition layout(LayoutRoot& root, const T& x, LayoutPosition self) {
+    FieldPosition pos = startFieldPosition();
+    forEachElement(LayoutTupleAccessor(root, x, self, pos));
+    return pos;
+  }
+  void freeze(FreezeRoot& root, const T& x, FreezePosition self) const {
+    forEachElement(FreezeTupleAccessor(root, x, self));
+  }
+  void thaw(ViewPosition self, T& out) const {
+    forEachElement(ThawTupleAccessor(self, out));
+  }
+  void print(std::ostream& os, int level) const final {
+    LayoutBase::print(os, level);
+    os << "::apache::thrift::ThriftPresult";
+  }
+  void clear() final {
+    LayoutBase::clear();
+    forEachElement(ClearTupleAccessor());
+  }
+
+  struct View : public ViewBase<View, LayoutSelf, T> {
+    View() {}
+    View(const LayoutSelf* layout, ViewPosition position)
+        : ViewBase<View, LayoutSelf, T>(layout, position) {}
+    template <int Idx>
+    auto get()
+        -> decltype(std::get<Idx>(this->layout_->asTuple())
+                        .layout.view(this->position_(
+                            std::get<Idx>(this->layout_->asTuple()).pos))) {
+      return std::get<Idx>(this->layout_->asTuple())
+          .layout.view(
+              this->position_(std::get<Idx>(this->layout_->asTuple()).pos));
+    }
+  };
+  View view(ViewPosition self) const {
+    return View(this, self);
+  }
+
+  template <typename SchemaInfo>
+  void save(
+      typename SchemaInfo::Schema& schema,
+      typename SchemaInfo::Layout& _layout,
+      typename SchemaInfo::Helper& helper) const {
+    Base::template save<SchemaInfo>(schema, _layout, helper);
+    forEachElement(SaveTupleAccessor<SchemaInfo>(schema, _layout, helper));
+  }
+
+  template <typename SchemaInfo>
+  void load(
+      const typename SchemaInfo::Schema& schema,
+      const typename SchemaInfo::Layout& _layout) {
+    Base::template load<SchemaInfo>(schema, _layout);
+    std::unordered_map<int, const schema::MemoryField*> refs;
+    for (const auto& field : _layout.getFields()) {
+      refs[field.getId()] = &field;
+    }
+    forEachElement(LoadTupleAccessor<SchemaInfo>(schema, _layout, refs));
+  }
+
+  inline Tuple& asTuple() {
+    return *this;
+  }
+
+  inline const Tuple& asTuple() const {
+    return *this;
+  }
+
+ protected:
+  template <
+      typename F,
+      typename Seq = folly::make_index_sequence<sizeof...(Args)>>
+  void forEachElement(F&& f) {
+    forEachElement(std::forward<F>(f), Seq{});
+  }
+
+  template <
+      typename F,
+      typename Seq = folly::make_index_sequence<sizeof...(Args)>>
+  void forEachElement(F&& f) const {
+    forEachElement(std::forward<F>(f), Seq{});
+  }
+
+ private:
+  template <typename F, size_t... Idxs>
+  void forEachElement(F&& f, folly::index_sequence<Idxs...>) {
+    using _ = bool[sizeof...(Args)];
+    (void)_{(f.template forEach<Idxs>(std::get<Idxs>(asTuple())), false)...};
+  }
+
+  template <typename F, size_t... Idxs>
+  void forEachElement(F&& f, folly::index_sequence<Idxs...>) const {
+    using _ = bool[sizeof...(Args)];
+    (void)_{(f.template forEach<Idxs>(std::get<Idxs>(asTuple())), false)...};
+  }
+
+  struct MaximizeTupleAccessor {
+    explicit MaximizeTupleAccessor(FieldPosition& pos) : pos_(pos) {}
+
+    template <int Idx, typename T>
+    void forEach(T& field) {
+      pos_ = maximizeField(pos_, field);
+    }
+
+    FieldPosition& pos_;
+  };
+
+  struct LayoutTupleAccessor {
+    explicit LayoutTupleAccessor(
+        LayoutRoot& root,
+        const T& x,
+        LayoutPosition& self,
+        FieldPosition& pos)
+        : root_(root), x_(x), self_(self), pos_(pos) {}
+
+    template <int Idx, typename T>
+    void forEach(T& field) {
+      if (x_.getIsSet(Idx)) {
+        pos_ =
+            root_.layoutField(self_, pos_, field, x_.template get<Idx>().ref());
+      }
+    }
+
+    LayoutRoot& root_;
+    const T& x_;
+    LayoutPosition& self_;
+    FieldPosition& pos_;
+  };
+
+  struct FreezeTupleAccessor {
+    explicit FreezeTupleAccessor(
+        FreezeRoot& root,
+        const T& x,
+        FreezePosition& self)
+        : root_(root), x_(x), self_(self) {}
+
+    template <int Idx, typename T>
+    void forEach(T& field) {
+      if (x_.getIsSet(Idx)) {
+        root_.freezeField(self_, field, x_.template get<Idx>().ref());
+      }
+    }
+
+    FreezeRoot& root_;
+    const T& x_;
+    FreezePosition& self_;
+  };
+
+  struct ThawTupleAccessor {
+    explicit ThawTupleAccessor(ViewPosition& self, T& out)
+        : self_(self), out_(out) {}
+
+    template <int Idx, typename T>
+    void forEach(T& field) {
+      thawField(self_, field, out_.template get<Idx>().ref());
+      out_.setIsSet(Idx, !field.layout.empty());
+    }
+
+    ViewPosition& self_;
+    T& out_;
+  };
+
+  struct ClearTupleAccessor {
+    template <int Idx, typename T>
+    void forEach(T& field) {
+      field.clear();
+    }
+  };
+
+  template <typename SchemaInfo>
+  struct SaveTupleAccessor {
+    SaveTupleAccessor(
+        typename SchemaInfo::Schema& schema,
+        typename SchemaInfo::Layout& layout,
+        typename SchemaInfo::Helper& helper)
+        : schema_(schema), layout_(layout), helper_(helper) {}
+
+    template <int Idx, typename T>
+    void forEach(T& field) {
+      field.template save<SchemaInfo>(schema_, layout_, helper_);
+    }
+
+    typename SchemaInfo::Schema& schema_;
+    typename SchemaInfo::Layout& layout_;
+    typename SchemaInfo::Helper& helper_;
+  };
+
+  template <typename SchemaInfo>
+  struct LoadTupleAccessor {
+    LoadTupleAccessor(
+        const typename SchemaInfo::Schema& schema,
+        const typename SchemaInfo::Layout& layout,
+        const std::unordered_map<int, const schema::MemoryField*>& refs)
+        : schema_(schema), layout_(layout), refs_(refs) {}
+
+    template <int Idx, typename T>
+    void forEach(T& field) {
+      if (auto ptr = folly::get_default(refs_, field.key, nullptr)) {
+        field.template load<SchemaInfo>(schema_, *ptr);
+      }
+    }
+
+    const typename SchemaInfo::Schema& schema_;
+    const typename SchemaInfo::Layout& layout_;
+    const std::unordered_map<int, const schema::MemoryField*>& refs_;
+  };
+};
+
+} // apache::thrift::frozen
+
 template <bool hasIsSet, class... Args>
 class Cpp2Ops<ThriftPresult<hasIsSet, Args...>> {
  public:
@@ -337,531 +623,142 @@ class Cpp2Ops<ThriftPresult<hasIsSet, Args...>> {
   }
 };
 
-template <>
-class Cpp2Ops<folly::fbstring> {
- public:
-  typedef folly::fbstring Type;
-  static constexpr protocol::TType thriftType() {
-    return protocol::T_STRING;
-  }
-  template <class Protocol>
-  static uint32_t write(Protocol* prot, const Type* value) {
-    return prot->writeString(*value);
-  }
-  template <class Protocol>
-  static uint32_t read(Protocol* prot, Type* value) {
-    return prot->readString(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSize(Protocol* prot, const Type* value) {
-    return prot->serializedSizeString(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSizeZC(Protocol* prot, const Type* value) {
-    return prot->serializedSizeString(*value);
-  }
-};
-
-template <>
-class Cpp2Ops<std::string> {
- public:
-  typedef std::string Type;
-  static constexpr protocol::TType thriftType() {
-    return protocol::T_STRING;
-  }
-  template <class Protocol>
-  static uint32_t write(Protocol* prot, const Type* value) {
-    return prot->writeString(*value);
-  }
-  template <class Protocol>
-  static uint32_t read(Protocol* prot, Type* value) {
-    return prot->readString(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSize(Protocol* prot, const Type* value) {
-    return prot->serializedSizeString(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSizeZC(Protocol* prot, const Type* value) {
-    return prot->serializedSizeString(*value);
-  }
-};
-
-template <>
-class Cpp2Ops<int8_t> {
- public:
-  typedef int8_t Type;
-  static constexpr protocol::TType thriftType() {
-    return protocol::T_BYTE;
-  }
-  template <class Protocol>
-  static uint32_t write(Protocol* prot, const Type* value) {
-    return prot->writeByte(*value);
-  }
-  template <class Protocol>
-  static uint32_t read(Protocol* prot, Type* value) {
-    return prot->readByte(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSize(Protocol* prot, const Type* value) {
-    return prot->serializedSizeByte(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSizeZC(Protocol* prot, const Type* value) {
-    return prot->serializedSizeByte(*value);
-  }
-};
-
-template <>
-class Cpp2Ops<int16_t> {
- public:
-  typedef int16_t Type;
-  static constexpr protocol::TType thriftType() {
-    return protocol::T_I16;
-  }
-  template <class Protocol>
-  static uint32_t write(Protocol* prot, const Type* value) {
-    return prot->writeI16(*value);
-  }
-  template <class Protocol>
-  static uint32_t read(Protocol* prot, Type* value) {
-    return prot->readI16(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSize(Protocol* prot, const Type* value) {
-    return prot->serializedSizeI16(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSizeZC(Protocol* prot, const Type* value) {
-    return prot->serializedSizeI16(*value);
-  }
-};
-
-template <>
-class Cpp2Ops<int32_t> {
- public:
-  typedef int32_t Type;
-  static constexpr protocol::TType thriftType() {
-    return protocol::T_I32;
-  }
-  template <class Protocol>
-  static uint32_t write(Protocol* prot, const Type* value) {
-    return prot->writeI32(*value);
-  }
-  template <class Protocol>
-  static uint32_t read(Protocol* prot, Type* value) {
-    return prot->readI32(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSize(Protocol* prot, const Type* value) {
-    return prot->serializedSizeI32(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSizeZC(Protocol* prot, const Type* value) {
-    return prot->serializedSizeI32(*value);
-  }
-};
-
-template <>
-class Cpp2Ops<int64_t> {
- public:
-  typedef int64_t Type;
-  static constexpr protocol::TType thriftType() {
-    return protocol::T_I64;
-  }
-  template <class Protocol>
-  static uint32_t write(Protocol* prot, const Type* value) {
-    return prot->writeI64(*value);
-  }
-  template <class Protocol>
-  static uint32_t read(Protocol* prot, Type* value) {
-    return prot->readI64(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSize(Protocol* prot, const Type* value) {
-    return prot->serializedSizeI64(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSizeZC(Protocol* prot, const Type* value) {
-    return prot->serializedSizeI64(*value);
-  }
-};
-
-template <>
-class Cpp2Ops<bool> {
- public:
-  typedef bool Type;
-  static constexpr protocol::TType thriftType() {
-    return protocol::T_BOOL;
-  }
-  template <class Protocol>
-  static uint32_t write(Protocol* prot, const Type* value) {
-    return prot->writeBool(*value);
-  }
-  template <class Protocol>
-  static uint32_t read(Protocol* prot, Type* value) {
-    return prot->readBool(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSize(Protocol* prot, const Type* value) {
-    return prot->serializedSizeBool(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSizeZC(Protocol* prot, const Type* value) {
-    return prot->serializedSizeBool(*value);
-  }
-};
-
-template <>
-class Cpp2Ops<double> {
- public:
-  typedef double Type;
-  static constexpr protocol::TType thriftType() {
-    return protocol::T_DOUBLE;
-  }
-  template <class Protocol>
-  static uint32_t write(Protocol* prot, const Type* value) {
-    return prot->writeDouble(*value);
-  }
-  template <class Protocol>
-  static uint32_t read(Protocol* prot, Type* value) {
-    return prot->readDouble(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSize(Protocol* prot, const Type* value) {
-    return prot->serializedSizeDouble(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSizeZC(Protocol* prot, const Type* value) {
-    return prot->serializedSizeDouble(*value);
-  }
-};
-
-template <class E>
-class Cpp2Ops<E, typename std::enable_if<std::is_enum<E>::value>::type> {
- public:
-  typedef E Type;
-  static constexpr protocol::TType thriftType() {
-    return protocol::T_I32;
-  }
-  template <class Protocol>
-  static uint32_t write(Protocol* prot, const Type* value) {
-    return prot->writeI32(static_cast<int32_t>(*value));
-  }
-  template <class Protocol>
-  static uint32_t read(Protocol* prot, Type* value) {
-    return prot->readI32(reinterpret_cast<int32_t&>(*value));
-  }
-  template <class Protocol>
-  static uint32_t serializedSize(Protocol* prot, const Type* value) {
-    return prot->serializedSizeI32(static_cast<int32_t>(*value));
-  }
-  template <class Protocol>
-  static uint32_t serializedSizeZC(Protocol* prot, const Type* value) {
-    return prot->serializedSizeI32(static_cast<int32_t>(*value));
-  }
-};
-
-template <>
-class Cpp2Ops<float> {
- public:
-  typedef float Type;
-  static constexpr protocol::TType thriftType() {
-    return protocol::T_FLOAT;
-  }
-  template <class Protocol>
-  static uint32_t write(Protocol* prot, const Type* value) {
-    return prot->writeFloat(*value);
-  }
-  template <class Protocol>
-  static uint32_t read(Protocol* prot, Type* value) {
-    return prot->readFloat(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSize(Protocol* prot, const Type* value) {
-    return prot->serializedSizeFloat(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSizeZC(Protocol* prot, const Type* value) {
-    return prot->serializedSizeFloat(*value);
-  }
-};
-
-
+//  AsyncClient helpers
 namespace detail {
+namespace ac {
 
-template <class Protocol, class V>
-uint32_t readIntoVector(Protocol* prot, V& vec) {
-  typedef typename V::value_type ElemType;
-  uint32_t xfer = 0;
-  for (auto& e : vec) {
-    xfer += Cpp2Ops<ElemType>::read(prot, &e);
+template <typename IntegerSequence>
+struct foreach_;
+
+template <std::size_t... I>
+struct foreach_<folly::index_sequence<I...>> {
+  template <typename F, typename... O>
+  FOLLY_ALWAYS_INLINE FOLLY_ATTR_VISIBILITY_HIDDEN static void go(
+      F&& f,
+      O&&... o) {
+    using _ = int[];
+    void(_{
+        (void(f(std::integral_constant<std::size_t, I>{}, std::forward<O>(o))),
+         0)...});
   }
-  return xfer;
+};
+
+template <typename F, typename... O>
+FOLLY_ALWAYS_INLINE FOLLY_ATTR_VISIBILITY_HIDDEN void foreach(F&& f, O&&... o) {
+  using seq = folly::make_index_sequence<sizeof...(O)>;
+  foreach_<seq>::go(std::forward<F>(f), std::forward<O>(o)...);
 }
 
-template <class Protocol>
-uint32_t readIntoVector(Protocol* prot, std::vector<bool>& vec) {
-  uint32_t xfer = 0;
-  for (auto e : vec) {
-    // e is a proxy object because the elements don't have distinct addresses
-    // (packed into a bitvector). We actually copy the proxy during iteration
-    // (can't use non-const reference because iteration returns by value, can't
-    // use const reference because we modify it), but it still points to the
-    // actual element.
-    bool b;
-    xfer += Cpp2Ops<bool>::read(prot, &b);
-    e = b;
-  }
-  return xfer;
+template <typename F, std::size_t... I>
+FOLLY_ALWAYS_INLINE FOLLY_ATTR_VISIBILITY_HIDDEN void foreach_index_(
+    F&& f,
+    folly::index_sequence<I...>) {
+  foreach_<folly::index_sequence<I...>>::go(std::forward<F>(f), I...);
 }
 
+template <std::size_t Size, typename F>
+FOLLY_ALWAYS_INLINE FOLLY_ATTR_VISIBILITY_HIDDEN void foreach_index(F&& f) {
+  using seq = folly::make_index_sequence<Size>;
+  foreach_index_([&](auto _, auto) { f(_); }, seq{});
 }
 
-template <class L>
-class Cpp2Ops<L, typename std::enable_if<detail::is_vector_like<L>::value>::type> {
- public:
-  typedef L Type;
-  static constexpr protocol::TType thriftType() {
-    return protocol::T_LIST;
+template <bool HasReturnType, typename PResult>
+folly::exception_wrapper extract_exn(PResult& result) {
+  using base = std::integral_constant<std::size_t, HasReturnType ? 1 : 0>;
+  auto ew = folly::exception_wrapper();
+  if (HasReturnType && result.getIsSet(0)) {
+    return ew;
   }
-  template <class Protocol>
-  static uint32_t write(Protocol* prot, const Type* value) {
-    typedef typename Type::value_type ElemType;
-    uint32_t xfer = 0;
-    xfer += prot->writeListBegin(Cpp2Ops<ElemType>::thriftType(), value->size());
-    for (const auto& e: *value) {
-      xfer += Cpp2Ops<ElemType>::write(prot, &e);
+  foreach_index<PResult::size::value - base::value>([&](auto index) {
+    if (!ew && result.getIsSet(index.value + base::value)) {
+      auto& fdata = result.template get<index.value + base::value>();
+      ew = folly::exception_wrapper(std::move(fdata.ref()));
     }
-    xfer += prot->writeListEnd();
-    return xfer;
+  });
+  if (!ew && HasReturnType) {
+    ew = folly::make_exception_wrapper<TApplicationException>(
+        TApplicationException::TApplicationExceptionType::MISSING_RESULT,
+        "failed: unknown result");
   }
-  template <class Protocol>
-  static uint32_t read(Protocol* prot, Type* value) {
-    value->clear();
-    uint32_t xfer = 0;
-    uint32_t size;
-    protocol::TType etype;
-    xfer += prot->readListBegin(etype, size);
-    value->resize(size);
-    xfer += detail::readIntoVector(prot, *value);
-    xfer += prot->readListEnd();
-    return xfer;
-  }
-  template <class Protocol>
-  static uint32_t serializedSize(Protocol* prot, const Type* value) {
-    typedef typename Type::value_type ElemType;
-    uint32_t xfer = 0;
-    xfer += prot->serializedSizeListBegin(Cpp2Ops<ElemType>::thriftType(), value->size());
-    for (const auto& e: *value) {
-      xfer += Cpp2Ops<ElemType>::serializedSize(prot, &e);
-    }
-    xfer += prot->serializedSizeListEnd();
-    return xfer;
-  }
-  template <class Protocol>
-  static uint32_t serializedSizeZC(Protocol* prot, const Type* value) {
-    typedef typename Type::value_type ElemType;
-    uint32_t xfer = 0;
-    xfer += prot->serializedSizeListBegin(Cpp2Ops<ElemType>::thriftType(), value->size());
-    for (const auto& e: *value) {
-      xfer += Cpp2Ops<ElemType>::serializedSizeZC(prot, &e);
-    }
-    xfer += prot->serializedSizeListEnd();
-    return xfer;
-  }
-};
+  return ew;
+}
 
-template <class S>
-class Cpp2Ops<S, typename std::enable_if<detail::is_set_like<S>::value>::type> {
- public:
-  typedef S Type;
-  static constexpr protocol::TType thriftType() {
-    return protocol::T_SET;
-  }
-  template <class Protocol>
-  static uint32_t write(Protocol* prot, const Type* value) {
-    typedef typename Type::key_type ElemType;
-    uint32_t xfer = 0;
-    xfer += prot->writeSetBegin(Cpp2Ops<ElemType>::thriftType(), value->size());
-    for (const auto& e: *value) {
-      xfer += Cpp2Ops<ElemType>::write(prot, &e);
+template <typename Protocol, typename PResult>
+folly::exception_wrapper recv_wrapped_helper(
+    const char* method,
+    Protocol* prot,
+    ClientReceiveState& state,
+    PResult& result) {
+  ContextStack* ctx = state.ctx();
+  std::string fname;
+  int32_t protoSeqId = 0;
+  MessageType mtype;
+  ctx->preRead();
+  try {
+    prot->readMessageBegin(fname, mtype, protoSeqId);
+    if (mtype == T_EXCEPTION) {
+      TApplicationException x;
+      detail::deserializeExceptionBody(prot, &x);
+      prot->readMessageEnd();
+      return folly::exception_wrapper(std::move(x));
     }
-    xfer += prot->writeSetEnd();
-    return xfer;
-  }
-  template <class Protocol>
-  static uint32_t read(Protocol* prot, Type* value) {
-    typedef typename Type::key_type ElemType;
-    value->clear();
-    uint32_t xfer = 0;
-    uint32_t size;
-    protocol::TType etype;
-    xfer += prot->readSetBegin(etype, size);
-    detail::Reserver<Type>::reserve(*value, size);
-    for (uint32_t i = 0; i < size; i++) {
-      ElemType elem;
-      xfer += Cpp2Ops<ElemType>::read(prot, &elem);
-      value->insert(std::move(elem));
+    if (mtype != T_REPLY) {
+      prot->skip(protocol::T_STRUCT);
+      prot->readMessageEnd();
+      return folly::make_exception_wrapper<TApplicationException>(
+          TApplicationException::TApplicationExceptionType::
+              INVALID_MESSAGE_TYPE);
     }
-    xfer += prot->readSetEnd();
-    return xfer;
-  }
-  template <class Protocol>
-  static uint32_t serializedSize(Protocol* prot, const Type* value) {
-    typedef typename Type::key_type ElemType;
-    uint32_t xfer = 0;
-    xfer += prot->serializedSizeSetBegin(Cpp2Ops<ElemType>::thriftType(), value->size());
-    for (const auto& e: *value) {
-      xfer += Cpp2Ops<ElemType>::serializedSize(prot, &e);
+    if (fname.compare(method) != 0) {
+      prot->skip(protocol::T_STRUCT);
+      prot->readMessageEnd();
+      return folly::make_exception_wrapper<TApplicationException>(
+          TApplicationException::TApplicationExceptionType::WRONG_METHOD_NAME);
     }
-    xfer += prot->serializedSizeSetEnd();
-    return xfer;
+    SerializedMessage smsg;
+    smsg.protocolType = prot->protocolType();
+    smsg.buffer = state.buf();
+    ctx->onReadData(smsg);
+    detail::deserializeRequestBody(prot, &result);
+    prot->readMessageEnd();
+    ctx->postRead(state.header(), state.buf()->length());
+    return folly::exception_wrapper();
+  } catch (std::exception const& e) {
+    return folly::exception_wrapper(std::current_exception(), e);
+  } catch (...) {
+    return folly::exception_wrapper(std::current_exception());
   }
-  template <class Protocol>
-  static uint32_t serializedSizeZC(Protocol* prot, const Type* value) {
-    typedef typename Type::key_type ElemType;
-    uint32_t xfer = 0;
-    xfer += prot->serializedSizeSetBegin(Cpp2Ops<ElemType>::thriftType(), value->size());
-    for (const auto& e: *value) {
-      xfer += Cpp2Ops<ElemType>::serializedSizeZC(prot, &e);
-    }
-    xfer += prot->serializedSizeSetEnd();
-    return xfer;
-  }
-};
+}
 
-template <class M>
-class Cpp2Ops<M, typename std::enable_if<detail::is_map_like<M>::value>::type> {
- public:
-  typedef M Type;
-  static constexpr protocol::TType thriftType() {
-    return protocol::T_MAP;
+template <typename PResult, typename Protocol, typename... ReturnTs>
+folly::exception_wrapper recv_wrapped(
+    const char* method,
+    Protocol* prot,
+    ClientReceiveState& state,
+    ReturnTs&... _returns) {
+  prot->setInput(state.buf());
+  auto guard = folly::makeGuard([&] { prot->setInput(nullptr); });
+  apache::thrift::ContextStack* ctx = state.ctx();
+  PResult result;
+  foreach(
+      [&](auto index, auto& obj) {
+        result.template get<index.value>().value = &obj;
+      },
+      _returns...);
+  auto ew = recv_wrapped_helper(method, prot, state, result);
+  if (!ew) {
+    constexpr auto const kHasReturnType = sizeof...(_returns) != 0;
+    ew = apache::thrift::detail::ac::extract_exn<kHasReturnType>(result);
   }
-  template <class Protocol>
-  static uint32_t write(Protocol* prot, const Type* value) {
-    typedef typename Type::key_type KeyType;
-    typedef typename std::remove_cv<typename std::remove_reference<decltype(*value->begin())>::type>::type PairType;
-    typedef typename PairType::second_type ValueType;
-    uint32_t xfer = 0;
-    xfer += prot->writeMapBegin(Cpp2Ops<KeyType>::thriftType(), Cpp2Ops<ValueType>::thriftType(), value->size());
-    for (const auto& e: *value) {
-      xfer += Cpp2Ops<KeyType>::write(prot, &e.first);
-      xfer += Cpp2Ops<ValueType>::write(prot, &e.second);
-    }
-    xfer += prot->writeMapEnd();
-    return xfer;
+  if (ew) {
+    ctx->handlerErrorWrapped(ew);
   }
-  template <class Protocol>
-  static uint32_t read(Protocol* prot, Type* value) {
-    typedef typename Type::key_type KeyType;
-    // We do this dance with decltype rather than just using Type::mapped_type
-    // because different map implementations (such as Google's dense_hash_map)
-    // call it data_type.
-    typedef typename std::remove_cv<typename std::remove_reference<decltype(*value->begin())>::type>::type PairType;
-    typedef typename PairType::second_type ValueType;
-    value->clear();
-    uint32_t xfer = 0;
-    uint32_t size;
-    protocol::TType keytype, valuetype;
-    xfer += prot->readMapBegin(keytype, valuetype, size);
-    detail::Reserver<Type>::reserve(*value, size);
-    for (uint32_t i = 0; i < size; i++) {
-      KeyType key;
-      xfer += Cpp2Ops<KeyType>::read(prot, &key);
-      auto& val = (*value)[std::move(key)];
-      xfer += Cpp2Ops<ValueType>::read(prot, &val);
-    }
-    xfer += prot->readMapEnd();
-    return xfer;
-  }
-  template <class Protocol>
-  static uint32_t serializedSize(Protocol* prot, const Type* value) {
-    typedef typename Type::key_type KeyType;
-    typedef typename std::remove_cv<typename std::remove_reference<decltype(*value->begin())>::type>::type PairType;
-    typedef typename PairType::second_type ValueType;
-    uint32_t xfer = 0;
-    xfer += prot->serializedSizeMapBegin(Cpp2Ops<KeyType>::thriftType(), Cpp2Ops<ValueType>::thriftType(), value->size());
-    for (const auto& e: *value) {
-      xfer += Cpp2Ops<KeyType>::serializedSize(prot, &e.first);
-      xfer += Cpp2Ops<ValueType>::serializedSize(prot, &e.second);
-    }
-    xfer += prot->serializedSizeMapEnd();
-    return xfer;
-  }
-  template <class Protocol>
-  static uint32_t serializedSizeZC(Protocol* prot, const Type* value) {
-    typedef typename Type::key_type KeyType;
-    typedef typename std::remove_cv<typename std::remove_reference<decltype(*value->begin())>::type>::type PairType;
-    typedef typename PairType::second_type ValueType;
-    uint32_t xfer = 0;
-    xfer += prot->serializedSizeMapBegin(Cpp2Ops<KeyType>::thriftType(), Cpp2Ops<ValueType>::thriftType(), value->size());
-    for (const auto& e: *value) {
-      xfer += Cpp2Ops<KeyType>::serializedSizeZC(prot, &e.first);
-      xfer += Cpp2Ops<ValueType>::serializedSizeZC(prot, &e.second);
-    }
-    xfer += prot->serializedSizeMapEnd();
-    return xfer;
-  }
-};
+  return ew;
+}
 
-template <>
-class Cpp2Ops<folly::IOBuf> {
- public:
-  typedef folly::IOBuf Type;
-  static constexpr protocol::TType thriftType() {
-    return protocol::T_STRING;
-  }
-  template <class Protocol>
-  static uint32_t write(Protocol* prot, const Type* value) {
-    return prot->writeBinary(*value);
-  }
-  template <class Protocol>
-  static uint32_t read(Protocol* prot, Type* value) {
-    return prot->readBinary(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSize(Protocol* prot, const Type* value) {
-    return prot->serializedSizeBinary(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSizeZC(Protocol* prot, const Type* value) {
-    return prot->serializedSizeZCBinary(*value);
-  }
-};
-
-template <>
-class Cpp2Ops<std::unique_ptr<folly::IOBuf>> {
- public:
-  typedef std::unique_ptr<folly::IOBuf> Type;
-  static constexpr protocol::TType thriftType() {
-    return protocol::T_STRING;
-  }
-  template <class Protocol>
-  static uint32_t write(Protocol* prot, const Type* value) {
-    return prot->writeBinary(*value);
-  }
-  template <class Protocol>
-  static uint32_t read(Protocol* prot, Type* value) {
-    return prot->readBinary(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSize(Protocol* prot, const Type* value) {
-    return prot->serializedSizeBinary(*value);
-  }
-  template <class Protocol>
-  static uint32_t serializedSizeZC(Protocol* prot, const Type* value) {
-    return prot->serializedSizeZCBinary(*value);
-  }
-};
-
-class BinaryProtocolReader;
-class BinaryProtocolWriter;
-class CompactProtocolReader;
-template <class Appender, class Storage>
-class CompactProtocolWriterImpl;
-using CompactProtocolWriter
-    = CompactProtocolWriterImpl<folly::io::QueueAppender, folly::IOBufQueue>;
+[[noreturn]] void throw_app_exn(char const* msg);
+} // namespace ac
+} // namespace detail
 
 //  AsyncProcessor helpers
 namespace detail { namespace ap {
@@ -880,6 +777,7 @@ struct helper {
 
   static void process_exn(
       const char* func,
+      const TApplicationException::TApplicationExceptionType type,
       const std::string& msg,
       std::unique_ptr<ResponseChannel::Request> req,
       Cpp2RequestContext* ctx,
@@ -904,18 +802,19 @@ using is_root_async_processor = std::is_void<typename T::BaseAsyncProcessor>;
 template <class ProtocolReader, class Processor>
 typename std::enable_if<is_root_async_processor<Processor>::value>::type
 process_missing(
-    Processor* processor,
+    Processor*,
     const std::string& fname,
     std::unique_ptr<ResponseChannel::Request> req,
-    std::unique_ptr<folly::IOBuf> buf,
+    std::unique_ptr<folly::IOBuf>,
     Cpp2RequestContext* ctx,
     folly::EventBase* eb,
-    concurrency::ThreadManager* tm,
+    concurrency::ThreadManager*,
     int32_t protoSeqId) {
   using h = helper_r<ProtocolReader>;
   const char* fn = "process";
+  auto type = TApplicationException::TApplicationExceptionType::UNKNOWN_METHOD;
   const auto msg = folly::sformat("Method name {} not found", fname);
-  return h::process_exn(fn, msg, std::move(req), ctx, eb, protoSeqId);
+  return h::process_exn(fn, type, msg, std::move(req), ctx, eb, protoSeqId);
 }
 
 template <class ProtocolReader, class Processor>
@@ -963,11 +862,42 @@ void process_pmap(
   folly::io::Cursor cursor(buf.get());
   cursor.skip(ctx->getMessageBeginSize());
 
-  auto iprot = folly::make_unique<ProtocolReader>();
+  auto iprot = std::make_unique<ProtocolReader>();
   iprot->setInput(cursor);
 
   (proc->*(pfn->second))(
       std::move(req), std::move(buf), std::move(iprot), ctx, eb, tm);
+}
+
+template <class Processor, typename... Args>
+typename std::enable_if<!Processor::HasFrozen2::value>::type process_frozen(
+    Processor*,
+    std::unique_ptr<ResponseChannel::Request> req,
+    std::unique_ptr<folly::IOBuf>,
+    Cpp2RequestContext* ctx,
+    folly::EventBase* eb,
+    Args&&...) {
+  DLOG(INFO) << "Received Frozen2Protocol request, "
+             << "but server is not built with Frozen2 support";
+  const char* fn = "process";
+  auto type =
+      TApplicationException::TApplicationExceptionType::INVALID_PROTOCOL;
+  const auto msg = "Server not built with frozen2 support";
+  return helper_r<Frozen2ProtocolReader>::process_exn(
+      fn, type, msg, std::move(req), ctx, eb, ctx->getProtoSeqId());
+}
+
+template <class Processor>
+typename std::enable_if<Processor::HasFrozen2::value>::type process_frozen(
+    Processor* processor,
+    std::unique_ptr<ResponseChannel::Request> req,
+    std::unique_ptr<folly::IOBuf> buf,
+    Cpp2RequestContext* ctx,
+    folly::EventBase* eb,
+    concurrency::ThreadManager* tm) {
+  const auto& pmap = processor->getFrozen2ProtocolProcessMap();
+  return process_pmap(
+      processor, pmap, std::move(req), std::move(buf), ctx, eb, tm);
 }
 
 //  Generated AsyncProcessor::process just calls this.
@@ -990,6 +920,10 @@ void process(
       const auto& pmap = processor->getCompactProtocolProcessMap();
       return process_pmap(
           processor, pmap, std::move(req), std::move(buf), ctx, eb, tm);
+    }
+    case protocol::T_FROZEN2_PROTOCOL: {
+      return process_frozen(
+          processor, std::move(req), std::move(buf), ctx, eb, tm);
     }
     default:
       LOG(ERROR) << "invalid protType: " << protType;
@@ -1058,7 +992,7 @@ future_returning(F&& f) {
 template <class F>
 std::unique_ptr<arg<F>>
 returning_uptr(F&& f) {
-  auto ret = folly::make_unique<arg<F>>();
+  auto ret = std::make_unique<arg<F>>();
   f(*ret);
   return ret;
 }
@@ -1069,37 +1003,6 @@ future_returning_uptr(F&& f) {
   return future([&]() {
       return returning_uptr(std::forward<F>(f));
   });
-}
-
-template <class F>
-void
-swallowing(F&& f) {
-  try { f(); }
-  catch(...) { }
-}
-
-template <class R>
-folly::Future<R>
-future_exn(std::exception_ptr ex) {
-  return folly::makeFuture<R>(folly::exception_wrapper(std::move(ex)));
-}
-
-template <class R, class E>
-folly::Future<R>
-future_exn(std::exception_ptr ex, E& e) {
-  return folly::makeFuture<R>(folly::exception_wrapper(std::move(ex), e));
-}
-
-template <class F>
-ret<F>
-future_catching(F&& f) {
-  try {
-    return f();
-  } catch (const std::exception& e) {
-    return future_exn<fut_ret<F>>(std::current_exception(), e);
-  } catch(...) {
-    return future_exn<fut_ret<F>>(std::current_exception());
-  }
 }
 
 using CallbackBase = HandlerCallbackBase;
@@ -1119,18 +1022,17 @@ template <class F>
 void
 async_tm_oneway(ServerInterface* si, CallbackBasePtr callback, F&& f) {
   async_tm_prep(si, callback.get());
-  swallowing(std::forward<F>(f));
+  folly::makeFutureWith(std::forward<F>(f)).then([cb = std::move(callback)] {});
 }
 
 template <class F>
 void
 async_tm(ServerInterface* si, CallbackPtr<F> callback, F&& f) {
   async_tm_prep(si, callback.get());
-  auto fut = future_catching(std::forward<F>(f));
-  auto callbackp = callback.release();
-  fut.then([=](folly::Try<fut_ret<F>>&& _return) {
-      callbackp->completeInThread(std::move(_return));
-  });
+  folly::makeFutureWith(std::forward<F>(f))
+      .then([cb = std::move(callback)](folly::Try<fut_ret<F>>&& _ret) mutable {
+        Callback<F>::completeInThread(std::move(cb), std::move(_ret));
+      });
 }
 
 template <class F>
@@ -1140,7 +1042,7 @@ async_eb_oneway(ServerInterface* si, CallbackBasePtr callback, F&& f) {
   callbackp->runFuncInQueue(
       [ si, callback = std::move(callback), f = std::forward<F>(f) ]() mutable {
         async_tm_oneway(si, std::move(callback), std::move(f));
-      });
+      }, true);
 }
 
 template <class F>
@@ -1152,6 +1054,8 @@ async_eb(ServerInterface* si, CallbackPtr<F> callback, F&& f) {
         async_tm(si, std::move(callback), std::move(f));
       });
 }
+
+[[noreturn]] void throw_app_exn_unimplemented(char const* name);
 }} // detail::si
 
 }} // apache::thrift

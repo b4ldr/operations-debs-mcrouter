@@ -18,8 +18,7 @@
 
 #include <thrift/lib/cpp2/fatal/reflection.h>
 
-#include <folly/FBString.h>
-
+#include <deque>
 #include <map>
 #include <set>
 #include <string>
@@ -29,198 +28,33 @@
 
 namespace apache { namespace thrift {
 
-// Update `thrift_string_traits` documentation in `reflection.h` after making
-// any changes to the interface
 template <typename C, typename T, typename A>
-struct thrift_string_traits<std::basic_string<C, T, A>> {
-  using type = std::basic_string<C, T, A>;
+struct thrift_string_traits<std::basic_string<C, T, A>>
+    : thrift_string_traits_std<std::basic_string<C, T, A>> {};
 
-  using value_type = typename type::value_type;
-  using size_type = typename type::size_type;
-  using iterator = typename type::iterator;
-  using const_iterator = typename type::const_iterator;
-
-  static iterator begin(type &what) { return what.begin(); }
-  static iterator end(type &what) { return what.end(); }
-
-  static const_iterator cbegin(type const &what) { return what.begin(); }
-  static const_iterator begin(type const &what) { return what.begin(); }
-  static const_iterator cend(type const &what) { return what.end(); }
-  static const_iterator end(type const &what) { return what.end(); }
-
-  static void clear(type &what) { what.clear(); }
-  static bool empty(type const &what) { return what.empty(); }
-  static size_type size(type const &what) { return what.size(); }
-
-  static value_type const *data(type const &what) { return what.data(); }
-  static value_type const *c_str(type const &what) { return what.c_str(); }
-};
-
-template <>
-struct thrift_string_traits<folly::fbstring> {
-  using type = folly::fbstring;
-
-  using value_type = type::value_type;
-  using size_type = typename type::size_type;
-  using iterator = typename type::iterator;
-  using const_iterator = typename type::const_iterator;
-
-  static iterator begin(type &what) { return what.begin(); }
-  static iterator end(type &what) { return what.end(); }
-
-  static const_iterator cbegin(type const &what) { return what.begin(); }
-  static const_iterator begin(type const &what) { return what.begin(); }
-  static const_iterator cend(type const &what) { return what.end(); }
-  static const_iterator end(type const &what) { return what.end(); }
-
-  static void clear(type &what) { what.clear(); }
-  static bool empty(type const &what) { return what.empty(); }
-  static size_type size(type const &what) { return what.size(); }
-
-  static value_type const *data(type const &what) { return what.data(); }
-  static value_type const *c_str(type const &what) { return what.c_str(); }
-};
-
-// Update `thrift_list_traits` documentation in `reflection.h` after making
-// any changes to the interface
 template <typename T, typename A>
-struct thrift_list_traits<std::vector<T, A>> {
-  using type = std::vector<T, A>;
+struct thrift_list_traits<std::deque<T, A>>
+    : thrift_list_traits_std<std::deque<T, A>> {};
 
-  using value_type = typename type::value_type;
-  using size_type = typename type::size_type;
-  using iterator = typename type::iterator;
-  using const_iterator = typename type::const_iterator;
-
-  static iterator begin(type &what) { return what.begin(); }
-  static iterator end(type &what) { return what.end(); }
-
-  static const_iterator cbegin(type const &what) { return what.begin(); }
-  static const_iterator begin(type const &what) { return what.begin(); }
-  static const_iterator cend(type const &what) { return what.end(); }
-  static const_iterator end(type const &what) { return what.end(); }
-
-  static void clear(type &what) { what.clear(); }
-  static bool empty(type const &what) { return what.empty(); }
-  static size_type size(type const &what) { return what.size(); }
-};
+template <typename T, typename A>
+struct thrift_list_traits<std::vector<T, A>>
+    : thrift_list_traits_std<std::vector<T, A>> {};
 
 template <typename K, typename C, typename A>
-struct thrift_set_traits<std::set<K, C, A>> {
-  using type = std::set<K, C, A>;
+struct thrift_set_traits<std::set<K, C, A>>
+    : thrift_set_traits_std<std::set<K, C, A>> {};
 
-  using key_type = typename type::key_type;
-  using value_type = typename type::value_type;
-  using size_type = typename type::size_type;
-  using iterator = typename type::iterator;
-  using const_iterator = typename type::const_iterator;
-
-  static iterator begin(type &what) { return what.begin(); }
-  static iterator end(type &what) { return what.end(); }
-
-  static const_iterator cbegin(type const &what) { return what.begin(); }
-  static const_iterator begin(type const &what) { return what.begin(); }
-  static const_iterator cend(type const &what) { return what.end(); }
-  static const_iterator end(type const &what) { return what.end(); }
-
-  static void clear(type &what) { what.clear(); }
-  static bool empty(type const &what) { return what.empty(); }
-  static size_type size(type const &what) { return what.size(); }
-};
-
-// Update `thrift_set_traits` documentation in `reflection.h` after making
-// any changes to the interface
 template <typename K, typename H, typename E, typename A>
-struct thrift_set_traits<std::unordered_set<K, H, E, A>> {
-  using type = std::unordered_set<K, H, E, A>;
-
-  using key_type = typename type::key_type;
-  using value_type = typename type::value_type;
-  using size_type = typename type::size_type;
-  using iterator = typename type::iterator;
-  using const_iterator = typename type::const_iterator;
-
-  using value_const_reference = value_type const &;
-  using value_reference = value_type &;
-
-  static iterator begin(type &what) { return what.begin(); }
-  static iterator end(type &what) { return what.end(); }
-
-  static const_iterator cbegin(type const &what) { return what.begin(); }
-  static const_iterator begin(type const &what) { return what.begin(); }
-  static const_iterator cend(type const &what) { return what.end(); }
-  static const_iterator end(type const &what) { return what.end(); }
-
-  static void clear(type &what) { what.clear(); }
-  static bool empty(type const &what) { return what.empty(); }
-  static size_type size(type const &what) { return what.size(); }
-};
+struct thrift_set_traits<std::unordered_set<K, H, E, A>>
+    : thrift_set_traits_std<std::unordered_set<K, H, E, A>> {};
 
 template <typename K, typename T, typename C, typename A>
-struct thrift_map_traits<std::map<K, T, C, A>> {
-  using type = std::map<K, T, C, A>;
+struct thrift_map_traits<std::map<K, T, C, A>>
+    : thrift_map_traits_std<std::map<K, T, C, A>> {};
 
-  using key_type = typename type::key_type;
-  using mapped_type = typename type::mapped_type;
-  using size_type = typename type::size_type;
-  using iterator = typename type::iterator;
-  using const_iterator = typename type::const_iterator;
-
-  using key_const_reference = key_type const &;
-  using mapped_const_reference = mapped_type const &;
-  using mapped_reference = mapped_type &;
-
-  static iterator begin(type &what) { return what.begin(); }
-  static iterator end(type &what) { return what.end(); }
-
-  static const_iterator cbegin(type const &what) { return what.begin(); }
-  static const_iterator begin(type const &what) { return what.begin(); }
-  static const_iterator cend(type const &what) { return what.end(); }
-  static const_iterator end(type const &what) { return what.end(); }
-
-  static key_const_reference key(const_iterator i) { return i->first; }
-  static key_const_reference key(iterator i) { return i->first; }
-  static mapped_const_reference mapped(const_iterator i) { return i->second; }
-  static mapped_reference mapped(iterator i) { return i->second; }
-
-  static void clear(type &what) { what.clear(); }
-  static bool empty(type const &what) { return what.empty(); }
-  static size_type size(type const &what) { return what.size(); }
-};
-
-// Update `thrift_map_traits` documentation in `reflection.h` after making
-// any changes to the interface
 template <typename K, typename T, typename H, typename E, typename A>
-struct thrift_map_traits<std::unordered_map<K, T, H, E, A>> {
-  using type = std::unordered_map<K, T, H, E, A>;
-
-  using key_type = typename type::key_type;
-  using mapped_type = typename type::mapped_type;
-  using size_type = typename type::size_type;
-  using iterator = typename type::iterator;
-  using const_iterator = typename type::const_iterator;
-
-  using key_const_reference = key_type const &;
-  using mapped_const_reference = mapped_type const &;
-  using mapped_reference = mapped_type &;
-
-  static iterator begin(type &what) { return what.begin(); }
-  static iterator end(type &what) { return what.end(); }
-
-  static const_iterator cbegin(type const &what) { return what.begin(); }
-  static const_iterator begin(type const &what) { return what.begin(); }
-  static const_iterator cend(type const &what) { return what.end(); }
-  static const_iterator end(type const &what) { return what.end(); }
-
-  static key_const_reference key(const_iterator i) { return i->first; }
-  static key_const_reference key(iterator i) { return i->first; }
-  static mapped_const_reference mapped(const_iterator i) { return i->second; }
-  static mapped_reference mapped(iterator i) { return i->second; }
-
-  static void clear(type &what) { what.clear(); }
-  static bool empty(type const &what) { return what.empty(); }
-  static size_type size(type const &what) { return what.size(); }
-};
+struct thrift_map_traits<std::unordered_map<K, T, H, E, A>>
+    : thrift_map_traits_std<std::unordered_map<K, T, H, E, A>> {};
 
 }} // apache::thrift
 

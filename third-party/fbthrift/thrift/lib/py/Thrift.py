@@ -26,6 +26,9 @@ import six
 import sys
 import threading
 
+UEXW_MAX_LENGTH = 1024
+
+
 class TType:
     STOP = 0
     VOID = 1
@@ -46,11 +49,23 @@ class TType:
     UTF16 = 17
     FLOAT = 19
 
+
 class TMessageType:
     CALL = 1
     REPLY = 2
     EXCEPTION = 3
     ONEWAY = 4
+
+
+class TPriority:
+    """ apache::thrift::concurrency::PRIORITY """
+    HIGH_IMPORTANT = 0
+    HIGH = 1
+    IMPORTANT = 2
+    NORMAL = 3
+    BEST_EFFORT = 4
+    N_PRIORITIES = 5
+
 
 class TRequestContext:
     def __init__(self):
@@ -62,9 +77,10 @@ class TRequestContext:
     def setHeaders(self, headers):
         self._headers = headers
 
+
 class TProcessorEventHandler:
     """Event handler for thrift processors"""
-    #TODO: implement asyncComplete for Twisted
+    # TODO: implement asyncComplete for Twisted
 
     def getHandlerContext(self, fn_name, server_context):
         """Called at the start of processing a handler method"""
@@ -97,6 +113,7 @@ class TProcessorEventHandler:
         exception that is declared in the thrift service specification"""
         pass
 
+
 class TServerInterface:
     def __init__(self):
         self._tl_request_context = threading.local()
@@ -116,6 +133,7 @@ class TProcessor:
         self._event_handler = TProcessorEventHandler()  # null object handler
         self._handler = None
         self._processMap = {}
+        self._priorityMap = {}
 
     def setEventHandler(self, event_handler):
         self._event_handler = event_handler
@@ -160,19 +178,72 @@ class TProcessor:
         oprot.writeMessageEnd()
         oprot.trans.flush()
 
+    def get_priority(self, fname):
+        return self._priorityMap.get(fname, TPriority.NORMAL)
+
     def _getReplyType(self, result):
         if isinstance(result, TApplicationException):
             return TMessageType.EXCEPTION
         return TMessageType.REPLY
 
-    def writeReply(self, oprot, handler_ctx, fn_name, seqid, result):
+    @staticmethod
+    def _get_exception_from_thrift_result(result):
+        """Returns the wrapped exception, if pressent. None if not.
+
+        result is a generated *_result object. This object either has a
+        'success' field set indicating the call succeeded, or a field set
+        indicating the exception thrown.
+        """
+        fields = (
+            result.__dict__.keys()
+            if hasattr(result, "__dict__") else result.__slots__
+        )
+        for field in fields:
+            value = getattr(result, field)
+            if value is None:
+                continue
+            elif field == 'success':
+                return None
+            else:
+                return value
+        return None
+
+    def writeReply(self, oprot, handler_ctx, fn_name, seqid, result, server_ctx=None):
         self._event_handler.preWrite(handler_ctx, fn_name, result)
         reply_type = self._getReplyType(result)
-        oprot.writeMessageBegin(fn_name, reply_type, seqid)
-        result.write(oprot)
-        oprot.writeMessageEnd()
-        oprot.trans.flush()
-        self._event_handler.postWrite(handler_ctx, fn_name, result)
+
+        if server_ctx is not None and hasattr(server_ctx, 'context_data'):
+            ex = (result if reply_type == TMessageType.EXCEPTION
+                  else self._get_exception_from_thrift_result(result))
+            if ex:
+                server_ctx.context_data.setHeaderEx(ex.__class__.__name__)
+                server_ctx.context_data.setHeaderExWhat(str(ex)[:UEXW_MAX_LENGTH])
+
+        try:
+            oprot.writeMessageBegin(fn_name, reply_type, seqid)
+            result.write(oprot)
+            oprot.writeMessageEnd()
+            oprot.trans.flush()
+
+        except Exception as e:
+            # Handle any thrift serialization exceptions
+
+            # Transport is likely in a messed up state. Some data may already have
+            # been written and it may not be possible to recover. Doing nothing
+            # causes the client to wait until the request times out. Try to
+            # close the connection to trigger a quicker failure on client side
+            oprot.trans.close()
+
+            # Let application know that there has been an exception
+            self._event_handler.handlerError(handler_ctx, fn_name, e)
+
+            # We raise the exception again to avoid any further processing
+            raise
+
+        finally:
+            # Since we called preWrite, we should also call postWrite to
+            # allow application to properly log their requests.
+            self._event_handler.postWrite(handler_ctx, fn_name, result)
 
 
 class TException(Exception):
@@ -193,6 +264,7 @@ class TException(Exception):
         Exception.__init__(self, message)
         self.message = message
 
+
 class TApplicationException(TException):
 
     """Application level thrift exceptions."""
@@ -212,6 +284,22 @@ class TApplicationException(TException):
     TIMEOUT = 12
     INJECTED_FAILURE = 13
 
+    EXTYPE_TO_STRING = {
+        UNKNOWN_METHOD: 'Unknown method',
+        INVALID_MESSAGE_TYPE: 'Invalid message type',
+        WRONG_METHOD_NAME: 'Wrong method name',
+        BAD_SEQUENCE_ID: 'Bad sequence ID',
+        MISSING_RESULT: 'Missing result',
+        INTERNAL_ERROR: 'Internal error',
+        PROTOCOL_ERROR: 'Protocol error',
+        INVALID_TRANSFORM: 'Invalid transform',
+        INVALID_PROTOCOL: 'Invalid protocol',
+        UNSUPPORTED_CLIENT_TYPE: 'Unsupported client type',
+        LOADSHEDDING: 'Loadshedding request',
+        TIMEOUT: 'Task timeout',
+        INJECTED_FAILURE: 'Injected Failure',
+    }
+
     def __init__(self, type=UNKNOWN, message=None):
         TException.__init__(self, message)
         self.type = type
@@ -219,34 +307,10 @@ class TApplicationException(TException):
     def __str__(self):
         if self.message:
             return self.message
-        elif self.type == self.UNKNOWN_METHOD:
-            return 'Unknown method'
-        elif self.type == self.INVALID_MESSAGE_TYPE:
-            return 'Invalid message type'
-        elif self.type == self.WRONG_METHOD_NAME:
-            return 'Wrong method name'
-        elif self.type == self.BAD_SEQUENCE_ID:
-            return 'Bad sequence ID'
-        elif self.type == self.MISSING_RESULT:
-            return 'Missing result'
-        elif self.type == self.INTERNAL_ERROR:
-            return 'Internal error'
-        elif self.type == self.PROTOCOL_ERROR:
-            return 'Protocol error'
-        elif self.type == self.INVALID_TRANSFORM:
-            return 'Invalid transform'
-        elif self.type == self.INVALID_PROTOCOL:
-            return 'Invalid protocol'
-        elif self.type == self.UNSUPPORTED_CLIENT_TYPE:
-            return 'Unsupported client type'
-        elif self.type == self.LOADSHEDDING:
-            return 'Loadshedding request'
-        elif self.type == self.TIMEOUT:
-            return 'Task timeout'
-        elif self.type == self.INJECTED_FAILURE:
-            return 'Injected Failure'
         else:
-            return 'Default (unknown) TApplicationException'
+            return self.EXTYPE_TO_STRING.get(
+                self.type,
+                'Default (unknown) TApplicationException')
 
     def read(self, iprot):
         iprot.readStructBegin()

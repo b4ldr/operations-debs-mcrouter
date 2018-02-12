@@ -1,4 +1,6 @@
 /*
+ * Copyright 2012-present Facebook, Inc.
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements. See the NOTICE file
  * distributed with this work for additional information
@@ -16,43 +18,16 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 #ifndef THRIFT_TEST_HANDLERS_ASYNCLOADHANDLER2_H_
 #define THRIFT_TEST_HANDLERS_ASYNCLOADHANDLER2_H_ 1
 
-#include "common/fb303/cpp/FacebookBase2.h"
-
 #include <thrift/perf/if/gen-cpp2/LoadTest.h>
-
-#include <thrift/lib/cpp/async/TEventServer.h>
-
-using apache::thrift::async::TEventServer;
 
 namespace apache { namespace thrift {
 
-// Using classes as callbacks is _much_ faster than std::function
-class FastNoopCallback
-    : public folly::EventBase::LoopCallback {
+class AsyncLoadHandler2 : public LoadTestSvIf {
  public:
-  FastNoopCallback(std::unique_ptr<HandlerCallback<void>> callback)
-      : callback_(std::move(callback)) {}
-  void runLoopCallback() noexcept override {
-    callback_->done();
-    delete this;
-  }
-  std::unique_ptr<HandlerCallback<void>> callback_;
-};
-
-class AsyncLoadHandler2 : public LoadTestSvIf
-                        , public facebook::fb303::FacebookBase2 {
-
- public:
-  facebook::fb303::cpp2::fb_status getStatus() override {
-    return facebook::fb303::cpp2::fb_status::ALIVE;
-  }
-
-  explicit AsyncLoadHandler2(TEventServer* server = nullptr)
-    : FacebookBase2("AsyncLoadHandler2") {}
-
   void async_eb_noop(std::unique_ptr<HandlerCallback<void>> callback) override;
   void async_eb_onewayNoop(
       std::unique_ptr<HandlerCallbackBase> callback) override;
@@ -95,6 +70,15 @@ class AsyncLoadHandler2 : public LoadTestSvIf
   void async_eb_add(std::unique_ptr<HandlerCallback<int64_t>>,
                     int64_t a,
                     int64_t b) override;
+  void async_eb_largeContainer(
+      std::unique_ptr<HandlerCallback<void>> callback,
+      std::unique_ptr<std::vector<BigStruct>> items) override;
+
+  void async_eb_iterAllFields(
+    std::unique_ptr<HandlerCallback<std::unique_ptr<std::vector<BigStruct>>>>
+      callback,
+    std::unique_ptr<std::vector<BigStruct>> items) override;
+
 };
 
 }} // apache::thrift

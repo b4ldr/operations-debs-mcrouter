@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2016-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,7 @@
 #include <folly/io/async/ssl/SSLErrors.h>
 
 #include <folly/Range.h>
-#include <openssl/err.h>
-#include <openssl/ssl.h>
+#include <folly/portability/OpenSSL.h>
 
 using namespace folly;
 
@@ -39,8 +38,9 @@ std::string decodeOpenSSLError(
     return "SSL connection closed normally";
   } else {
     std::array<char, 256> buf;
-    std::string msg(ERR_error_string(errError, buf.data()));
-    return msg;
+    ERR_error_string_n(errError, buf.data(), buf.size());
+    // OpenSSL will null terminate the string.
+    return std::string(buf.data());
   }
 }
 
@@ -98,7 +98,7 @@ AsyncSocketException::AsyncSocketExceptionType exTypefromSSLErr(SSLError err) {
       return AsyncSocketException::SSL_ERROR;
   }
 }
-}
+} // namespace
 
 namespace folly {
 
@@ -127,4 +127,4 @@ SSLException::SSLException(SSLError error)
           getSSLErrorString(error).str(),
           0),
       sslError(error) {}
-}
+} // namespace folly

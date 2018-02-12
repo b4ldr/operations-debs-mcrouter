@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2013-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,17 +22,16 @@
 // will verify that the file actually gets created, which means that everything
 // worked as intended.
 
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 #include <signal.h>
-#include <unistd.h>
+#include <sys/types.h>
 
 #include <glog/logging.h>
 
 #include <folly/Conv.h>
 #include <folly/Subprocess.h>
 #include <folly/portability/GFlags.h>
+#include <folly/portability/Unistd.h>
 
 using folly::Subprocess;
 
@@ -40,7 +39,7 @@ DEFINE_bool(child, false, "");
 
 namespace {
 constexpr int kSignal = SIGUSR1;
-}  // namespace
+} // namespace
 
 void runChild(const char* file) {
   // Block SIGUSR1 so it's queued
@@ -60,7 +59,7 @@ void runChild(const char* file) {
   CHECK_ERR(creat(file, 0600));
 }
 
-void runParent(const char* file) {
+[[noreturn]] void runParent(const char* file) {
   std::vector<std::string> args {"/proc/self/exe", "--child", file};
   Subprocess proc(
       args,

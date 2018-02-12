@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2014-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/async/RequestChannel.h>
 #include <thrift/lib/cpp2/async/FutureRequest.h>
@@ -30,6 +29,8 @@
 #include <thrift/lib/cpp/async/TAsyncSocket.h>
 
 #include <thrift/lib/cpp2/async/GssSaslClient.h>
+
+#include <folly/init/Init.h>
 
 #include <boost/cast.hpp>
 #include <boost/lexical_cast.hpp>
@@ -81,7 +82,7 @@ void enableSecurity(HeaderClientChannel* channel,
 
   channel->setSecurityPolicy(THRIFT_SECURITY_REQUIRED);
 
-  auto saslClient = folly::make_unique<GssSaslClient>(channel->getEventBase());
+  auto saslClient = std::make_unique<GssSaslClient>(channel->getEventBase());
   saslClient->setClientIdentity(clientIdentity);
   saslClient->setServiceIdentity(serviceIdentity);
   saslClient->setSaslThreadManager(make_shared<SaslThreadManager>(
@@ -90,6 +91,7 @@ void enableSecurity(HeaderClientChannel* channel,
       make_shared<krb5::Krb5CredentialsCacheManager>());
   saslClient->setSecurityMech(mech);
   channel->setSaslClient(std::move(saslClient));
+  channel->setSaslTimeout(5000);
 }
 
 HeaderClientChannel::Ptr getClientChannel(EventBase* eb,
@@ -134,8 +136,8 @@ void runTest(std::function<void(HeaderClientChannel* channel)> setup) {
   RpcOptions rpcOptions;
   rpcOptions.setWriteHeader("security_test",
                             sp == THRIFT_SECURITY_REQUIRED ? "1" : "0");
-  client.sendResponse(rpcOptions, folly::make_unique<FunctionReplyCallback>(
-                      [&base,&client,&c,&sp](ClientReceiveState&& state) {
+  client.sendResponse(rpcOptions, std::make_unique<FunctionReplyCallback>(
+                      [&c,&sp](ClientReceiveState&& state) {
     EXPECT_FALSE(state.isException());
     if (sp == THRIFT_SECURITY_REQUIRED) {
       EXPECT_TRUE(state.isSecurityActive());
@@ -146,7 +148,7 @@ void runTest(std::function<void(HeaderClientChannel* channel)> setup) {
     try {
       TestServiceAsyncClient::recv_sendResponse(res, state);
     } catch(const std::exception&) {
-      EXPECT_TRUE(false);
+      ADD_FAILURE();
     }
     EXPECT_EQ(res, "10");
     c.down();
@@ -154,14 +156,14 @@ void runTest(std::function<void(HeaderClientChannel* channel)> setup) {
 
 
   // fail on time out
-  base.tryRunAfterDelay([] {EXPECT_TRUE(false);}, 5000);
+  base.tryRunAfterDelay([] { ADD_FAILURE(); }, 5000);
 
-  base.tryRunAfterDelay([&client,&base,&c,&sp] {
+  base.tryRunAfterDelay([&client,&c,&sp] {
     RpcOptions rpcOptions1;
     rpcOptions1.setWriteHeader("security_test",
                               sp == THRIFT_SECURITY_REQUIRED ? "1" : "0");
-    client.sendResponse(rpcOptions1, folly::make_unique<FunctionReplyCallback>(
-          [&base,&c,&sp](ClientReceiveState&& state) {
+    client.sendResponse(rpcOptions1, std::make_unique<FunctionReplyCallback>(
+          [&c,&sp](ClientReceiveState&& state) {
       EXPECT_FALSE(state.isException());
       if (sp == THRIFT_SECURITY_REQUIRED) {
         EXPECT_TRUE(state.isSecurityActive());
@@ -172,7 +174,7 @@ void runTest(std::function<void(HeaderClientChannel* channel)> setup) {
       try {
         TestServiceAsyncClient::recv_sendResponse(res, state);
       } catch(const std::exception&) {
-        EXPECT_TRUE(false);
+        ADD_FAILURE();
       }
       EXPECT_EQ(res, "10");
       c.down();
@@ -181,8 +183,8 @@ void runTest(std::function<void(HeaderClientChannel* channel)> setup) {
     RpcOptions rpcOptions2;
     rpcOptions2.setWriteHeader("security_test",
                               sp == THRIFT_SECURITY_REQUIRED ? "1" : "0");
-    client.sendResponse(rpcOptions2, folly::make_unique<FunctionReplyCallback>(
-          [&base,&c,&sp](ClientReceiveState&& state) {
+    client.sendResponse(rpcOptions2, std::make_unique<FunctionReplyCallback>(
+          [&c,&sp](ClientReceiveState&& state) {
       EXPECT_FALSE(state.isException());
       if (sp == THRIFT_SECURITY_REQUIRED) {
         EXPECT_TRUE(state.isSecurityActive());
@@ -193,7 +195,7 @@ void runTest(std::function<void(HeaderClientChannel* channel)> setup) {
       try {
         TestServiceAsyncClient::recv_sendResponse(res, state);
       } catch(const std::exception&) {
-        EXPECT_TRUE(false);
+        ADD_FAILURE();
       }
       EXPECT_EQ(res, "10");
       c.down();
@@ -205,7 +207,7 @@ void runTest(std::function<void(HeaderClientChannel* channel)> setup) {
 
 
 TEST(Security, Basic) {
-  runTest([](HeaderClientChannel* channel) {});
+  runTest([](HeaderClientChannel*) {});
 }
 
 TEST(Security, CompressionZlib) {
@@ -220,9 +222,9 @@ TEST(Security, CompressionSnappy) {
   });
 }
 
-TEST(Security, DISABLED_CompressionQlz) {
+TEST(Security, CompressionZstd) {
   runTest([](HeaderClientChannel* channel) {
-    channel->setTransform(transport::THeader::QLZ_TRANSFORM);
+    channel->setTransform(transport::THeader::ZSTD_TRANSFORM);
   });
 }
 
@@ -317,7 +319,7 @@ public:
         int32_t res = DuplexClientAsyncClient::recv_update(state);
         EXPECT_EQ(res, si);
       } catch (const std::exception&) {
-        EXPECT_TRUE(false);
+        ADD_FAILURE();
       }
     }, startIndex_);
     startIndex_++;
@@ -394,12 +396,12 @@ void duplexTest(const apache::thrift::SecurityMech mech) {
       bool res = DuplexServiceAsyncClient::recv_registerForUpdates(state);
       EXPECT_TRUE(res);
     } catch (const std::exception&) {
-      EXPECT_TRUE(false);
+      ADD_FAILURE();
     }
   }, START, COUNT, INTERVAL);
 
   // fail on time out
-  base.tryRunAfterDelay([] {EXPECT_TRUE(false);}, 5000);
+  base.tryRunAfterDelay([] { ADD_FAILURE(); }, 5000);
 
   base.loopForever();
 
@@ -429,24 +431,32 @@ void runRequestContextTest(bool failSecurity) {
   TestServiceAsyncClient client(std::move(channel));
   Countdown c(2, [&base](){base.terminateLoopSoon();});
 
-  // Send first request with a unique RequestContext. This would trigger
-  // security. Rest of the request would queue behind it.
-  folly::RequestContext::create();
-  folly::RequestContext::get()->setContextData("first", nullptr);
-  client.sendResponse([&base,&client,&c](ClientReceiveState&& state) {
-    EXPECT_TRUE(folly::RequestContext::get()->hasContextData("first"));
-    c.down();
-  }, 10);
+  {
+    // Send first request with a unique RequestContext. This would trigger
+    // security. Rest of the request would queue behind it.
+    folly::RequestContextScopeGuard rctx;
+    folly::RequestContext::get()->setContextData("first", nullptr);
+    client.sendResponse(
+        [&c](ClientReceiveState&&) {
+          EXPECT_TRUE(folly::RequestContext::get()->hasContextData("first"));
+          c.down();
+        },
+        10);
+  }
 
-  // Send another request with a unique RequestContext. This request would
-  // queue behind the first one inside HeaderClientChannel.
-  folly::RequestContext::create();
-  folly::RequestContext::get()->setContextData("second", nullptr);
-  client.sendResponse([&base,&client,&c](ClientReceiveState&& state) {
-    EXPECT_FALSE(folly::RequestContext::get()->hasContextData("first"));
-    EXPECT_TRUE(folly::RequestContext::get()->hasContextData("second"));
-    c.down();
-  }, 10);
+  {
+    // Send another request with a unique RequestContext. This request would
+    // queue behind the first one inside HeaderClientChannel.
+    folly::RequestContextScopeGuard rctx;
+    folly::RequestContext::get()->setContextData("second", nullptr);
+    client.sendResponse(
+        [&c](ClientReceiveState&&) {
+          EXPECT_FALSE(folly::RequestContext::get()->hasContextData("first"));
+          EXPECT_TRUE(folly::RequestContext::get()->hasContextData("second"));
+          c.down();
+        },
+        10);
+  }
 
   // Now start looping the eventbase to guarantee that all the above requests
   // would always queue.
@@ -463,9 +473,7 @@ TEST(SecurityRequestContext, Fail) {
 
 int main(int argc, char** argv) {
   setenv("KRB5_CONFIG", "/etc/krb5-thrift.conf", 0);
-  testing::InitGoogleTest(&argc, argv);
-  google::InitGoogleLogging(argv[0]);
-  google::ParseCommandLineFlags(&argc, &argv, true);
-
+  ::testing::InitGoogleTest(&argc, argv);
+  folly::init(&argc, &argv);
   return RUN_ALL_TESTS();
 }

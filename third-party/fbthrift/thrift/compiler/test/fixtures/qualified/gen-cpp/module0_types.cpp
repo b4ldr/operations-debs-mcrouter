@@ -5,42 +5,39 @@
  *  @generated
  */
 #include "thrift/compiler/test/fixtures/qualified/gen-cpp/module0_types.h"
+#include "thrift/compiler/test/fixtures/qualified/gen-cpp/module0_data.h"
 
 #include "thrift/compiler/test/fixtures/qualified/gen-cpp/module0_reflection.h"
 
 #include <algorithm>
 #include <string.h>
 
+#include <folly/Indestructible.h>
+
 namespace MODULE0 {
 
-const int _kEnumValues[] = {
-  ONE,
-  TWO,
-  THREE
-};
+const typename _Enum_EnumMapFactory::ValuesToNamesMapType _Enum_VALUES_TO_NAMES = _Enum_EnumMapFactory::makeValuesToNamesMap();
 
-const char* const _kEnumNames[] = {
-  "ONE",
-  "TWO",
-  "THREE"
-};
-
-const std::map<int, const char*> _Enum_VALUES_TO_NAMES(apache::thrift::TEnumIterator<int>(3, _kEnumValues, _kEnumNames), apache::thrift::TEnumIterator<int>(-1, NULL, NULL));
-
-const std::map<const char*, int, apache::thrift::ltstr> _Enum_NAMES_TO_VALUES(apache::thrift::TEnumInverseIterator<int>(3, _kEnumValues, _kEnumNames), apache::thrift::TEnumInverseIterator<int>(-1, NULL, NULL));
+const typename _Enum_EnumMapFactory::NamesToValuesMapType _Enum_NAMES_TO_VALUES = _Enum_EnumMapFactory::makeNamesToValuesMap();
 
 } // namespace
 namespace apache { namespace thrift {
-template<>
-const char* TEnumTraitsBase< ::MODULE0::Enum>::findName( ::MODULE0::Enum value) {
-return findName( ::MODULE0::_Enum_VALUES_TO_NAMES, value);
-} 
+template <>const std::size_t TEnumTraits< ::MODULE0::Enum>::size = 3;
+template <>const folly::Range<const  ::MODULE0::Enum*> TEnumTraits< ::MODULE0::Enum>::values = folly::range( ::MODULE0::_EnumEnumDataStorage::values);
+template <>const folly::Range<const folly::StringPiece*> TEnumTraits< ::MODULE0::Enum>::names = folly::range( ::MODULE0::_EnumEnumDataStorage::names);
 
 template<>
-bool TEnumTraitsBase< ::MODULE0::Enum>::findValue(const char* name,  ::MODULE0::Enum* out) {
-return findValue( ::MODULE0::_Enum_NAMES_TO_VALUES, name, out);
-} 
-}} // apache::thrift 
+const char* TEnumTraits< ::MODULE0::Enum>::findName( ::MODULE0::Enum value) {
+  static const auto map = folly::Indestructible< ::MODULE0::_Enum_EnumMapFactory::ValuesToNamesMapType>{ ::MODULE0::_Enum_EnumMapFactory::makeValuesToNamesMap()};
+  return findName(*map, value);
+}
+
+template<>
+bool TEnumTraits< ::MODULE0::Enum>::findValue(const char* name,  ::MODULE0::Enum* out) {
+  static const auto map = folly::Indestructible< ::MODULE0::_Enum_EnumMapFactory::NamesToValuesMapType>{ ::MODULE0::_Enum_EnumMapFactory::makeNamesToValuesMap()};
+  return findValue(*map, name, out);
+}
+}} // apache::thrift
 
 namespace MODULE0 {
 const uint64_t Struct::_reflection_id;
@@ -56,11 +53,26 @@ bool Struct::operator == (const Struct & rhs) const {
   return true;
 }
 
+void Struct::translateFieldName(
+    FOLLY_MAYBE_UNUSED folly::StringPiece _fname,
+    FOLLY_MAYBE_UNUSED int16_t& fid,
+    FOLLY_MAYBE_UNUSED apache::thrift::protocol::TType& _ftype) {
+  if (false) {}
+  else if (_fname == "first") {
+    fid = 1;
+    _ftype = apache::thrift::protocol::T_I32;
+  }
+  else if (_fname == "second") {
+    fid = 2;
+    _ftype = apache::thrift::protocol::T_STRING;
+  }
+};
+
 uint32_t Struct::read(apache::thrift::protocol::TProtocol* iprot) {
 
   uint32_t xfer = 0;
-  std::string fname;
-  apache::thrift::protocol::TType ftype;
+  std::string _fname;
+  apache::thrift::protocol::TType _ftype;
   int16_t fid;
 
   ::apache::thrift::reflection::Schema * schema = iprot->getSchema();
@@ -68,7 +80,7 @@ uint32_t Struct::read(apache::thrift::protocol::TProtocol* iprot) {
      ::MODULE0::module0_reflection_::reflectionInitializer_11424233335995828524(*schema);
     iprot->setNextStructType(Struct::_reflection_id);
   }
-  xfer += iprot->readStructBegin(fname);
+  xfer += iprot->readStructBegin(_fname);
 
   using apache::thrift::protocol::TProtocolException;
 
@@ -76,30 +88,30 @@ uint32_t Struct::read(apache::thrift::protocol::TProtocol* iprot) {
 
   while (true)
   {
-    xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == apache::thrift::protocol::T_STOP) {
+    xfer += iprot->readFieldBegin(_fname, _ftype, fid);
+    if (_ftype == apache::thrift::protocol::T_STOP) {
       break;
     }
     switch (fid)
     {
       case 1:
-        if (ftype == apache::thrift::protocol::T_I32) {
+        if (_ftype == apache::thrift::protocol::T_I32) {
           xfer += iprot->readI32(this->first);
           this->__isset.first = true;
         } else {
-          xfer += iprot->skip(ftype);
+          xfer += iprot->skip(_ftype);
         }
         break;
       case 2:
-        if (ftype == apache::thrift::protocol::T_STRING) {
+        if (_ftype == apache::thrift::protocol::T_STRING) {
           xfer += iprot->readString(this->second);
           this->__isset.second = true;
         } else {
-          xfer += iprot->skip(ftype);
+          xfer += iprot->skip(_ftype);
         }
         break;
       default:
-        xfer += iprot->skip(ftype);
+        xfer += iprot->skip(_ftype);
         break;
     }
     xfer += iprot->readFieldEnd();
@@ -140,26 +152,18 @@ void swap(Struct &a, Struct &b) {
 
 void merge(const Struct& from, Struct& to) {
   using apache::thrift::merge;
-  if (from.__isset.first) {
-    merge(from.first, to.first);
-    to.__isset.first = true;
-  }
-  if (from.__isset.second) {
-    merge(from.second, to.second);
-    to.__isset.second = true;
-  }
+  merge(from.first, to.first);
+  to.__isset.first = to.__isset.first || from.__isset.first;
+  merge(from.second, to.second);
+  to.__isset.second = to.__isset.second || from.__isset.second;
 }
 
 void merge(Struct&& from, Struct& to) {
   using apache::thrift::merge;
-  if (from.__isset.first) {
-    merge(std::move(from.first), to.first);
-    to.__isset.first = true;
-  }
-  if (from.__isset.second) {
-    merge(std::move(from.second), to.second);
-    to.__isset.second = true;
-  }
+  merge(std::move(from.first), to.first);
+  to.__isset.first = to.__isset.first || from.__isset.first;
+  merge(std::move(from.second), to.second);
+  to.__isset.second = to.__isset.second || from.__isset.second;
 }
 
 } // namespace

@@ -1,20 +1,27 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
-
 #pragma once
 
 #include <folly/io/async/AsyncSSLSocket.h>
 #include <folly/io/async/AsyncSocket.h>
+#include <folly/io/async/DestructorCheck.h>
 #include <folly/io/async/EventBaseManager.h>
+#include <wangle/bootstrap/BaseClientBootstrap.h>
 #include <wangle/channel/Pipeline.h>
-#include <wangle/concurrent/IOThreadPoolExecutor.h>
+#include <folly/executors/IOThreadPoolExecutor.h>
 
 namespace wangle {
 
@@ -23,19 +30,27 @@ namespace wangle {
  * ServerBootstrap.  On connect() a new pipeline is created.
  */
 template <typename Pipeline>
-class ClientBootstrap {
-
+class ClientBootstrap : public BaseClientBootstrap<Pipeline>,
+                        public folly::DestructorCheck {
   class ConnectCallback : public folly::AsyncSocket::ConnectCallback {
    public:
-    ConnectCallback(folly::Promise<Pipeline*> promise, ClientBootstrap* bootstrap)
-        : promise_(std::move(promise))
-        , bootstrap_(bootstrap) {}
+    ConnectCallback(
+        folly::Promise<Pipeline*> promise,
+        ClientBootstrap* bootstrap,
+        std::shared_ptr<folly::AsyncSocket> socket)
+        : promise_(std::move(promise)),
+          bootstrap_(bootstrap),
+          socket_(socket),
+          safety_(*bootstrap) {}
 
     void connectSuccess() noexcept override {
-      if (bootstrap_->getPipeline()) {
-        bootstrap_->getPipeline()->transportActive();
+      if (!safety_.destroyed()) {
+        bootstrap_->makePipeline(std::move(socket_));
+        if (bootstrap_->getPipeline()) {
+          bootstrap_->getPipeline()->transportActive();
+        }
+        promise_.setValue(bootstrap_->getPipeline());
       }
-      promise_.setValue(bootstrap_->getPipeline());
       delete this;
     }
 
@@ -47,6 +62,8 @@ class ClientBootstrap {
    private:
     folly::Promise<Pipeline*> promise_;
     ClientBootstrap* bootstrap_;
+    std::shared_ptr<folly::AsyncSocket> socket_;
+    folly::DestructorCheck::Safety safety_;
   };
 
  public:
@@ -54,18 +71,8 @@ class ClientBootstrap {
   }
 
   ClientBootstrap* group(
-      std::shared_ptr<wangle::IOThreadPoolExecutor> group) {
+      std::shared_ptr<folly::IOThreadPoolExecutor> group) {
     group_ = group;
-    return this;
-  }
-
-  ClientBootstrap* sslContext(folly::SSLContextPtr sslContext) {
-    sslContext_ = sslContext;
-    return this;
-  }
-
-  ClientBootstrap* sslSession(SSL_SESSION* sslSession) {
-    sslSession_ = sslSession;
     return this;
   }
 
@@ -76,19 +83,19 @@ class ClientBootstrap {
 
   folly::Future<Pipeline*> connect(
       const folly::SocketAddress& address,
-      std::chrono::milliseconds timeout = std::chrono::milliseconds(0)) {
-    DCHECK(pipelineFactory_);
-    auto base = folly::EventBaseManager::get()->getEventBase();
-    if (group_) {
-      base = group_->getEventBase();
-    }
+      std::chrono::milliseconds timeout =
+          std::chrono::milliseconds(0)) override {
+    auto base = (group_)
+      ? group_->getEventBase()
+      : folly::EventBaseManager::get()->getEventBase();
     folly::Future<Pipeline*> retval((Pipeline*)nullptr);
     base->runImmediatelyOrRunInEventBaseThreadAndWait([&](){
       std::shared_ptr<folly::AsyncSocket> socket;
-      if (sslContext_) {
-        auto sslSocket = folly::AsyncSSLSocket::newSocket(sslContext_, base);
-        if (sslSession_) {
-          sslSocket->setSSLSession(sslSession_, true);
+      if (this->sslContext_) {
+        auto sslSocket = folly::AsyncSSLSocket::newSocket(
+            this->sslContext_, base, this->deferSecurityNegotiation_);
+        if (this->sslSession_) {
+          sslSocket->setSSLSession(this->sslSession_, true);
         }
         socket = sslSocket;
       } else {
@@ -97,34 +104,28 @@ class ClientBootstrap {
       folly::Promise<Pipeline*> promise;
       retval = promise.getFuture();
       socket->connect(
-          new ConnectCallback(std::move(promise), this),
+          new ConnectCallback(std::move(promise), this, socket),
           address,
           timeout.count());
-      pipeline_ = pipelineFactory_->newPipeline(socket);
     });
     return retval;
   }
 
-  ClientBootstrap* pipelineFactory(
-      std::shared_ptr<PipelineFactory<Pipeline>> factory) {
-    pipelineFactory_ = factory;
-    return this;
-  }
-
-  Pipeline* getPipeline() {
-    return pipeline_.get();
-  }
-
-  virtual ~ClientBootstrap() = default;
+  ~ClientBootstrap() override = default;
 
  protected:
-  typename Pipeline::Ptr pipeline_;
-
   int port_;
-
-  std::shared_ptr<PipelineFactory<Pipeline>> pipelineFactory_;
-  std::shared_ptr<wangle::IOThreadPoolExecutor> group_;
-  folly::SSLContextPtr sslContext_;
-  SSL_SESSION* sslSession_{nullptr};
+  std::shared_ptr<folly::IOThreadPoolExecutor> group_;
 };
+
+class ClientBootstrapFactory
+    : public BaseClientBootstrapFactory<BaseClientBootstrap<>> {
+ public:
+  ClientBootstrapFactory() {}
+
+  BaseClientBootstrap<>::Ptr newClient() override {
+    return std::make_unique<ClientBootstrap<DefaultPipeline>>();
+  }
+};
+
 } // namespace wangle

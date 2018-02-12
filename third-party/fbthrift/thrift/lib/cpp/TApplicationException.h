@@ -1,4 +1,6 @@
 /*
+ * Copyright 2004-present Facebook, Inc.
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements. See the NOTICE file
  * distributed with this work for additional information
@@ -16,7 +18,6 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-
 #ifndef _THRIFT_TAPPLICATIONEXCEPTION_H_
 #define _THRIFT_TAPPLICATIONEXCEPTION_H_ 1
 
@@ -76,6 +77,10 @@ class TApplicationException : public TException {
 
   ~TApplicationException() throw() override {}
 
+  const std::string& getMessage() const {
+    return message_;
+  }
+
   /**
    * Returns an error code that provides information about the type of error
    * that has occurred.
@@ -84,6 +89,14 @@ class TApplicationException : public TException {
    */
   TApplicationExceptionType getType() const {
     return type_;
+  }
+
+  void setMessage(std::string&& msg) {
+    message_ = std::move(msg);
+  }
+
+  void setType(TApplicationExceptionType type) {
+    type_ = type;
   }
 
   const char* what() const throw() override {
@@ -125,8 +138,7 @@ class TApplicationException : public TException {
     }
   }
 
-  template <class Protocol_>
-  uint32_t read(Protocol_* iprot) {
+  uint32_t read(apache::thrift::protocol::TProtocol* iprot) {
     uint32_t xfer = 0;
     std::string fname;
     apache::thrift::protocol::TType ftype;
@@ -165,6 +177,48 @@ class TApplicationException : public TException {
 
     xfer += iprot->readStructEnd();
     return xfer;
+  }
+
+  template <class Protocol_>
+  uint32_t read(Protocol_* iprot) {
+    uint32_t xfer = iprot->getCurrentPosition().getCurrentPosition();
+    std::string fname;
+    apache::thrift::protocol::TType ftype;
+    int16_t fid;
+
+    iprot->readStructBegin(fname);
+
+    while (true) {
+      iprot->readFieldBegin(fname, ftype, fid);
+      if (ftype == apache::thrift::protocol::T_STOP) {
+        break;
+      }
+      switch (fid) {
+        case 1:
+          if (ftype == apache::thrift::protocol::T_STRING) {
+            iprot->readString(message_);
+          } else {
+            iprot->skip(ftype);
+          }
+          break;
+        case 2:
+          if (ftype == apache::thrift::protocol::T_I32) {
+            int32_t type;
+            iprot->readI32(type);
+            type_ = static_cast<TApplicationExceptionType>(type);
+          } else {
+            iprot->skip(ftype);
+          }
+          break;
+        default:
+          iprot->skip(ftype);
+          break;
+      }
+      iprot->readFieldEnd();
+    }
+
+    iprot->readStructEnd();
+    return iprot->getCurrentPosition().getCurrentPosition() - xfer;
   }
 
   template <class Protocol_>

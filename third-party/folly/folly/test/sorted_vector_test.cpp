@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2011-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,27 +15,35 @@
  */
 
 #include <folly/sorted_vector_types.h>
-#include <gtest/gtest.h>
+
+#include <iterator>
 #include <list>
+#include <memory>
+#include <string>
+
+#include <folly/Range.h>
+#include <folly/portability/GMock.h>
+#include <folly/portability/GTest.h>
 
 using folly::sorted_vector_set;
 using folly::sorted_vector_map;
 
 namespace {
 
-template<class T>
-struct less_invert : std::binary_function<T,T,bool> {
+template <class T>
+struct less_invert {
   bool operator()(const T& a, const T& b) const {
     return b < a;
   }
 };
 
-template<class Container>
+template <class Container>
 void check_invariant(Container& c) {
   auto it = c.begin();
   auto end = c.end();
-  if (it == end)
+  if (it == end) {
     return;
+  }
   auto prev = it;
   ++it;
   for (; it != end; ++it, ++prev) {
@@ -44,7 +52,7 @@ void check_invariant(Container& c) {
 }
 
 struct OneAtATimePolicy {
-  template<class Container>
+  template <class Container>
   void increase_capacity(Container& c) {
     if (c.size() == c.capacity()) {
       c.reserve(c.size() + 1);
@@ -70,7 +78,28 @@ struct CountCopyCtor {
   int count_;
 };
 
-}
+struct Opaque {
+  int value;
+  friend bool operator==(Opaque a, Opaque b) {
+    return a.value == b.value;
+  }
+  friend bool operator<(Opaque a, Opaque b) {
+    return a.value < b.value;
+  }
+  struct Compare : std::less<int>, std::less<Opaque> {
+    using is_transparent = void;
+    using std::less<int>::operator();
+    using std::less<Opaque>::operator();
+    bool operator()(int a, Opaque b) const {
+      return std::less<int>::operator()(a, b.value);
+    }
+    bool operator()(Opaque a, int b) const {
+      return std::less<int>::operator()(a.value, b);
+    }
+  };
+};
+
+} // namespace
 
 TEST(SortedVectorTypes, SimpleSetTest) {
   sorted_vector_set<int> s;
@@ -139,6 +168,70 @@ TEST(SortedVectorTypes, SimpleSetTest) {
   EXPECT_TRUE(cpy2 == cpy);
 }
 
+TEST(SortedVectorTypes, TransparentSetTest) {
+  using namespace folly::string_piece_literals;
+  using Compare = folly::transparent<std::less<folly::StringPiece>>;
+
+  constexpr auto buddy = "buddy"_sp;
+  constexpr auto hello = "hello"_sp;
+  constexpr auto stake = "stake"_sp;
+  constexpr auto world = "world"_sp;
+  constexpr auto zebra = "zebra"_sp;
+
+  sorted_vector_set<std::string, Compare> const s({hello.str(), world.str()});
+
+  // find
+  EXPECT_TRUE(s.end() == s.find(buddy));
+  EXPECT_EQ(hello, *s.find(hello));
+  EXPECT_TRUE(s.end() == s.find(stake));
+  EXPECT_EQ(world, *s.find(world));
+  EXPECT_TRUE(s.end() == s.find(zebra));
+
+  // count
+  EXPECT_EQ(0, s.count(buddy));
+  EXPECT_EQ(1, s.count(hello));
+  EXPECT_EQ(0, s.count(stake));
+  EXPECT_EQ(1, s.count(world));
+  EXPECT_EQ(0, s.count(zebra));
+
+  // lower_bound
+  EXPECT_TRUE(s.find(hello) == s.lower_bound(buddy));
+  EXPECT_TRUE(s.find(hello) == s.lower_bound(hello));
+  EXPECT_TRUE(s.find(world) == s.lower_bound(stake));
+  EXPECT_TRUE(s.find(world) == s.lower_bound(world));
+  EXPECT_TRUE(s.end() == s.lower_bound(zebra));
+
+  // upper_bound
+  EXPECT_TRUE(s.find(hello) == s.upper_bound(buddy));
+  EXPECT_TRUE(s.find(world) == s.upper_bound(hello));
+  EXPECT_TRUE(s.find(world) == s.upper_bound(stake));
+  EXPECT_TRUE(s.end() == s.upper_bound(world));
+  EXPECT_TRUE(s.end() == s.upper_bound(zebra));
+
+  // equal_range
+  for (auto value : {buddy, hello, stake, world, zebra}) {
+    EXPECT_TRUE(
+        std::make_pair(s.lower_bound(value), s.upper_bound(value)) ==
+        s.equal_range(value))
+        << value;
+  }
+}
+
+TEST(SortedVectorTypes, BadHints) {
+  for (int toInsert = -1; toInsert <= 7; ++toInsert) {
+    for (int hintPos = 0; hintPos <= 4; ++hintPos) {
+      sorted_vector_set<int> s;
+      for (int i = 0; i <= 3; ++i) {
+        s.insert(i * 2);
+      }
+      s.insert(s.begin() + hintPos, toInsert);
+      size_t expectedSize = (toInsert % 2) == 0 ? 4 : 5;
+      EXPECT_EQ(s.size(), expectedSize);
+      check_invariant(s);
+    }
+  }
+}
+
 TEST(SortedVectorTypes, SimpleMapTest) {
   sorted_vector_map<int,float> m;
   for (int i = 0; i < 1000; ++i) {
@@ -200,6 +293,56 @@ TEST(SortedVectorTypes, SimpleMapTest) {
   check_invariant(m);
 }
 
+TEST(SortedVectorTypes, TransparentMapTest) {
+  using namespace folly::string_piece_literals;
+  using Compare = folly::transparent<std::less<folly::StringPiece>>;
+
+  constexpr auto buddy = "buddy"_sp;
+  constexpr auto hello = "hello"_sp;
+  constexpr auto stake = "stake"_sp;
+  constexpr auto world = "world"_sp;
+  constexpr auto zebra = "zebra"_sp;
+
+  sorted_vector_map<std::string, float, Compare> const m(
+      {{hello.str(), -1.}, {world.str(), +1.}});
+
+  // find
+  EXPECT_TRUE(m.end() == m.find(buddy));
+  EXPECT_EQ(hello, m.find(hello)->first);
+  EXPECT_TRUE(m.end() == m.find(stake));
+  EXPECT_EQ(world, m.find(world)->first);
+  EXPECT_TRUE(m.end() == m.find(zebra));
+
+  // count
+  EXPECT_EQ(0, m.count(buddy));
+  EXPECT_EQ(1, m.count(hello));
+  EXPECT_EQ(0, m.count(stake));
+  EXPECT_EQ(1, m.count(world));
+  EXPECT_EQ(0, m.count(zebra));
+
+  // lower_bound
+  EXPECT_TRUE(m.find(hello) == m.lower_bound(buddy));
+  EXPECT_TRUE(m.find(hello) == m.lower_bound(hello));
+  EXPECT_TRUE(m.find(world) == m.lower_bound(stake));
+  EXPECT_TRUE(m.find(world) == m.lower_bound(world));
+  EXPECT_TRUE(m.end() == m.lower_bound(zebra));
+
+  // upper_bound
+  EXPECT_TRUE(m.find(hello) == m.upper_bound(buddy));
+  EXPECT_TRUE(m.find(world) == m.upper_bound(hello));
+  EXPECT_TRUE(m.find(world) == m.upper_bound(stake));
+  EXPECT_TRUE(m.end() == m.upper_bound(world));
+  EXPECT_TRUE(m.end() == m.upper_bound(zebra));
+
+  // equal_range
+  for (auto value : {buddy, hello, stake, world, zebra}) {
+    EXPECT_TRUE(
+        std::make_pair(m.lower_bound(value), m.upper_bound(value)) ==
+        m.equal_range(value))
+        << value;
+  }
+}
+
 TEST(SortedVectorTypes, Sizes) {
   EXPECT_EQ(sizeof(sorted_vector_set<int>),
             sizeof(std::vector<int>));
@@ -247,13 +390,15 @@ TEST(SortedVectorTypes, InitializerLists) {
 
 TEST(SortedVectorTypes, CustomCompare) {
   sorted_vector_set<int,less_invert<int> > s;
-  for (int i = 0; i < 200; ++i)
+  for (int i = 0; i < 200; ++i) {
     s.insert(i);
+  }
   check_invariant(s);
 
   sorted_vector_map<int,float,less_invert<int> > m;
-  for (int i = 0; i < 200; ++i)
+  for (int i = 0; i < 200; ++i) {
     m[i] = 12.0;
+  }
   check_invariant(m);
 }
 
@@ -307,8 +452,8 @@ TEST(SortedVectorTest, EmptyTest) {
 
 TEST(SortedVectorTest, MoveTest) {
   sorted_vector_set<std::unique_ptr<int>> s;
-  s.insert(std::unique_ptr<int>(new int(5)));
-  s.insert(s.end(), std::unique_ptr<int>(new int(10)));
+  s.insert(std::make_unique<int>(5));
+  s.insert(s.end(), std::make_unique<int>(10));
   EXPECT_EQ(s.size(), 2);
 
   for (const auto& p : s) {
@@ -316,8 +461,8 @@ TEST(SortedVectorTest, MoveTest) {
   }
 
   sorted_vector_map<int, std::unique_ptr<int>> m;
-  m.insert(std::make_pair(5, std::unique_ptr<int>(new int(5))));
-  m.insert(m.end(), std::make_pair(10, std::unique_ptr<int>(new int(10))));
+  m.insert(std::make_pair(5, std::make_unique<int>(5)));
+  m.insert(m.end(), std::make_pair(10, std::make_unique<int>(10)));
 
   EXPECT_EQ(*m[5], 5);
   EXPECT_EQ(*m[10], 10);
@@ -335,4 +480,246 @@ TEST(SortedVectorTest, ShrinkTest) {
   // The standard does not actually enforce that this be true, but assume that
   // vector::shrink_to_fit respects the caller.
   EXPECT_EQ(s.capacity(), s.size());
+}
+
+TEST(SortedVectorTypes, EraseTest) {
+  sorted_vector_set<int> s1;
+  s1.insert(1);
+  sorted_vector_set<int> s2(s1);
+  EXPECT_EQ(0, s1.erase(0));
+  EXPECT_EQ(s2, s1);
+}
+
+std::vector<int> extractValues(sorted_vector_set<CountCopyCtor> const& in) {
+  std::vector<int> ret;
+  std::transform(
+      in.begin(),
+      in.end(),
+      std::back_inserter(ret),
+      [](const CountCopyCtor& c) { return c.val_; });
+  return ret;
+}
+
+template <typename T, typename S>
+std::vector<T> makeVectorOfWrappers(std::vector<S> ss) {
+  std::vector<T> ts;
+  ts.reserve(ss.size());
+  for (auto const& s : ss) {
+    ts.emplace_back(s);
+  }
+  return ts;
+}
+
+TEST(SortedVectorTypes, TestSetBulkInsertionSortMerge) {
+  auto s = makeVectorOfWrappers<CountCopyCtor, int>({6, 4, 8, 2});
+
+  sorted_vector_set<CountCopyCtor> vset(s.begin(), s.end());
+  check_invariant(vset);
+
+  // Add an unsorted range that will have to be merged in.
+  s = makeVectorOfWrappers<CountCopyCtor, int>({10, 7, 5, 1});
+
+  vset.insert(s.begin(), s.end());
+  check_invariant(vset);
+  EXPECT_EQ(vset.rbegin()->count_, 1);
+
+  EXPECT_THAT(
+      extractValues(vset),
+      testing::ElementsAreArray({1, 2, 4, 5, 6, 7, 8, 10}));
+}
+
+TEST(SortedVectorTypes, TestSetBulkInsertionMiddleValuesEqualDuplication) {
+  auto s = makeVectorOfWrappers<CountCopyCtor, int>({4, 6, 8});
+
+  sorted_vector_set<CountCopyCtor> vset(s.begin(), s.end());
+  check_invariant(vset);
+
+  s = makeVectorOfWrappers<CountCopyCtor, int>({8, 10, 12});
+
+  vset.insert(s.begin(), s.end());
+  check_invariant(vset);
+  EXPECT_EQ(vset.rbegin()->count_, 1);
+
+  EXPECT_THAT(
+      extractValues(vset),
+      testing::ElementsAreArray({4, 6, 8, 10, 12}));
+}
+
+TEST(SortedVectorTypes, TestSetBulkInsertionSortMergeDups) {
+  auto s = makeVectorOfWrappers<CountCopyCtor, int>({6, 4, 8, 2});
+
+  sorted_vector_set<CountCopyCtor> vset(s.begin(), s.end());
+  check_invariant(vset);
+
+  // Add an unsorted range that will have to be merged in.
+  s = makeVectorOfWrappers<CountCopyCtor, int>({10, 6, 5, 2});
+
+  vset.insert(s.begin(), s.end());
+  check_invariant(vset);
+  EXPECT_EQ(vset.rbegin()->count_, 1);
+  EXPECT_THAT(
+      extractValues(vset), testing::ElementsAreArray({2, 4, 5, 6, 8, 10}));
+}
+
+TEST(SortedVectorTypes, TestSetInsertionDupsOneByOne) {
+  auto s = makeVectorOfWrappers<CountCopyCtor, int>({6, 4, 8, 2});
+
+  sorted_vector_set<CountCopyCtor> vset(s.begin(), s.end());
+  check_invariant(vset);
+
+  // Add an unsorted range that will have to be merged in.
+  s = makeVectorOfWrappers<CountCopyCtor, int>({10, 6, 5, 2});
+
+  for (const auto& elem : s) {
+    vset.insert(elem);
+  }
+  check_invariant(vset);
+  EXPECT_EQ(vset.rbegin()->count_, 3);
+  EXPECT_THAT(
+      extractValues(vset), testing::ElementsAreArray({2, 4, 5, 6, 8, 10}));
+}
+
+TEST(SortedVectorTypes, TestSetBulkInsertionSortNoMerge) {
+  auto s = makeVectorOfWrappers<CountCopyCtor, int>({6, 4, 8, 2});
+
+  sorted_vector_set<CountCopyCtor> vset(s.begin(), s.end());
+  check_invariant(vset);
+
+  // Add an unsorted range that will not have to be merged in.
+  s = makeVectorOfWrappers<CountCopyCtor, int>({20, 15, 16, 13});
+
+  vset.insert(s.begin(), s.end());
+  check_invariant(vset);
+  EXPECT_EQ(vset.rbegin()->count_, 1);
+  EXPECT_THAT(
+      extractValues(vset),
+      testing::ElementsAreArray({2, 4, 6, 8, 13, 15, 16, 20}));
+}
+
+TEST(SortedVectorTypes, TestSetBulkInsertionNoSortMerge) {
+  auto s = makeVectorOfWrappers<CountCopyCtor, int>({6, 4, 8, 2});
+
+  sorted_vector_set<CountCopyCtor> vset(s.begin(), s.end());
+  check_invariant(vset);
+
+  // Add a sorted range that will have to be merged in.
+  s = makeVectorOfWrappers<CountCopyCtor, int>({1, 3, 5, 9});
+
+  vset.insert(s.begin(), s.end());
+  check_invariant(vset);
+  EXPECT_EQ(vset.rbegin()->count_, 1);
+  EXPECT_THAT(
+      extractValues(vset), testing::ElementsAreArray({1, 2, 3, 4, 5, 6, 8, 9}));
+}
+
+TEST(SortedVectorTypes, TestSetBulkInsertionNoSortNoMerge) {
+  auto s = makeVectorOfWrappers<CountCopyCtor, int>({6, 4, 8, 2});
+
+  sorted_vector_set<CountCopyCtor> vset(s.begin(), s.end());
+  check_invariant(vset);
+
+  // Add a sorted range that will not have to be merged in.
+  s = makeVectorOfWrappers<CountCopyCtor, int>({21, 22, 23, 24});
+
+  vset.insert(s.begin(), s.end());
+  check_invariant(vset);
+  EXPECT_EQ(vset.rbegin()->count_, 1);
+  EXPECT_THAT(
+      extractValues(vset),
+      testing::ElementsAreArray({2, 4, 6, 8, 21, 22, 23, 24}));
+}
+
+TEST(SortedVectorTypes, TestSetBulkInsertionEmptyRange) {
+  std::vector<CountCopyCtor> s;
+  EXPECT_TRUE(s.empty());
+
+  // insertion of empty range into empty container.
+  sorted_vector_set<CountCopyCtor> vset(s.begin(), s.end());
+  check_invariant(vset);
+
+  s = makeVectorOfWrappers<CountCopyCtor, int>({6, 4, 8, 2});
+
+  vset.insert(s.begin(), s.end());
+
+  // insertion of empty range into non-empty container.
+  s.clear();
+  vset.insert(s.begin(), s.end());
+  check_invariant(vset);
+
+  EXPECT_THAT(extractValues(vset), testing::ElementsAreArray({2, 4, 6, 8}));
+}
+
+// This is a test of compilation - the behavior has already been tested
+// extensively above.
+TEST(SortedVectorTypes, TestBulkInsertionUncopyableTypes) {
+  std::vector<std::pair<int, std::unique_ptr<int>>> s;
+  s.emplace_back(1, std::make_unique<int>(0));
+
+  sorted_vector_map<int, std::unique_ptr<int>> vmap(
+      std::make_move_iterator(s.begin()), std::make_move_iterator(s.end()));
+
+  s.clear();
+  s.emplace_back(3, std::make_unique<int>(0));
+  vmap.insert(
+      std::make_move_iterator(s.begin()), std::make_move_iterator(s.end()));
+}
+
+// A moveable and copyable struct, which we use to make sure that no copy
+// operations are performed during bulk insertion if moving is an option.
+struct Movable {
+  int x_;
+  explicit Movable(int x) : x_(x) {}
+  Movable(const Movable&) {
+    ADD_FAILURE() << "Copy ctor should not be called";
+  }
+  Movable& operator=(const Movable&) {
+    ADD_FAILURE() << "Copy assignment should not be called";
+    return *this;
+  }
+
+  Movable(Movable&&) = default;
+  Movable& operator=(Movable&&) = default;
+};
+
+TEST(SortedVectorTypes, TestBulkInsertionMovableTypes) {
+  std::vector<std::pair<int, Movable>> s;
+  s.emplace_back(3, Movable(2));
+  s.emplace_back(1, Movable(0));
+
+  sorted_vector_map<int, Movable> vmap(
+      std::make_move_iterator(s.begin()), std::make_move_iterator(s.end()));
+
+  s.clear();
+  s.emplace_back(4, Movable(3));
+  s.emplace_back(2, Movable(1));
+  vmap.insert(
+      std::make_move_iterator(s.begin()), std::make_move_iterator(s.end()));
+}
+
+TEST(SortedVectorTypes, TestSetCreationFromVector) {
+  std::vector<int> vec = {3, 1, -1, 5, 0};
+  sorted_vector_set<int> vset(std::move(vec));
+  check_invariant(vset);
+  EXPECT_THAT(vset, testing::ElementsAreArray({-1, 0, 1, 3, 5}));
+}
+
+TEST(SortedVectorTypes, TestMapCreationFromVector) {
+  std::vector<std::pair<int, int>> vec = {
+      {3, 1}, {1, 5}, {-1, 2}, {5, 3}, {0, 3}};
+  sorted_vector_map<int, int> vmap(std::move(vec));
+  check_invariant(vmap);
+  auto contents = std::vector<std::pair<int, int>>(vmap.begin(), vmap.end());
+  auto expected_contents = std::vector<std::pair<int, int>>({
+      {-1, 2}, {0, 3}, {1, 5}, {3, 1}, {5, 3},
+  });
+  EXPECT_EQ(contents, expected_contents);
+}
+
+TEST(SortedVectorTypes, TestBulkInsertionWithDuplicatesIntoEmptySet) {
+  sorted_vector_set<int> set;
+  {
+    std::vector<int> const vec = {0, 1, 0, 1};
+    set.insert(vec.begin(), vec.end());
+  }
+  EXPECT_THAT(set, testing::ElementsAreArray({0, 1}));
 }

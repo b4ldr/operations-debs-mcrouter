@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #pragma once
@@ -14,7 +20,7 @@
 #include <folly/ExceptionWrapper.h>
 #include <folly/Memory.h>
 #include <folly/futures/Future.h>
-#include <folly/futures/Unit.h>
+#include <folly/Unit.h>
 #include <folly/io/IOBufQueue.h>
 #include <folly/io/async/AsyncTransport.h>
 #include <folly/io/async/DelayedDestruction.h>
@@ -31,7 +37,7 @@ class PipelineManager {
  public:
   virtual ~PipelineManager() = default;
   virtual void deletePipeline(PipelineBase* pipeline) = 0;
-  virtual void refreshTimeout() {};
+  virtual void refreshTimeout() {}
 };
 
 class PipelineBase : public std::enable_shared_from_this<PipelineBase> {
@@ -118,6 +124,8 @@ class PipelineBase : public std::enable_shared_from_this<PipelineBase> {
 
   virtual void finalize() = 0;
 
+  size_t numHandlers() const;
+
  protected:
   template <class Context>
   void addContextFront(Context* ctx);
@@ -167,7 +175,7 @@ class Pipeline : public PipelineBase {
     return std::shared_ptr<Pipeline>(new Pipeline());
   }
 
-  ~Pipeline();
+  ~Pipeline() override;
 
   template <class T = R>
   typename std::enable_if<!std::is_same<T, folly::Unit>::value>::type

@@ -1,4 +1,6 @@
 /*
+ * Copyright 2004-present Facebook, Inc.
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements. See the NOTICE file
  * distributed with this work for additional information
@@ -16,17 +18,15 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-
 #include <string>
 #include <fstream>
 #include <iostream>
 #include <vector>
 #include <map>
 
-#include <stdlib.h>
-#include <sys/stat.h>
 #include <sstream>
 #include <thrift/compiler/generate/t_generator.h>
+#include <thrift/compiler/generate/t_concat_generator.h>
 #include <thrift/compiler/platform.h>
 using namespace std;
 
@@ -34,14 +34,13 @@ using namespace std;
 /**
  * JSON code generator
  */
-class t_json_generator : public t_generator {
+class t_json_generator : public t_concat_generator {
  public:
   t_json_generator(
       t_program* program,
       const std::map<std::string, std::string>& /*parsed_options*/,
       const std::string& /*option_string*/)
-    : t_generator(program)
-  {
+      : t_concat_generator(program) {
     out_dir_base_ = "gen-json";
   }
 
@@ -60,10 +59,13 @@ class t_json_generator : public t_generator {
   void generate_xception(t_struct* txception) override;
 
   void   print_type       (t_type* ttype);
-  void   print_const_value(t_const_value* tvalue);
+  void   print_const_value(const t_const_value* tvalue);
   void   print_const_key  (t_const_value* tvalue);
+  void print_lineno(int lineno);
   string type_to_string   (t_type* type);
   string type_to_spec_args(t_type* ttype);
+
+  bool should_resolve_to_true_type(const t_type* ttype);
 
   std::ofstream f_out_;
 };
@@ -74,21 +76,21 @@ class t_json_generator : public t_generator {
  */
 void t_json_generator::generate_program() {
   // Make output directory
-  MKDIR(get_out_dir().c_str());
+  make_dir(get_out_dir().c_str());
   string module_name = program_->get_namespace("json");
   string fname = get_out_dir();
   if (module_name.empty()) {
     module_name = program_->get_name();
   }
   string mangled_module_name = module_name;
-  MKDIR(fname.c_str());
+  make_dir(fname.c_str());
   for (string::size_type pos = mangled_module_name.find('.');
        pos != string::npos;
        pos = mangled_module_name.find('.')) {
     fname += '/';
     fname += mangled_module_name.substr(0, pos);
     mangled_module_name.erase(0, pos+1);
-    MKDIR(fname.c_str());
+    make_dir(fname.c_str());
   }
 
   fname += '/';
@@ -192,7 +194,10 @@ void t_json_generator::generate_program() {
  * Converts the parse type to a string
  */
 string t_json_generator::type_to_string(t_type* type) {
-  type = get_true_type(type);
+  if (should_resolve_to_true_type(type)) {
+    type = get_true_type(type);
+  }
+
   if (type->is_base_type()) {
     t_base_type::t_base tbase = ((t_base_type*)type)->get_base();
     switch (tbase) {
@@ -227,6 +232,8 @@ string t_json_generator::type_to_string(t_type* type) {
     return "LIST";
   } else if (type->is_service()) {
     return "SERVICE";
+  } else if (type->is_typedef()) {
+    return "TYPEDEF";
   }
 
   throw "INVALID TYPE IN type_to_string: " + type->get_name();
@@ -242,12 +249,15 @@ string t_json_generator::type_to_string(t_type* type) {
  *              | { "key_type" : tuple_spec, "val_type" : tuple_spec}  // (maps)
  */
 string t_json_generator::type_to_spec_args(t_type* ttype) {
-  ttype = get_true_type(ttype);
+  if (should_resolve_to_true_type(ttype)) {
+    ttype = get_true_type(ttype);
+  }
 
   if (ttype->is_base_type()) {
     return "null";
-  } else if (ttype->is_struct() || ttype->is_xception() ||
-             ttype->is_service() || ttype->is_enum()) {
+  } else if (
+      ttype->is_struct() || ttype->is_xception() || ttype->is_service() ||
+      ttype->is_enum() || ttype->is_typedef()) {
     string module = "";
     if (ttype->get_program() != program_) {
       module = ttype->get_program()->get_name() + ".";
@@ -313,7 +323,7 @@ void t_json_generator::print_const_key(t_const_value* tvalue) {
 /**
  * Prints out a JSON representation of the provided constant value
  */
-void t_json_generator::print_const_value(t_const_value* tvalue) {
+void t_json_generator::print_const_value(const t_const_value* tvalue) {
   bool first = true;
   switch (tvalue->get_type()) {
   case t_const_value::CV_INTEGER:
@@ -324,6 +334,9 @@ void t_json_generator::print_const_value(t_const_value* tvalue) {
     break;
   case t_const_value::CV_STRING:
     f_out_ << "\"" << tvalue->get_string() << "\"";
+    break;
+  case t_const_value::CV_BOOL:
+    f_out_ << (tvalue->get_bool() ? "true" : "false");
     break;
   case t_const_value::CV_MAP:
     {
@@ -366,6 +379,10 @@ void t_json_generator::print_const_value(t_const_value* tvalue) {
   }
 }
 
+void t_json_generator::print_lineno(int lineno) {
+  indent(f_out_) << "\"lineno\" : " << lineno << "," << endl;
+}
+
 /**
  * Generates a typedef.
  *
@@ -374,6 +391,7 @@ void t_json_generator::print_const_value(t_const_value* tvalue) {
 void t_json_generator::generate_typedef(t_typedef* ttypedef) {
   indent(f_out_) << "\"" << ttypedef->get_name() << "\" : {" << endl;
   indent_up();
+  print_lineno(ttypedef->get_lineno());
   print_type(ttypedef->get_type());
   f_out_ << endl;
   indent_down();
@@ -388,6 +406,9 @@ void t_json_generator::generate_typedef(t_typedef* ttypedef) {
 void t_json_generator::generate_enum(t_enum* tenum) {
   indent(f_out_) << "\"" << tenum->get_name() << "\" : {" << endl;
   indent_up();
+  print_lineno(tenum->get_lineno());
+  indent(f_out_) << "\"constants\" : {" << endl;
+  indent_up();
   vector<t_enum_value*> values = tenum->get_constants();
   vector<t_enum_value*>::iterator val_iter;
   for (val_iter = values.begin(); val_iter != values.end(); ++val_iter) {
@@ -398,6 +419,8 @@ void t_json_generator::generate_enum(t_enum* tenum) {
       << (*val_iter)->get_value();
   }
   f_out_ << endl;
+  indent_down();
+  indent(f_out_) << "}" << endl;
   indent_down();
   indent(f_out_) << "}";
 }
@@ -423,6 +446,7 @@ void t_json_generator::generate_const(t_const* tconst) {
   string name = tconst->get_name();
   indent(f_out_) << "\"" << name << "\" : {" << endl;
   indent_up();
+  print_lineno(tconst->get_lineno());
   indent(f_out_) << "\"value\" : ";
   print_const_value(tconst->get_value());
   f_out_ << "," << endl;
@@ -441,6 +465,7 @@ void t_json_generator::generate_struct(t_struct* tstruct) {
   string name = tstruct->get_name();
   indent(f_out_) << "\"" << name << "\" : {" << endl;
   indent_up();
+  print_lineno(tstruct->get_lineno());
   indent(f_out_) << "\"is_exception\" : "
     << (tstruct->is_xception() ? "true" : "false") << "," << endl;
   indent(f_out_) << "\"is_union\" : "
@@ -459,7 +484,7 @@ void t_json_generator::generate_struct(t_struct* tstruct) {
     print_type((*mem_iter)->get_type());
     f_out_ << "," << endl << indent() <<  "\"required\" : "
       << ((*mem_iter)->get_req() != t_field::T_OPTIONAL ? "true" : "false");
-    t_const_value* default_val = (*mem_iter)->get_value();
+    const t_const_value* default_val = (*mem_iter)->get_value();
     if (default_val != nullptr) {
       f_out_ << "," << endl << indent() << "\"default_value\" : ";
       print_const_value(default_val);
@@ -510,6 +535,7 @@ void t_json_generator::generate_service(t_service* tservice) {
   if (!first) {
     f_out_ << "," << endl;
   }
+  print_lineno(tservice->get_lineno());
   f_out_ << indent() << "\"functions\" : {" << endl;
   indent_up();
   for ( ; fn_iter != functions.end(); fn_iter++) {
@@ -581,6 +607,16 @@ void t_json_generator::generate_service(t_service* tservice) {
   f_out_ << endl;
   indent_down();
   indent(f_out_) << "}";
+}
+
+bool t_json_generator::should_resolve_to_true_type(const t_type* ttype) {
+  if (ttype->is_typedef()) {
+    // Only resolve undefined typedefs as they were used for undeclared types
+    if (!static_cast<const t_typedef*>(ttype)->is_defined()) {
+      return true;
+    }
+  }
+  return false;
 }
 
 THRIFT_REGISTER_GENERATOR(json, "JSON", "");

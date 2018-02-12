@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2004-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,17 +19,25 @@
 #include <array>
 #include <limits>
 #include <list>
+#include <typeinfo>
+
 #include <folly/Conv.h>
+#include <folly/Range.h>
 #include <folly/dynamic.h>
-#include <folly/json.h>
+#include <folly/io/Cursor.h>
 #include <folly/io/IOBuf.h>
 #include <folly/io/IOBufQueue.h>
-#include <folly/io/Cursor.h>
+#include <folly/json.h>
 #include <thrift/lib/cpp/protocol/TBase64Utils.h>
 #include <thrift/lib/cpp/protocol/TJSONProtocol.h>
 #include <thrift/lib/cpp2/protocol/Protocol.h>
 
 namespace apache { namespace thrift {
+
+namespace detail {
+template <typename Str>
+using is_string = std::is_same<typename Str::value_type, char>;
+}
 
 class JSONProtocolWriterCommon {
 
@@ -72,24 +80,25 @@ class JSONProtocolWriterCommon {
       const std::unique_ptr<folly::IOBuf>& data);
 
   //  These sizes are common to both json and simple-json protocols.
-  inline uint32_t serializedSizeByte(int8_t = 0);
-  inline uint32_t serializedSizeI16(int16_t = 0);
-  inline uint32_t serializedSizeI32(int32_t = 0);
-  inline uint32_t serializedSizeI64(int64_t = 0);
-  inline uint32_t serializedSizeDouble(double = 0.0);
-  inline uint32_t serializedSizeFloat(float = 0);
-  inline uint32_t serializedSizeString(folly::StringPiece);
-  inline uint32_t serializedSizeBinary(folly::StringPiece str);
-  inline uint32_t serializedSizeBinary(folly::ByteRange v);
-  inline uint32_t serializedSizeBinary(const std::unique_ptr<folly::IOBuf>& v);
-  inline uint32_t serializedSizeBinary(const folly::IOBuf& v);
-  inline uint32_t serializedSizeZCBinary(folly::StringPiece str);
-  inline uint32_t serializedSizeZCBinary(folly::ByteRange v);
+  inline uint32_t serializedSizeByte(int8_t = 0) const;
+  inline uint32_t serializedSizeI16(int16_t = 0) const;
+  inline uint32_t serializedSizeI32(int32_t = 0) const;
+  inline uint32_t serializedSizeI64(int64_t = 0) const;
+  inline uint32_t serializedSizeDouble(double = 0.0) const;
+  inline uint32_t serializedSizeFloat(float = 0) const;
+  inline uint32_t serializedSizeString(folly::StringPiece) const;
+  inline uint32_t serializedSizeBinary(folly::StringPiece str) const;
+  inline uint32_t serializedSizeBinary(folly::ByteRange v) const;
+  inline uint32_t serializedSizeBinary(
+    const std::unique_ptr<folly::IOBuf>& v) const;
+  inline uint32_t serializedSizeBinary(const folly::IOBuf& v) const;
+  inline uint32_t serializedSizeZCBinary(folly::StringPiece str) const;
+  inline uint32_t serializedSizeZCBinary(folly::ByteRange v) const;
   inline uint32_t serializedSizeZCBinary(
-      const std::unique_ptr<folly::IOBuf>& /*v*/);
-  inline uint32_t serializedSizeZCBinary(const folly::IOBuf& /*v*/);
+      const std::unique_ptr<folly::IOBuf>& /*v*/) const;
+  inline uint32_t serializedSizeZCBinary(const folly::IOBuf& /*v*/) const;
   inline uint32_t serializedSizeSerializedData(
-      const std::unique_ptr<folly::IOBuf>& data);
+      const std::unique_ptr<folly::IOBuf>& data) const;
 
  protected:
 
@@ -126,6 +135,10 @@ class JSONProtocolWriterCommon {
   };
 
   std::list<Context> context;
+
+ private:
+  uint32_t writeJSONDoubleInternal(double dbl);
+  uint32_t writeJSONIntInternal(int64_t num);
 };
 
 class JSONProtocolReaderCommon {
@@ -146,7 +159,9 @@ class JSONProtocolReaderCommon {
    * set to some other buffer.
    */
   void setInput(const folly::io::Cursor& cursor) { in_ = cursor; }
-  void setInput(const folly::IOBuf* buf) { setInput(folly::io::Cursor(buf)); }
+  void setInput(const folly::IOBuf* buf) {
+    in_.reset(buf);
+  }
 
   inline uint32_t readMessageBegin(std::string& name,
                                    MessageType& messageType,
@@ -167,7 +182,7 @@ class JSONProtocolReaderCommon {
 
   inline uint32_t skip(TType type);
 
-  folly::io::Cursor getCurrentPosition() const {
+  const folly::io::Cursor& getCurrentPosition() const {
     return in_;
   }
 
@@ -220,7 +235,7 @@ class JSONProtocolReaderCommon {
   inline uint32_t readJSONVal(double& val);
   inline uint32_t readJSONVal(float& val);
   template <typename Str>
-  inline typename std::enable_if<is_string<Str>::value, uint32_t>::type
+  inline typename std::enable_if<detail::is_string<Str>::value, uint32_t>::type
   readJSONVal(Str& val);
   inline bool JSONtoBool(const std::string& s);
   inline uint32_t readJSONVal(bool& val);
@@ -232,13 +247,38 @@ class JSONProtocolReaderCommon {
   template <typename StrType>
   uint32_t readJSONBase64(StrType& s);
 
-  static const std::string kEscapeChars;
+  // This string's characters must match up with the elements in kEscapeCharVals
+  // I don't have '/' on this list even though it appears on www.json.org --
+  // it is not in the RFC
+  static constexpr folly::StringPiece kEscapeChars{"\"\\/bfnrt"};
   static const uint8_t kEscapeCharVals[8];
   static inline uint8_t hexVal(uint8_t ch);
 
   void base64_decode(uint8_t *buf, uint32_t len) {
     protocol::base64_decode(buf, len);
   }
+
+  template <class Predicate>
+  uint32_t readWhile(const Predicate& pred, std::string& out);
+
+  // Returns next character, or \0 if at the end.
+  inline int8_t peekCharSafe();
+
+  [[noreturn]] static void throwBadVersion();
+  [[noreturn]] static void throwUnrecognizableAsBoolean(std::string const& s);
+  [[noreturn]] static void throwUnrecognizableAsIntegral(
+      folly::StringPiece s,
+      std::type_info const& type);
+  [[noreturn]] static void throwUnrecognizableAsFloatingPoint(
+      std::string const& s);
+  [[noreturn]] static void throwUnrecognizableAsString(
+      std::string const& s,
+      std::exception const& e);
+  [[noreturn]] static void throwUnrecognizableAsAny(std::string const& s);
+  [[noreturn]] static void throwInvalidFieldStart(char ch);
+  [[noreturn]] static void throwUnexpectedChar(char ch, char expected);
+  [[noreturn]] static void throwInvalidEscapeChar(char ch);
+  [[noreturn]] static void throwInvalidHexChar(char ch);
 
   //  Rewrite in subclasses.
   std::array<folly::StringPiece, 2> bools_{{"", ""}};
@@ -268,4 +308,4 @@ class JSONProtocolReaderCommon {
 
 }} // apache::thrift
 
-#include "JSONProtocolCommon.tcc"
+#include <thrift/lib/cpp2/protocol/JSONProtocolCommon.tcc>

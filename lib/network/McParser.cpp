@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
+ *  Copyright (c) 2017, Facebook, Inc.
  *  All rights reserved.
  *
  *  This source code is licensed under the BSD-style license found in the
@@ -15,34 +15,37 @@
 #include <folly/Format.h>
 #include <folly/Memory.h>
 #include <folly/ThreadLocal.h>
+#include <folly/experimental/JemallocNodumpAllocator.h>
 #include <folly/io/Cursor.h>
 
-#include "mcrouter/lib/allocator/JemallocNodumpAllocator.h"
+#include "mcrouter/lib/cycles/Clocks.h"
 #include "mcrouter/lib/network/UmbrellaProtocol.h"
 
-namespace facebook { namespace memcache {
+namespace facebook {
+namespace memcache {
 
 namespace {
-// Adjust buffer size after this many requests
-constexpr size_t kAdjustBufferSizeInterval = 10000;
+// Adjust buffer size after this many CPU cycles (~2 billion)
+constexpr uint64_t kAdjustBufferSizeCpuCycles = 1UL << 31;
 
-/*
- * Determine the protocol by looking at the first byte
- */
-mc_protocol_t determineProtocol(uint8_t firstByte) {
-  switch (firstByte) {
-    case kCaretMagicByte:
-      return mc_caret_protocol;
-    case ENTRY_LIST_MAGIC_BYTE:
-      return mc_umbrella_protocol;
+size_t mcOpToRequestTypeId(mc_op_t mc_op) {
+  switch (mc_op) {
+#define THRIFT_OP(MC_OPERATION)                                           \
+  case MC_OPERATION::mc_op: {                                             \
+    using Request =                                                       \
+        typename TypeFromOp<MC_OPERATION::mc_op, RequestOpMapping>::type; \
+    return Request::typeId;                                               \
+  }
+#include "mcrouter/lib/McOpList.h"
+
     default:
-      return mc_ascii_protocol;
+      return 0;
   }
 }
 
-#ifdef CAN_USE_JEMALLOC_NODUMP_ALLOCATOR
+#ifdef FOLLY_JEMALLOC_NODUMP_ALLOCATOR_SUPPORTED
 
-folly::ThreadLocal<JemallocNodumpAllocator> allocator;
+folly::ThreadLocal<folly::JemallocNodumpAllocator> allocator;
 
 folly::IOBuf copyToNodumpBuffer(
     const UmbrellaMessageInfo& umMsgInfo,
@@ -58,28 +61,32 @@ folly::IOBuf copyToNodumpBuffer(
   folly::io::Cursor c(&readBuffer);
   c.pull(p, readBuffer.length());
   // Transfer ownership to a new IOBuf
-  return folly::IOBuf(folly::IOBuf::TAKE_OWNERSHIP,
-                      p,
-                      bufSize,
-                      readBuffer.length(),
-                      JemallocNodumpAllocator::deallocate,
-                      reinterpret_cast<void*> (allocator->getFlags()));
+  return folly::IOBuf(
+      folly::IOBuf::TAKE_OWNERSHIP,
+      p,
+      bufSize,
+      readBuffer.length(),
+      folly::JemallocNodumpAllocator::deallocate,
+      reinterpret_cast<void*>(allocator->getFlags()));
 }
 
 #endif
 
 } // anonymous
 
-McParser::McParser(ParserCallback& callback,
-                   size_t minBufferSize,
-                   size_t maxBufferSize,
-                   const bool useJemallocNodumpAllocator)
+McParser::McParser(
+    ParserCallback& callback,
+    size_t minBufferSize,
+    size_t maxBufferSize,
+    const bool useJemallocNodumpAllocator,
+    ConnectionFifo* debugFifo)
     : callback_(callback),
       bufferSize_(minBufferSize),
       maxBufferSize_(maxBufferSize),
+      debugFifo_(debugFifo),
       readBuffer_(folly::IOBuf::CREATE, bufferSize_),
       useJemallocNodumpAllocator_(useJemallocNodumpAllocator) {
-#ifndef CAN_USE_JEMALLOC_NODUMP_ALLOCATOR
+#ifndef FOLLY_JEMALLOC_NODUMP_ALLOCATOR_SUPPORTED
   useJemallocNodumpAllocator_ = false;
 #endif
 }
@@ -91,7 +98,8 @@ void McParser::reset() {
 std::pair<void*, size_t> McParser::getReadBuffer() {
   assert(!readBuffer_.isChained());
   readBuffer_.unshareOne();
-  if (!readBuffer_.length() && readBuffer_.capacity() > 0) {
+  if (!readBuffer_.length()) {
+    assert(readBuffer_.capacity() > 0);
     /* If we read everything, reset pointers to 0 and re-use the buffer */
     readBuffer_.clear();
   } else if (readBuffer_.headroom() > 0) {
@@ -123,8 +131,8 @@ bool McParser::readUmbrellaOrCaretData() {
     if (parseStatus != UmbrellaParseStatus::OK) {
       callback_.parseError(
           mc_res_remote_error,
-          folly::sformat("Error parsing {} header",
-                         mc_protocol_to_string(protocol_)));
+          folly::sformat(
+              "Error parsing {} header", mc_protocol_to_string(protocol_)));
       return false;
     }
 
@@ -133,6 +141,22 @@ bool McParser::readUmbrellaOrCaretData() {
     // Parse message body
     // Case 1: Entire message (and possibly part of next) is in the buffer
     if (readBuffer_.length() >= messageSize) {
+      if (UNLIKELY(debugFifo_ && debugFifo_->isConnected())) {
+        if (protocol_ == mc_umbrella_protocol) {
+          const auto mc_op = umbrellaDetermineOperation(
+              readBuffer_.data(), umMsgInfo_.headerSize);
+          umMsgInfo_.typeId = mcOpToRequestTypeId(mc_op);
+          if (umMsgInfo_.typeId != 0 &&
+              umbrellaIsReply(readBuffer_.data(), umMsgInfo_.headerSize)) {
+            // We assume reply typeId is always one plus corresponding
+            // request's typeId. We rely on this in ClientServerMcParser.h.
+            ++umMsgInfo_.typeId;
+          }
+        }
+        debugFifo_->startMessage(MessageDirection::Received, umMsgInfo_.typeId);
+        debugFifo_->writeData(readBuffer_.writableData(), messageSize);
+      }
+
       bool cbStatus;
       if (protocol_ == mc_umbrella_protocol) {
         cbStatus = callback_.umMessageReady(umMsgInfo_, readBuffer_);
@@ -159,12 +183,12 @@ bool McParser::readUmbrellaOrCaretData() {
     if (readBuffer_.length() + readBuffer_.tailroom() < messageSize) {
       assert(!readBuffer_.isChained());
       readBuffer_.unshareOne();
-      bufferSize_ = std::max(bufferSize_, messageSize);
+      bufferSize_ = std::max<size_t>(bufferSize_, messageSize);
       readBuffer_.reserve(
           0 /* minHeadroom */,
           bufferSize_ - readBuffer_.length() /* minTailroom */);
     }
-#ifdef CAN_USE_JEMALLOC_NODUMP_ALLOCATOR
+#ifdef FOLLY_JEMALLOC_NODUMP_ALLOCATOR_SUPPORTED
     if (useJemallocNodumpAllocator_) {
       readBuffer_ = copyToNodumpBuffer(umMsgInfo_, readBuffer_);
     }
@@ -174,11 +198,13 @@ bool McParser::readUmbrellaOrCaretData() {
 
   // We parsed everything, read buffer is empty.
   // Try to shrink it to reduce memory footprint
-  if (parsedMessages_ >= kAdjustBufferSizeInterval &&
-      readBuffer_.capacity() > maxBufferSize_) {
-    parsedMessages_ = 0;
-    bufferSize_ = std::min(bufferSize_, maxBufferSize_);
-    readBuffer_ = folly::IOBuf(folly::IOBuf::CREATE, bufferSize_);
+  if (bufferSize_ > maxBufferSize_) {
+    auto curCycles = cycles::getCpuCycles();
+    if (curCycles > lastShrinkCycles_ + kAdjustBufferSizeCpuCycles) {
+      lastShrinkCycles_ = curCycles;
+      bufferSize_ = maxBufferSize_;
+      readBuffer_ = folly::IOBuf(folly::IOBuf::CREATE, bufferSize_);
+    }
   }
   return true;
 }
@@ -196,8 +222,8 @@ bool McParser::readDataAvailable(size_t len) {
     if (protocol_ == mc_ascii_protocol) {
       outOfOrder_ = false;
     } else {
-      assert(protocol_ == mc_umbrella_protocol ||
-             protocol_ == mc_caret_protocol);
+      assert(
+          protocol_ == mc_umbrella_protocol || protocol_ == mc_caret_protocol);
       outOfOrder_ = true;
     }
   }
@@ -209,4 +235,9 @@ bool McParser::readDataAvailable(size_t len) {
   return readUmbrellaOrCaretData();
 }
 
-}}  // facebook::memcache
+double McParser::getDropProbability() const {
+  return static_cast<double>(umMsgInfo_.dropProbability) /
+      kDropProbabilityNormalizer;
+}
+}
+} // facebook::memcache

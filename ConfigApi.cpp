@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2015, Facebook, Inc.
+ *  Copyright (c) 2017, Facebook, Inc.
  *  All rights reserved.
  *
  *  This source code is licensed under the BSD-style license found in the
@@ -9,26 +9,98 @@
  */
 #include "ConfigApi.h"
 
-#include <boost/filesystem/path.hpp>
+#include <boost/filesystem.hpp>
 
-#include <folly/dynamic.h>
 #include <folly/FileUtil.h>
 #include <folly/Memory.h>
+#include <folly/String.h>
+#include <folly/dynamic.h>
 
-#include "mcrouter/config.h"
+#include "mcrouter/CarbonRouterInstance.h"
 #include "mcrouter/FileDataProvider.h"
-#include "mcrouter/lib/fbi/cpp/util.h"
-#include "mcrouter/McrouterInstance.h"
 #include "mcrouter/McrouterLogFailure.h"
-#include "mcrouter/options.h"
 #include "mcrouter/ThreadUtil.h"
+#include "mcrouter/config.h"
+#include "mcrouter/lib/fbi/cpp/util.h"
+#include "mcrouter/options.h"
 
-namespace facebook { namespace memcache { namespace mcrouter {
+namespace facebook {
+namespace memcache {
+namespace mcrouter {
+
+namespace {
 
 const char* const kMcrouterConfigKey = "mcrouter_config";
 const char* const kConfigFile = "config_file";
 const char* const kConfigImport = "config_import";
 const int kConfigReloadInterval = 60;
+
+boost::filesystem::path getBackupConfigDirectory(const McrouterOptions& opts) {
+  return boost::filesystem::path(opts.config_dump_root) / opts.service_name /
+      opts.router_name;
+}
+
+boost::filesystem::path getBackupConfigFileName(
+    folly::StringPiece sourcePrefix,
+    folly::StringPiece name) {
+  sourcePrefix.removeSuffix(':');
+  return boost::filesystem::path(folly::sformat(
+      "{}-{}", sourcePrefix, folly::uriEscape<std::string>(name)));
+}
+
+bool ensureConfigDirectoryExists(boost::filesystem::path directory) {
+  if (directory.empty() || boost::filesystem::exists(directory)) {
+    return true;
+  }
+  if (ensureConfigDirectoryExists(directory.parent_path())) {
+    boost::system::error_code ec;
+    auto created = ensureDirExistsAndWritable(directory.string());
+    if (!created) {
+      LOG(ERROR) << "Failed to create directory '" << directory
+                 << "'. Error code: " << ec;
+    }
+    return created;
+  }
+  return false;
+}
+
+bool setupDumpConfigToDisk(const McrouterOptions& opts) {
+  if (opts.config_dump_root.empty()) {
+    return false;
+  }
+  if (opts.service_name.empty() || opts.router_name.empty()) {
+    MC_LOG_FAILURE(
+        opts,
+        memcache::failure::Category::kOther,
+        "Service name or router name not set. Configs won't be saved to disk.");
+    return false;
+  }
+  if (!ensureConfigDirectoryExists(getBackupConfigDirectory(opts))) {
+    MC_LOG_FAILURE(
+        opts,
+        memcache::failure::Category::kOther,
+        "Failed to setup directory for dumping configs. "
+        "Configs won't be saved to disk.");
+    return false;
+  }
+  return true;
+}
+
+template <class Tag>
+void logFailureEveryN(
+    const McrouterOptions& opts,
+    const char* category,
+    std::string msg,
+    int n) {
+  static thread_local uint64_t count = 0;
+  if ((count++ % n) == 0) {
+    MC_LOG_FAILURE(opts, category, msg);
+  }
+}
+struct DumpFileTag;
+struct TouchFileTag;
+
+} // anonymous namespace
 
 const char* const ConfigApi::kFilePrefix = "file:";
 
@@ -38,8 +110,8 @@ ConfigApi::~ConfigApi() {
 
 ConfigApi::ConfigApi(const McrouterOptions& opts)
     : opts_(opts),
-      finish_(false) {
-}
+      finish_(false),
+      dumpConfigToDisk_(setupDumpConfigToDisk(opts)) {}
 
 ConfigApi::CallbackHandle ConfigApi::subscribe(Callback callback) {
   return callbacks_.subscribe(std::move(callback));
@@ -80,8 +152,7 @@ bool ConfigApi::checkFileUpdate() {
         hasUpdate |= file.provider->hasUpdate();
       }
     } catch (const std::exception& e) {
-      LOG(ERROR) << "Check " << file.path << " for update failed: "
-                 << e.what();
+      LOG(ERROR) << "Check " << file.path << " for update failed: " << e.what();
       // check with hash, if it throws error something is totally wrong,
       // reconfiguration thread will log error and finish.
       file.provider.reset();
@@ -101,9 +172,9 @@ void ConfigApi::configThreadRun() {
       callbacks_.notify();
       {
         std::unique_lock<std::mutex> lk(finishMutex_);
-        finishCV_.wait_for(lk, std::chrono::milliseconds(10),
-                           [this] { return finish_.load(); });
-
+        finishCV_.wait_for(lk, std::chrono::milliseconds(10), [this] {
+          return finish_.load();
+        });
       }
     }
     return;
@@ -114,11 +185,16 @@ void ConfigApi::configThreadRun() {
     try {
       hasUpdate = checkFileUpdate();
     } catch (const std::exception& e) {
-      MC_LOG_FAILURE(opts_, memcache::failure::Category::kOther,
-                     "Check for config update failed: {}", e.what());
+      MC_LOG_FAILURE(
+          opts_,
+          memcache::failure::Category::kOther,
+          "Check for config update failed: {}",
+          e.what());
     } catch (...) {
-      MC_LOG_FAILURE(opts_, memcache::failure::Category::kOther,
-                     "Check for config update failed with unknown error");
+      MC_LOG_FAILURE(
+          opts_,
+          memcache::failure::Category::kOther,
+          "Check for config update failed with unknown error");
     }
     // There are a couple of races that can happen here
     // First, the IN_MODIFY event can be fired before the write is complete,
@@ -133,9 +209,9 @@ void ConfigApi::configThreadRun() {
     {
       std::unique_lock<std::mutex> lk(finishMutex_);
       finishCV_.wait_for(
-        lk, std::chrono::milliseconds(opts_.reconfiguration_delay_ms),
-        [this] { return finish_.load(); });
-
+          lk,
+          std::chrono::milliseconds(opts_.reconfiguration_delay_ms),
+          [this] { return finish_.load(); });
     }
 
     if (hasUpdate) {
@@ -159,29 +235,46 @@ bool ConfigApi::FileInfo::checkMd5Changed() {
   return md5 != previousHash;
 }
 
-bool ConfigApi::getConfigFile(std::string& contents) {
+bool ConfigApi::getConfigFile(std::string& contents, std::string& path) {
   folly::StringPiece configStr = opts_.config;
   if (configStr.startsWith(kFilePrefix)) {
+    path = configStr.str();
     configStr.removePrefix(kFilePrefix);
     return get(ConfigType::ConfigFile, configStr.str(), contents);
   }
   if (!configStr.empty()) {
+    path = shorten(configStr, 64);
     contents = configStr.str();
     return true;
   }
   if (!opts_.config_str.empty()) {
     // explicit config, no automatic reload
+    path = shorten(opts_.config_str, 64);
     contents = opts_.config_str;
     return true;
   }
   if (!opts_.config_file.empty()) {
+    path = "file:" + opts_.config_file;
     return get(ConfigType::ConfigFile, opts_.config_file, contents);
   }
   return false;
 }
 
-bool ConfigApi::get(ConfigType type, const std::string& path,
-                    std::string& contents) {
+bool ConfigApi::readFile(const std::string& path, std::string& contents) {
+  bool fileRead = false;
+  if (shouldReadFromBackupFiles()) {
+    fileRead = readFromBackupFile(kFilePrefix, path, contents);
+  }
+  if (!fileRead) {
+    fileRead = folly::readFile(path.data(), contents);
+  }
+  return fileRead;
+}
+
+bool ConfigApi::get(
+    ConfigType type,
+    const std::string& path,
+    std::string& contents) {
   std::string fullPath;
   folly::StringPiece configPath = path;
   folly::StringPiece configOpt = opts_.config;
@@ -210,7 +303,7 @@ bool ConfigApi::get(ConfigType type, const std::string& path,
     fullPath = path;
   }
 
-  if (!folly::readFile(fullPath.data(), contents)) {
+  if (!readFile(fullPath, contents)) {
     return false;
   }
 
@@ -223,6 +316,7 @@ bool ConfigApi::get(ConfigType type, const std::string& path,
     file.type = type;
     file.lastMd5Check = nowWallSec();
     file.md5 = Md5Hash(contents);
+    file.content = contents; // copy file contents so that we can dump it later
   }
   return true;
 }
@@ -235,13 +329,16 @@ void ConfigApi::trackConfigSources() {
 void ConfigApi::subscribeToTrackedSources() {
   std::lock_guard<std::mutex> lock(fileInfoMutex_);
   assert(tracking_);
+  lastConfigFromBackupFiles_ = shouldReadFromBackupFiles();
   tracking_ = false;
   isFirstConfig_ = false;
+  readFromBackupFiles_ = false;
 
   if (!opts_.disable_reload_configs) {
     // start watching for updates
     for (auto& it : trackedFiles_) {
       auto& file = it.second;
+      dumpConfigSourceToDisk(kFilePrefix, file.path, file.content, file.md5);
       try {
         if (!file.provider) {
           // reuse existing providers
@@ -255,8 +352,8 @@ void ConfigApi::subscribeToTrackedSources() {
         }
       } catch (const std::exception& e) {
         // it's not that bad, we will check for change in hash
-        LOG(INFO) << "Can not start watching " << file.path <<
-                     " for modifications: " << e.what();
+        LOG(INFO) << "Can not start watching " << file.path
+                  << " for modifications: " << e.what();
       }
     }
   }
@@ -315,4 +412,102 @@ bool ConfigApi::isFirstConfig() const {
   return isFirstConfig_;
 }
 
-}}} // facebook::memcache::mcrouter
+void ConfigApi::dumpConfigSourceToDisk(
+    const std::string& sourcePrefix,
+    const std::string& name,
+    const std::string& contents,
+    const std::string& md5OrVersion) {
+  if (!dumpConfigToDisk_ || lastConfigFromBackupFiles_) {
+    return;
+  }
+
+  auto directory = getBackupConfigDirectory(opts_);
+  auto filePath =
+      (directory / getBackupConfigFileName(sourcePrefix, name)).string();
+
+  bool shouldRewrite = true;
+  auto backupFileIt = backupFiles_.find(filePath);
+  if (backupFileIt == backupFiles_.end()) {
+    backupFileIt = backupFiles_.emplace(filePath, "").first;
+  } else {
+    shouldRewrite = (backupFileIt->second != md5OrVersion);
+  }
+
+  if (shouldRewrite) {
+    if (atomicallyWriteFileToDisk(contents, filePath)) {
+      // Makes sure the file has the correct permission for when we decide to
+      // run mcrouter with another user.
+      ensureHasPermission(filePath, 0666);
+      backupFileIt->second = md5OrVersion;
+    } else {
+      logFailureEveryN<DumpFileTag>(
+          opts_,
+          memcache::failure::Category::kOther,
+          folly::sformat(
+              "Error while dumping last valid config to disk. "
+              "Failed to write file {}.",
+              filePath),
+          1000);
+      ensureConfigDirectoryExists(directory);
+    }
+  } else {
+    if (!touchFile(filePath)) {
+      logFailureEveryN<TouchFileTag>(
+          opts_,
+          memcache::failure::Category::kOther,
+          folly::sformat(
+              "Error while touching backup config file {}", filePath),
+          1000);
+      ensureConfigDirectoryExists(directory);
+    }
+  }
+}
+
+bool ConfigApi::readFromBackupFile(
+    const std::string& sourcePrefix,
+    const std::string& name,
+    std::string& contents) const {
+  auto filePath = getBackupConfigDirectory(opts_) /
+      getBackupConfigFileName(sourcePrefix, name);
+  if (!boost::filesystem::exists(filePath)) {
+    LOG(WARNING) << "Backup file '" << filePath << "' not found.";
+    return false;
+  }
+
+  auto now = nowWallSec();
+  auto lastWriteTime = boost::filesystem::last_write_time(filePath);
+  if (lastWriteTime + opts_.max_dumped_config_age < now) {
+    LOG(WARNING) << "Config backup '" << sourcePrefix << name
+                 << "' too old to be trusted. "
+                 << "Age: " << now - lastWriteTime << " seconds. "
+                 << "Max age allowed: " << opts_.max_dumped_config_age
+                 << " seconds.";
+    return false;
+  }
+
+  LOG(INFO) << "Reading config source " << sourcePrefix << name
+            << " from backup.";
+  return folly::readFile(filePath.c_str(), contents);
+}
+
+void ConfigApi::enableReadingFromBackupFiles() {
+  if (!isFirstConfig()) {
+    throw std::logic_error(
+        "Reading from backup files is just allowed on the first configuration");
+  }
+  if (opts_.max_dumped_config_age == 0) {
+    LOG(WARNING) << "Reading configs from backup is disabled "
+                    "(max_dumped_config_age == 0)";
+    return;
+  }
+  readFromBackupFiles_ = true;
+  LOG(WARNING) << "Enabling read config from backup files.";
+}
+
+bool ConfigApi::shouldReadFromBackupFiles() const {
+  return readFromBackupFiles_;
+}
+
+} // mcrouter
+} // memcache
+} // facebook

@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include <wangle/channel/Handler.h>
@@ -260,8 +266,8 @@ template <class Rin, class Rout = Rin, class Win = Rout, class Wout = Rin>
 class ConcreteHandler : public Handler<Rin, Rout, Win, Wout> {
   typedef typename Handler<Rin, Rout, Win, Wout>::Context Context;
  public:
-  void read(Context* ctx, Rin msg) override {}
-  Future<Unit> write(Context* ctx, Win msg) override { return makeFuture(); }
+  void read(Context*, Rin /* msg */) override {}
+  Future<Unit> write(Context*, Win /* msg */) override { return makeFuture(); }
 };
 
 typedef HandlerAdapter<std::string, std::string> StringHandler;
@@ -405,4 +411,66 @@ TEST(Pipeline, Concurrent) {
   std::thread t(spam);
   spam();
   t.join();
+}
+
+TEST(PipelineTest, NumHandler) {
+  NiceMock<MockHandlerAdapter<int, int>> handler1, handler2;
+  auto pipeline = Pipeline<int, int>::create();
+  EXPECT_EQ(0, pipeline->numHandlers());
+
+  pipeline->addBack(&handler1);
+  EXPECT_EQ(1, pipeline->numHandlers());
+
+  pipeline->addBack(&handler2);
+  EXPECT_EQ(2, pipeline->numHandlers());
+
+  pipeline->finalize();
+  EXPECT_EQ(2, pipeline->numHandlers());
+
+  pipeline->remove(&handler1);
+  EXPECT_EQ(1, pipeline->numHandlers());
+
+  pipeline->remove(&handler2);
+  EXPECT_EQ(0, pipeline->numHandlers());
+}
+
+
+TEST(PipelineTest, HandlerReuse) {
+  NiceMock<MockHandlerAdapter<int, int>> handler1, handler2, handler3;
+  auto pipeline1 = Pipeline<int, int>::create();
+
+  // pipeline1 contains the first two handlers
+  (*pipeline1)
+    .addBack(&handler1)
+    .addBack(&handler2)
+    .finalize();
+  pipeline1->read(42);
+  EXPECT_NE(nullptr, handler2.getContext());
+
+  // Close and detach the back handler (#2)
+  pipeline1->close();
+  pipeline1->removeBack();
+  ASSERT_EQ(nullptr, handler2.getContext());
+
+  auto pipeline2 = Pipeline<int, int>::create();
+  (*pipeline2)
+    .addBack(&handler2)
+    .addBack(&handler3)
+    .finalize();
+  pipeline2->read(24);
+  EXPECT_NE(nullptr, handler2.getContext());
+
+  // detach both
+  pipeline2->remove(&handler2);
+  pipeline2->remove(&handler3);
+  ASSERT_EQ(nullptr, handler2.getContext());
+  ASSERT_EQ(nullptr, handler3.getContext());
+
+  auto pipeline3 = Pipeline<int, int>::create();
+  (*pipeline3)
+    .addBack(&handler2)
+    .addBack(&handler3)
+    .finalize();
+  pipeline3->read(1);
+  EXPECT_NE(nullptr, handler2.getContext());
 }

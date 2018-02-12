@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2004-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #pragma once
 
 namespace apache { namespace thrift {
@@ -96,8 +95,8 @@ uint32_t JSONProtocolWriterCommon::writeBinary(folly::ByteRange v) {
 uint32_t JSONProtocolWriterCommon::writeBinary(
     const std::unique_ptr<folly::IOBuf>& str) {
   DCHECK(str);
-  auto ret = writeContext();
   if (!str) {
+    auto ret = writeContext();
     return ret + writeJSONString(folly::StringPiece());
   }
   return writeBinary(*str);
@@ -117,81 +116,84 @@ uint32_t JSONProtocolWriterCommon::writeSerializedData(
   return buf->computeChainDataLength();
 }
 
-uint32_t JSONProtocolWriterCommon::serializedSizeByte(int8_t /*val*/) {
+uint32_t JSONProtocolWriterCommon::serializedSizeByte(int8_t /*val*/) const {
   // 3 bytes for serialized, plus it might be a key, plus context
   return 6;
 }
 
-uint32_t JSONProtocolWriterCommon::serializedSizeI16(int16_t /*val*/) {
+uint32_t JSONProtocolWriterCommon::serializedSizeI16(int16_t /*val*/) const {
   return 8;
 }
 
-uint32_t JSONProtocolWriterCommon::serializedSizeI32(int32_t /*val*/) {
+uint32_t JSONProtocolWriterCommon::serializedSizeI32(int32_t /*val*/) const {
   return 13;
 }
 
-uint32_t JSONProtocolWriterCommon::serializedSizeI64(int64_t /*val*/) {
+uint32_t JSONProtocolWriterCommon::serializedSizeI64(int64_t /*val*/) const {
   return 25;
 }
 
-uint32_t JSONProtocolWriterCommon::serializedSizeDouble(double /*val*/) {
+uint32_t JSONProtocolWriterCommon::serializedSizeDouble(double /*val*/) const {
   return 25;
 }
 
-uint32_t JSONProtocolWriterCommon::serializedSizeFloat(float /*val*/) {
+uint32_t JSONProtocolWriterCommon::serializedSizeFloat(float /*val*/) const {
   return 25;
 }
 
 uint32_t JSONProtocolWriterCommon::serializedSizeString(
-    folly::StringPiece str) {
+    folly::StringPiece str) const {
   return str.size() * 6 + 3;
 }
 
 uint32_t JSONProtocolWriterCommon::serializedSizeBinary(
-    folly::StringPiece str) {
+    folly::StringPiece str) const {
   return serializedSizeBinary(folly::ByteRange(str));
 }
 
-uint32_t JSONProtocolWriterCommon::serializedSizeBinary(folly::ByteRange v) {
+uint32_t JSONProtocolWriterCommon::serializedSizeBinary(
+  folly::ByteRange v) const {
   return v.size() * 6 + 3;
 }
 
 uint32_t JSONProtocolWriterCommon::serializedSizeBinary(
-    const std::unique_ptr<folly::IOBuf>& v) {
+    std::unique_ptr<folly::IOBuf> const& v) const {
   return (v ? serializedSizeBinary(*v) * 6 : 0) + 3;
 }
 
 uint32_t JSONProtocolWriterCommon::serializedSizeBinary(
-    const folly::IOBuf& v) {
+    folly::IOBuf const& v) const {
   size_t size = v.computeChainDataLength();
   if (size > std::numeric_limits<uint32_t>::max() - serializedSizeI32()) {
-    throw TProtocolException(TProtocolException::SIZE_LIMIT);
+    TProtocolException::throwExceededSizeLimit();
   }
   return size * 6 + 3;
 }
 
 uint32_t JSONProtocolWriterCommon::serializedSizeZCBinary(
-    folly::StringPiece str) {
+    folly::StringPiece str) const {
   return serializedSizeZCBinary(folly::ByteRange(str));
 }
 
-uint32_t JSONProtocolWriterCommon::serializedSizeZCBinary(folly::ByteRange v) {
+uint32_t JSONProtocolWriterCommon::serializedSizeZCBinary(
+  folly::ByteRange v) const {
   return serializedSizeBinary(v);
 }
 
 uint32_t JSONProtocolWriterCommon::serializedSizeZCBinary(
-    const std::unique_ptr<folly::IOBuf>&) {
+    std::unique_ptr<folly::IOBuf> const&) const {
   // size only
   return serializedSizeI32();
 }
 
-uint32_t JSONProtocolWriterCommon::serializedSizeZCBinary(const folly::IOBuf&) {
+uint32_t JSONProtocolWriterCommon::serializedSizeZCBinary(
+  folly::IOBuf const&) const {
   // size only
   return serializedSizeI32();
 }
 
 uint32_t JSONProtocolWriterCommon::serializedSizeSerializedData(
-    const std::unique_ptr<folly::IOBuf>& /*buf*/) {
+    std::unique_ptr<folly::IOBuf> const& /*buf*/) const {
   // writeSerializedData's implementation just chains IOBufs together. Thus
   // we don't expect external buffer space for it.
   return 0;
@@ -345,16 +347,7 @@ uint32_t JSONProtocolWriterCommon::writeJSONBool(bool val) {
 }
 
 uint32_t JSONProtocolWriterCommon::writeJSONInt(int64_t num) {
-  std::string serialized;
-  if (!context.empty() &&
-      context.back().type == ContextType::MAP &&
-      context.back().meta % 2 == 1) {
-    serialized = folly::to<std::string>('"', num, '"');
-  } else {
-    serialized = folly::to<std::string>(num);
-  }
-  out_.push((const uint8_t*)serialized.c_str(), serialized.length());
-  return serialized.length();
+  return writeJSONIntInternal(num);
 }
 
 template<typename T>
@@ -366,9 +359,7 @@ uint32_t JSONProtocolWriterCommon::writeJSONDouble(T dbl) {
   } else if (std::isnan(dbl)) {
     return writeJSONString(TJSONProtocol::kThriftNan);
   } else {
-    auto serialized = folly::to<std::string>(dbl);
-    out_.push((const uint8_t*)serialized.c_str(), serialized.length());
-    return serialized.length();
+    return writeJSONDoubleInternal(dbl);
   }
 }
 
@@ -383,8 +374,7 @@ uint32_t JSONProtocolReaderCommon::readMessageBegin(std::string& name,
   int64_t tmpVal;
   ret += readI64(tmpVal);
   if (tmpVal != TJSONProtocol::kThriftVersion1) {
-    throw TProtocolException(TProtocolException::BAD_VERSION,
-                             "Message contained bad version.");
+    throwBadVersion();
   }
   ret += readString(name);
   ret += readI64(tmpVal);
@@ -456,12 +446,12 @@ uint32_t JSONProtocolReaderCommon::skip(TType /*type*/) {
   bool keyish;
   auto ret = ensureAndReadContext(keyish);
   ret += readWhitespace();
-  auto ch = *in_.peek().first;
+  auto ch = peekCharSafe();
   if (ch == TJSONProtocol::kJSONObjectStart) {
     ret += beginContext(ContextType::MAP);
     while (true) {
       skipWhitespace();
-      if (*in_.peek().first == TJSONProtocol::kJSONObjectEnd) {
+      if (peekCharSafe() == TJSONProtocol::kJSONObjectEnd) {
         break;
       }
       ret += skip(TType::T_VOID);
@@ -472,7 +462,7 @@ uint32_t JSONProtocolReaderCommon::skip(TType /*type*/) {
     ret += beginContext(ContextType::ARRAY);
     while (true) {
       skipWhitespace();
-      if (*in_.peek().first == TJSONProtocol::kJSONArrayEnd) {
+      if (peekCharSafe() == TJSONProtocol::kJSONArrayEnd) {
         break;
       }
       ret += skip(TType::T_VOID);
@@ -491,16 +481,13 @@ uint32_t JSONProtocolReaderCommon::skip(TType /*type*/) {
     return ret + readJSONNull();
   }
 
-  throw TProtocolException(
-    TProtocolException::INVALID_DATA,
-    std::string(1, ch) + " is not a valid start to a JSON field");
+  throwInvalidFieldStart(ch);
 }
 
 uint32_t JSONProtocolReaderCommon::readFromPositionAndAppend(
     folly::io::Cursor& snapshot,
     std::unique_ptr<folly::IOBuf>& ser) {
-
-  int32_t size = in_ - snapshot;
+  int32_t size = folly::io::Cursor(in_) - snapshot;
 
   if (ser) {
     std::unique_ptr<folly::IOBuf> newBuf;
@@ -521,17 +508,20 @@ uint32_t JSONProtocolReaderCommon::readFromPositionAndAppend(
  */
 
 void JSONProtocolReaderCommon::skipWhitespace() {
-  while (true) {
-    auto peek = *in_.peek().first;
-    if (peek == TJSONProtocol::kJSONSpace ||
-        peek == TJSONProtocol::kJSONNewline ||
-        peek == TJSONProtocol::kJSONTab ||
-        peek == TJSONProtocol::kJSONCarriageReturn) {
-      in_.read<uint8_t>();
-      skippedWhitespace_++;
-    } else {
-      return;
+  for (auto peek = in_.peekBytes(); !peek.empty(); peek = in_.peekBytes()) {
+    uint32_t size = 0;
+    for (char ch : peek) {
+      if (ch != TJSONProtocol::kJSONSpace &&
+          ch != TJSONProtocol::kJSONNewline &&
+          ch != TJSONProtocol::kJSONTab &&
+          ch != TJSONProtocol::kJSONCarriageReturn) {
+        in_.skip(size);
+        return;
+      }
+      ++skippedWhitespace_;
+      ++size;
     }
+    in_.skip(size);
   }
 }
 
@@ -545,10 +535,7 @@ uint32_t JSONProtocolReaderCommon::readWhitespace() {
 uint32_t JSONProtocolReaderCommon::ensureCharNoWhitespace(char expected) {
   auto actual = in_.read<int8_t>();
   if (actual != expected) {
-    throw TProtocolException(
-      TProtocolException::INVALID_DATA,
-      folly::sformat("expected '{}' (hex 0x{:02x}), read '{:c}' (hex 0x{:02x})",
-                     expected, expected, actual, actual));
+    throwUnexpectedChar(actual, expected);
   }
   return 1;
 }
@@ -634,10 +621,8 @@ template <typename T>
 T JSONProtocolReaderCommon::castIntegral(folly::StringPiece val) {
   try {
     return folly::to<T>(val);
-  } catch (const std::exception& e) {
-    throw TProtocolException(
-      TProtocolException::INVALID_DATA,
-      folly::to<std::string>(val, " is not a valid ", typeid(T).name()));
+  } catch (const std::exception&) {
+    throwUnrecognizableAsIntegral(val, typeid(T));
   }
 }
 
@@ -684,19 +669,13 @@ uint32_t JSONProtocolReaderCommon::readJSONIntegral(T& val) {
 }
 
 uint32_t JSONProtocolReaderCommon::readNumericalChars(std::string& val) {
-  auto ret = readWhitespace();
-  while (true) {
-    auto peek = *in_.peek().first;
-    if ((peek >= '0' && peek <= '9') ||
-        peek == '+' || peek == '-' || peek == '.' || peek == 'E' ||
-        peek == 'e') {
-      val += in_.read<int8_t>();
-      ret++;
-    } else {
-      break;
-    }
-  }
-  return ret;
+  return readWhitespace() +
+      readWhile(
+             [](uint8_t ch) {
+               return (ch >= '0' && ch <= '9') || ch == '+' || ch == '-' ||
+                   ch == '.' || ch == 'E' || ch == 'e';
+             },
+             val);
 }
 
 uint32_t JSONProtocolReaderCommon::readJSONVal(int8_t& val) {
@@ -717,7 +696,7 @@ uint32_t JSONProtocolReaderCommon::readJSONVal(int64_t& val) {
 
 uint32_t JSONProtocolReaderCommon::readJSONVal(double& val) {
   auto ret = readWhitespace();
-  if (*in_.peek().first == TJSONProtocol::kJSONStringDelimiter) {
+  if (peekCharSafe() == TJSONProtocol::kJSONStringDelimiter) {
     std::string str;
     ret += readJSONString(str);
     if (str == TJSONProtocol::kThriftNan) {
@@ -730,6 +709,8 @@ uint32_t JSONProtocolReaderCommon::readJSONVal(double& val) {
     }
     else if (str == TJSONProtocol::kThriftNegativeInfinity) {
       val = -HUGE_VAL;
+    } else {
+      throwUnrecognizableAsFloatingPoint(str);
     }
     return ret;
   }
@@ -737,10 +718,8 @@ uint32_t JSONProtocolReaderCommon::readJSONVal(double& val) {
   ret += readNumericalChars(s);
   try {
     val = folly::to<double>(s);
-  } catch (const std::exception& e) {
-    throw TProtocolException(
-      TProtocolException::INVALID_DATA,
-      s + " is not a valid float/double");
+  } catch (const std::exception&) {
+    throwUnrecognizableAsFloatingPoint(s);
   }
   return ret;
 }
@@ -753,8 +732,7 @@ uint32_t JSONProtocolReaderCommon::readJSONVal(float& val) {
 }
 
 template <typename Str>
-typename std::enable_if<
-    JSONProtocolReaderCommon::is_string<Str>::value, uint32_t>::type
+typename std::enable_if<detail::is_string<Str>::value, uint32_t>::type
 JSONProtocolReaderCommon::readJSONVal(Str& val) {
   return readJSONString(val);
 }
@@ -765,9 +743,7 @@ bool JSONProtocolReaderCommon::JSONtoBool(const std::string& s) {
   } else if (s == "false") {
     return false;
   } else {
-    throw TProtocolException(
-      TProtocolException::INVALID_DATA,
-      folly::to<std::string>(s, " is not a valid bool"));
+    throwUnrecognizableAsBoolean(s);
   }
   return false;
 }
@@ -783,20 +759,14 @@ uint32_t JSONProtocolReaderCommon::readJSONNull() {
   std::string s;
   auto ret = readJSONKeyword(s);
   if (s != "null") {
-    throw TProtocolException(
-      TProtocolException::INVALID_DATA,
-      folly::to<std::string>(s, " is not valid JSON"));
+    throwUnrecognizableAsAny(s);
   }
   return ret;
 }
 
 uint32_t JSONProtocolReaderCommon::readJSONKeyword(std::string& kw) {
-  auto ret = readWhitespace();
-  while (*in_.peek().first >= 'a' && *in_.peek().first <= 'z') {
-    kw += in_.read<int8_t>();
-    ++ret;
-  }
-  return ret;
+  return readWhitespace() +
+      readWhile([](int8_t ch) { return ch >= 'a' && ch <= 'z'; }, kw);
 }
 
 uint32_t JSONProtocolReaderCommon::readJSONEscapeChar(uint8_t& out) {
@@ -832,11 +802,9 @@ uint32_t JSONProtocolReaderCommon::readJSONString(StrType& val) {
           ret += readJSONEscapeChar(ch);
         }
       } else {
-        size_t pos = kEscapeChars.find(ch);
+        size_t pos = kEscapeChars.find_first_of(ch);
         if (pos == std::string::npos) {
-          throw TProtocolException(TProtocolException::INVALID_DATA,
-                                   "Expected control char, got '" +
-                                   std::string((const char *)&ch, 1)  + "'.");
+          throwInvalidEscapeChar(ch);
         }
         if (allowDecodeUTF8_) {
           json += "\\";
@@ -859,11 +827,9 @@ uint32_t JSONProtocolReaderCommon::readJSONString(StrType& val) {
     json += "\"";
     try {
       folly::dynamic parsed = folly::parseJson(json);
-      val += parsed.c_str();
+      val += parsed.getString();
     } catch (const std::exception& e) {
-      throw TProtocolException(
-        TProtocolException::INVALID_DATA,
-        json + " is not a valid JSON string");
+      throwUnrecognizableAsString(json, e);
     }
   }
 
@@ -902,13 +868,35 @@ uint8_t JSONProtocolReaderCommon::hexVal(uint8_t ch) {
     return ch - 'a' + 10;
   }
   else {
-    throw TProtocolException(
-        TProtocolException::INVALID_DATA,
-        folly::to<std::string>(
-          "Expected hex val ([0-9a-f]); got \'",
-          folly::StringPiece((char *)&ch, 1),
-          "\'."));
+    throwInvalidHexChar(ch);
   }
+}
+
+template <class Predicate>
+uint32_t JSONProtocolReaderCommon::readWhile(
+    const Predicate& pred,
+    std::string& out) {
+  uint32_t ret = 0;
+  for (auto peek = in_.peekBytes(); !peek.empty(); peek = in_.peekBytes()) {
+    uint32_t size = 0;
+    for (uint8_t ch : peek) {
+      if (!pred(ch)) {
+        out.append(peek.begin(), peek.begin() + size);
+        in_.skip(size);
+        return ret + size;
+      }
+      ++size;
+    }
+    out.append(peek.begin(), peek.end());
+    ret += size;
+    in_.skip(size);
+  }
+  return ret;
+}
+
+int8_t JSONProtocolReaderCommon::peekCharSafe() {
+  auto peek = in_.peekBytes();
+  return peek.empty() ? 0 : *peek.data();
 }
 
 }} // apache::thrift

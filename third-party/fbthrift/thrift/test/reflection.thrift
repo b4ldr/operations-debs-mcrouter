@@ -6,22 +6,32 @@ namespace java.swift test_swift.cpp_reflection
 namespace php test_php.cpp_reflection
 namespace python test_py.cpp_reflection
 
+include "thrift/test/reflection_dep_B.thrift"
+include "thrift/test/reflection_dep_C.thrift"
+
+cpp_include "thrift/test/fatal_custom_types.h"
+
 enum enum1 {
-  field0,
-  field1,
-  field2
+  field0 = 0,
+  field1 = 1,
+  field2 = 2,
 }
 
 enum enum2 {
-  field0_2,
-  field1_2,
-  field2_2
+  field0_2 = 0,
+  field1_2 = 1,
+  field2_2 = 2,
 }
 
 enum enum3 {
-  field0_3,
-  field1_3,
-  field2_3
+  field0_3 = 0,
+  field1_3 = 1 (
+    field_annotation = "field annotated",
+  ),
+  field2_3 = 2 (
+    field_structured_annotation = '{"a": "foo", "b": 567, "c": true}',
+    field_annotation = "some other text",
+  ),
 } (
   one.here = "with some value associated",
   another.there = ".",
@@ -57,6 +67,10 @@ struct structA {
   2: string b
 }
 
+typedef structA (
+  cpp.type = "test_cpp_reflection::custom_structA"
+) my_structA
+
 union unionA {
   1: i32 i
   2: double d
@@ -77,6 +91,8 @@ struct structB {
 } (
   some.annotation = "this is its value",
   some.other.annotation = "this is its other value",
+  multi_line_annotation = "line one
+line two"
 )
 
 struct structC {
@@ -149,8 +165,60 @@ struct struct3 {
   15: set<string> fieldO
   16: set<structB> fieldP
   17: map<string, structA> fieldQ
-  18: map<string, structB> fieldR
+  18: map<string, structB> (cpp.template = 'std::unordered_map') fieldR
+  19: map<binary, binary> fieldS
 }
+
+struct struct4 {
+  1: required i32 field0
+  2: optional string field1
+  3: enum1 field2
+  6: structA field3 (cpp2.ref = "true")
+}
+
+struct struct5 {
+  1: required i32 field0
+  2: optional string field1
+  3: enum1 field2
+  4: structA field3 (annotate_here = "with text")
+  5: structB field4
+}
+
+struct struct_binary {
+  1: binary bi
+}
+
+struct dep_A_struct {
+  1: reflection_dep_B.dep_B_struct b
+  2: reflection_dep_C.dep_C_struct c
+  3: i32 i_a
+}
+
+struct annotated {
+  1: i32 a (
+    m_b_false = 'false',
+    m_b_true = 'true',
+    m_int = '10',
+    m_string = '"hello"',
+    m_int_list = '[-1, 2, 3]',
+    m_str_list = '["a", "b", "c"]',
+    m_mixed_list = '["a", 1, "b", 2]',
+    m_int_map = '{"a": 1, "b": -2, "c": -3}',
+    m_str_map = '{"a": "A", "b": "B", "c": "C"}',
+    m_mixed_map = '{"a": -2, "b": "B", "c": 3}'
+  )
+} (
+  s_b_false = 'false',
+  s_b_true = 'true',
+  s_int = '10',
+  s_string = '"hello"',
+  s_int_list = '[-1, 2, 3]',
+  s_str_list = '["a", "b", "c"]',
+  s_mixed_list = '["a", 1, "b", 2]',
+  s_int_map = '{"a": 1, "b": -2, "c": -3}',
+  s_str_map = '{"a": "A", "b": "B", "c": "C"}',
+  s_mixed_map = '{"a": -2, "b": "B", "c": 3}'
+)
 
 service service1 {
   void method1();
@@ -184,32 +252,34 @@ const string constant2 = "hello";
 const enum1 constant3 = enum1.field0;
 
 enum enum_with_special_names {
-  get,
-  getter,
-  lists,
-  maps,
-  name,
-  name_to_value,
-  names,
-  prefix_tree,
-  sets,
-  setter,
-  str,
-  strings,
-  type,
-  value,
-  value_to_name,
-  values,
-  id,
-  ids,
-  descriptor,
-  descriptors,
-  key,
-  keys,
-  annotation,
-  annotations,
-  member,
-  members,
+  get = 0,
+  getter = 1,
+  lists = 2,
+  maps = 3,
+  name = 4,
+  name_to_value = 5,
+  names = 6,
+  prefix_tree = 7,
+  sets = 8,
+  setter = 9,
+  str = 10,
+  strings = 11,
+  type = 12,
+  value = 13,
+  value_to_name = 14,
+  values = 15,
+  id = 16,
+  ids = 17,
+  descriptor = 18,
+  descriptors = 19,
+  key = 20,
+  keys = 21,
+  annotation = 22,
+  annotations = 23,
+  member = 24,
+  members = 25,
+  field = 26,
+  fields = 27,
 }
 
 union union_with_special_names {
@@ -239,6 +309,8 @@ union union_with_special_names {
   24: i32 annotations
   25: i32 member
   26: i32 members
+  27: i32 field
+  28: i32 fields
 }
 
 struct struct_with_special_names {
@@ -268,6 +340,8 @@ struct struct_with_special_names {
   24: i32 annotations
   25: i32 member
   26: i32 members
+  27: i32 field
+  28: i32 fields
 }
 
 service service_with_special_names {
@@ -297,6 +371,20 @@ service service_with_special_names {
   i32 annotations()
   i32 member()
   i32 members()
+  i32 field()
+  i32 fields()
 }
 
 const i32 constant_with_special_name = 42;
+
+struct hasRefUnique {
+  1: structA a (cpp.ref_type = "unique"),
+}
+
+struct hasRefShared {
+  1: structA a (cpp.ref_type = "shared"),
+}
+
+struct hasRefSharedConst {
+  1: structA a (cpp.ref_type = "shared_const"),
+}

@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #pragma once
 
@@ -111,8 +117,9 @@ class ConnectionManager: public folly::DelayedDestruction,
    */
   void initiateGracefulShutdown(std::chrono::milliseconds idleGrace);
 
-  /* gracefully shutdown certain percentage of persistent client connections
-     and leave the rest intact.
+  /**
+   * Gracefully shutdown certain percentage of persistent client connections
+   * and leave the rest intact.
    */
   void drainConnections(double pct, std::chrono::milliseconds idleGrace);
 
@@ -121,6 +128,12 @@ class ConnectionManager: public folly::DelayedDestruction,
    * the ones that are busy.
    */
   void dropAllConnections();
+
+  /**
+   * Force-stop "pct" (0.0 to 1.0) of remaining client connections,
+   * regardless of whether they are busy or idle.
+   */
+  void dropConnections(double pct);
 
   size_t getNumConnections() const { return conns_.size(); }
 
@@ -152,9 +165,9 @@ class ConnectionManager: public folly::DelayedDestruction,
   /**
    * ManagedConnection::Callbacks
    */
-  void onActivated(ManagedConnection& conn);
+  void onActivated(ManagedConnection& conn) override;
 
-  void onDeactivated(ManagedConnection& conn);
+  void onDeactivated(ManagedConnection& conn) override;
 
  private:
 
@@ -225,11 +238,10 @@ class ConnectionManager: public folly::DelayedDestruction,
     bool all_{true};
     double pct_{1.0};
     ConnectionManager& manager_;
-    ShutdownState shutdownState_{ShutdownState::NONE};;
+    ShutdownState shutdownState_{ShutdownState::NONE};
   };
 
-
-  ~ConnectionManager() = default;
+  ~ConnectionManager() override = default;
 
   ConnectionManager(const ConnectionManager&) = delete;
   ConnectionManager& operator=(ConnectionManager&) = delete;
@@ -240,6 +252,11 @@ class ConnectionManager: public folly::DelayedDestruction,
    * isBusy() method.
    */
   void drainAllConnections();
+
+  /**
+   * Signal the drain helper that we are about to start dropping connections.
+   */
+  void stopDrainingForShutdown();
 
   void idleGracefulTimeoutExpired();
 

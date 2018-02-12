@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Facebook, Inc.
+ * Copyright 2015-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,8 +38,8 @@
 #include <thrift/lib/cpp2/test/util/TestHeaderClientChannelFactory.h>
 #include <thrift/lib/cpp2/test/util/TestHTTPClientChannelFactory.h>
 
-#include <folly/experimental/fibers/FiberManagerMap.h>
-#include <wangle/concurrent/GlobalExecutor.h>
+#include <folly/executors/GlobalExecutor.h>
+#include <folly/fibers/FiberManagerMap.h>
 
 #include <boost/cast.hpp>
 #include <boost/lexical_cast.hpp>
@@ -81,7 +81,7 @@ class SharedServerTests
 
     switch (std::get<0>(GetParam())) {
       case THRIFT_SERVER: {
-        auto f = folly::make_unique<TestThriftServerFactory<TestInterface>>();
+        auto f = std::make_unique<TestThriftServerFactory<TestInterface>>();
         if (securityPolicy != THRIFT_SECURITY_DISABLED) {
           f->useStubSaslServer(true);
         }
@@ -90,18 +90,17 @@ class SharedServerTests
       }
       case PROXYGEN: {
         ASSERT_EQ(THRIFT_SECURITY_DISABLED, securityPolicy);
-        serverFactory = folly::make_unique<
+        serverFactory = std::make_unique<
             TestProxygenThriftServerFactory<TestInterface>>();
         break;
       }
       default:
         FAIL();
-        break;
     }
 
     switch (std::get<1>(GetParam())) {
       case HEADER: {
-        auto c = folly::make_unique<TestHeaderClientChannelFactory>();
+        auto c = std::make_unique<TestHeaderClientChannelFactory>();
         c->setProtocolId(protocolId);
         c->setSecurityPolicy(securityPolicy);
         channelFactory = std::move(c);
@@ -109,15 +108,13 @@ class SharedServerTests
       }
       case HTTP2: {
         ASSERT_EQ(THRIFT_SECURITY_DISABLED, securityPolicy);
-        auto c = folly::make_unique<TestHTTPClientChannelFactory>();
-        c->setCodec(TestHTTPClientChannelFactory::Codec::HTTP2);
+        auto c = std::make_unique<TestHTTPClientChannelFactory>();
         c->setProtocolId(protocolId);
         channelFactory = std::move(c);
         break;
       }
       default:
         FAIL();
-        break;
     }
   }
 
@@ -127,7 +124,7 @@ class SharedServerTests
     if (!server) {
       createServer();
     }
-    sst = folly::make_unique<ScopedServerThread>(server);
+    sst = std::make_unique<ScopedServerThread>(server);
   }
 
   void createSocket() {
@@ -149,7 +146,7 @@ class SharedServerTests
     if (!channel) {
       createChannel();
     }
-    client = folly::make_unique<TestServiceAsyncClient>(std::move(channel));
+    client = std::make_unique<TestServiceAsyncClient>(std::move(channel));
   }
 
   void init() {
@@ -259,29 +256,28 @@ TEST_P(SharedServerTests, HandlerInEventBaseTest) {
 bool compareIOBufChain(const folly::IOBuf* buf1, const folly::IOBuf* buf2) {
   folly::io::Cursor c1(buf1);
   folly::io::Cursor c2(buf2);
-  std::pair<const uint8_t *, size_t> p1, p2;
+  folly::ByteRange b1;
+  folly::ByteRange b2;
   while (1) {
-    if (p1.second == 0) {
-      p1 = c1.peek();
-      c1.skip(p1.second);
+    if (b1.empty()) {
+      b1 = c1.peekBytes();
+      c1.skip(b1.size());
     }
-    if (p2.second == 0) {
-      p2 = c2.peek();
-      c2.skip(p2.second);
+    if (b2.empty()) {
+      b2 = c2.peekBytes();
+      c2.skip(b2.size());
     }
-    if (p1.second == 0 || p2.second == 0) {
+    if (b1.empty() || b2.empty()) {
       // one is finished, the other must be finished too
-      return p1.second == 0 && p2.second == 0;
+      return b1.empty() && b2.empty();
     }
 
-    size_t m = std::min(p1.second, p2.second);
-    if (memcmp(p1.first, p2.first, m) != 0) {
+    size_t m = std::min(b1.size(), b2.size());
+    if (memcmp(b1.data(), b2.data(), m) != 0) {
       return false;
     }
-    p1.first += m;
-    p1.second -= m;
-    p2.first += m;
-    p2.second -= m;
+    b1.advance(m);
+    b2.advance(m);
   }
 }
 
@@ -333,8 +329,6 @@ TEST_P(SharedServerTests, OverloadTest) {
 
   init();
 
-  std::string response;
-
   auto tval = 10000;
   int too_full = 0;
   int exception_headers = 0;
@@ -384,7 +378,7 @@ TEST_P(SharedServerTests, OnewaySyncClientTest) {
 TEST_P(SharedServerTests, ThriftServerSizeLimits) {
   init();
 
-  google::FlagSaver flagSaver;
+  gflags::FlagSaver flagSaver;
   FLAGS_thrift_cpp2_protocol_reader_string_limit = 1024 * 1024;
 
   std::string response;
@@ -406,7 +400,7 @@ TEST_P(SharedServerTests, ThriftServerSizeLimits) {
 namespace {
 class MyExecutor : public folly::Executor {
  public:
-  void add(std::function<void()> f) override {
+  void add(folly::Func f) override {
     calls++;
     f();
   }
@@ -432,8 +426,8 @@ TEST_P(SharedServerTests, PoolExecutorTest) {
 namespace {
 class FiberExecutor : public folly::Executor {
  public:
-  void add(std::function<void()> f) override {
-    folly::fibers::getFiberManager(*wangle::getEventBase()).add(f);
+  void add(folly::Func f) override {
+    folly::fibers::getFiberManager(*folly::getEventBase()).add(std::move(f));
   }
 };
 }
@@ -514,7 +508,7 @@ TEST_P(SharedServerTests, CallbackOrderingTest) {
 
   auto channel = static_cast<ClientChannel*>(client->getChannel());
   auto socket = channel->getTransport();
-  client->noResponse([](ClientReceiveState&& state) {}, 1000);
+  client->noResponse([](ClientReceiveState&&) {}, 1000);
   base->tryRunAfterDelay([&]() { socket->closeNow(); }, 100);
   base->tryRunAfterDelay([&]() { base->terminateLoopSoon(); }, 500);
   base->loopForever();

@@ -73,7 +73,7 @@ class service3Null : virtual public service3If {
   }
 };
 
-class service3_methodA_args : public apache::thrift::TStructType<service3_methodA_args> {
+class service3_methodA_args final : public apache::thrift::TStructType<service3_methodA_args> {
  public:
 
   static const uint64_t _reflection_id = 9701210761501798668U;
@@ -88,9 +88,6 @@ class service3_methodA_args : public apache::thrift::TStructType<service3_method
 
   void __clear();
 
-  virtual ~service3_methodA_args() throw() {}
-
-
   bool operator == (const service3_methodA_args &) const;
   bool operator != (const service3_methodA_args& rhs) const {
     return !(*this == rhs);
@@ -98,56 +95,62 @@ class service3_methodA_args : public apache::thrift::TStructType<service3_method
 
   bool operator < (const service3_methodA_args & ) const;
 
-  void readFromJson(const char* jsonText, size_t len);
-  void readFromJson(const char* jsonText);
+  void readFromJson(const char* jsonText, size_t len, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
+  void readFromJson(const char* jsonText, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class service3_methodA_args;
 void merge(const service3_methodA_args& from, service3_methodA_args& to);
 void merge(service3_methodA_args&& from, service3_methodA_args& to);
-class service3_methodA_pargs : public apache::thrift::TStructType<service3_methodA_pargs> {
+class service3_methodA_pargs final : public apache::thrift::TStructType<service3_methodA_pargs> {
  public:
 
   static const uint64_t _reflection_id = 6235408869533435628U;
   static void _reflection_register(::apache::thrift::reflection::Schema&);
   service3_methodA_pargs() = default;
 
-  virtual ~service3_methodA_pargs() throw() {}
-
-
-  void readFromJson(const char* jsonText, size_t len);
-  void readFromJson(const char* jsonText);
+  void readFromJson(const char* jsonText, size_t len, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
+  void readFromJson(const char* jsonText, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class service3_methodA_pargs;
 void merge(const service3_methodA_pargs& from, service3_methodA_pargs& to);
 void merge(service3_methodA_pargs&& from, service3_methodA_pargs& to);
-class service3_methodA_presult : public apache::thrift::TStructType<service3_methodA_presult> {
+class service3_methodA_presult final : public apache::thrift::TStructType<service3_methodA_presult> {
  public:
 
   static const uint64_t _reflection_id = 8183088415690553388U;
   static void _reflection_register(::apache::thrift::reflection::Schema&);
   service3_methodA_presult() = default;
 
-  virtual ~service3_methodA_presult() throw() {}
-
-
-  void readFromJson(const char* jsonText, size_t len);
-  void readFromJson(const char* jsonText);
+  void readFromJson(const char* jsonText, size_t len, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
+  void readFromJson(const char* jsonText, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class service3_methodA_presult;
 void merge(const service3_methodA_presult& from, service3_methodA_presult& to);
 void merge(service3_methodA_presult&& from, service3_methodA_presult& to);
-class service3_methodB_args : public apache::thrift::TStructType<service3_methodB_args> {
+class service3_methodB_args final : public apache::thrift::TStructType<service3_methodB_args> {
  public:
 
   static const uint64_t _reflection_id = 8365765279786380140U;
@@ -200,9 +203,6 @@ class service3_methodB_args : public apache::thrift::TStructType<service3_method
   service3_methodB_args& operator=(service3_methodB_args&&) = default;
 
   void __clear();
-
-  virtual ~service3_methodB_args() throw() {}
-
   int32_t x;
   struct1 y;
   double z;
@@ -226,17 +226,21 @@ class service3_methodB_args : public apache::thrift::TStructType<service3_method
 
   bool operator < (const service3_methodB_args & ) const;
 
-  void readFromJson(const char* jsonText, size_t len);
-  void readFromJson(const char* jsonText);
+  void readFromJson(const char* jsonText, size_t len, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
+  void readFromJson(const char* jsonText, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class service3_methodB_args;
 void merge(const service3_methodB_args& from, service3_methodB_args& to);
 void merge(service3_methodB_args&& from, service3_methodB_args& to);
-class service3_methodB_pargs : public apache::thrift::TStructType<service3_methodB_pargs> {
+class service3_methodB_pargs final : public apache::thrift::TStructType<service3_methodB_pargs> {
  public:
 
   static const uint64_t _reflection_id = 16087431785943291340U;
@@ -278,43 +282,45 @@ class service3_methodB_pargs : public apache::thrift::TStructType<service3_metho
   {
     z = arg.move();
   }
-
-  virtual ~service3_methodB_pargs() throw() {}
-
   const int32_t* x;
   const struct1* y;
   const double* z;
 
-  void readFromJson(const char* jsonText, size_t len);
-  void readFromJson(const char* jsonText);
+  void readFromJson(const char* jsonText, size_t len, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
+  void readFromJson(const char* jsonText, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class service3_methodB_pargs;
 void merge(const service3_methodB_pargs& from, service3_methodB_pargs& to);
 void merge(service3_methodB_pargs&& from, service3_methodB_pargs& to);
-class service3_methodB_presult : public apache::thrift::TStructType<service3_methodB_presult> {
+class service3_methodB_presult final : public apache::thrift::TStructType<service3_methodB_presult> {
  public:
 
   static const uint64_t _reflection_id = 14506585065281573676U;
   static void _reflection_register(::apache::thrift::reflection::Schema&);
   service3_methodB_presult() = default;
 
-  virtual ~service3_methodB_presult() throw() {}
-
-
-  void readFromJson(const char* jsonText, size_t len);
-  void readFromJson(const char* jsonText);
+  void readFromJson(const char* jsonText, size_t len, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
+  void readFromJson(const char* jsonText, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class service3_methodB_presult;
 void merge(const service3_methodB_presult& from, service3_methodB_presult& to);
 void merge(service3_methodB_presult&& from, service3_methodB_presult& to);
-class service3_methodC_args : public apache::thrift::TStructType<service3_methodC_args> {
+class service3_methodC_args final : public apache::thrift::TStructType<service3_methodC_args> {
  public:
 
   static const uint64_t _reflection_id = 18111395864871211084U;
@@ -329,9 +335,6 @@ class service3_methodC_args : public apache::thrift::TStructType<service3_method
 
   void __clear();
 
-  virtual ~service3_methodC_args() throw() {}
-
-
   bool operator == (const service3_methodC_args &) const;
   bool operator != (const service3_methodC_args& rhs) const {
     return !(*this == rhs);
@@ -339,36 +342,41 @@ class service3_methodC_args : public apache::thrift::TStructType<service3_method
 
   bool operator < (const service3_methodC_args & ) const;
 
-  void readFromJson(const char* jsonText, size_t len);
-  void readFromJson(const char* jsonText);
+  void readFromJson(const char* jsonText, size_t len, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
+  void readFromJson(const char* jsonText, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class service3_methodC_args;
 void merge(const service3_methodC_args& from, service3_methodC_args& to);
 void merge(service3_methodC_args&& from, service3_methodC_args& to);
-class service3_methodC_pargs : public apache::thrift::TStructType<service3_methodC_pargs> {
+class service3_methodC_pargs final : public apache::thrift::TStructType<service3_methodC_pargs> {
  public:
 
   static const uint64_t _reflection_id = 2210812191286520076U;
   static void _reflection_register(::apache::thrift::reflection::Schema&);
   service3_methodC_pargs() = default;
 
-  virtual ~service3_methodC_pargs() throw() {}
-
-
-  void readFromJson(const char* jsonText, size_t len);
-  void readFromJson(const char* jsonText);
+  void readFromJson(const char* jsonText, size_t len, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
+  void readFromJson(const char* jsonText, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class service3_methodC_pargs;
 void merge(const service3_methodC_pargs& from, service3_methodC_pargs& to);
 void merge(service3_methodC_pargs&& from, service3_methodC_pargs& to);
-class service3_methodC_presult : public apache::thrift::TStructType<service3_methodC_presult> {
+class service3_methodC_presult final : public apache::thrift::TStructType<service3_methodC_presult> {
  public:
 
   static const uint64_t _reflection_id = 13028484199505159020U;
@@ -387,9 +395,6 @@ class service3_methodC_presult : public apache::thrift::TStructType<service3_met
     success = arg.move();
     __isset.success = true;
   }
-
-  virtual ~service3_methodC_presult() throw() {}
-
   int32_t* success;
 
   struct __isset {
@@ -400,17 +405,21 @@ class service3_methodC_presult : public apache::thrift::TStructType<service3_met
     bool success;
   } __isset;
 
-  void readFromJson(const char* jsonText, size_t len);
-  void readFromJson(const char* jsonText);
+  void readFromJson(const char* jsonText, size_t len, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
+  void readFromJson(const char* jsonText, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class service3_methodC_presult;
 void merge(const service3_methodC_presult& from, service3_methodC_presult& to);
 void merge(service3_methodC_presult&& from, service3_methodC_presult& to);
-class service3_methodD_args : public apache::thrift::TStructType<service3_methodD_args> {
+class service3_methodD_args final : public apache::thrift::TStructType<service3_methodD_args> {
  public:
 
   static const uint64_t _reflection_id = 9361302880502445324U;
@@ -463,9 +472,6 @@ class service3_methodD_args : public apache::thrift::TStructType<service3_method
   service3_methodD_args& operator=(service3_methodD_args&&) = default;
 
   void __clear();
-
-  virtual ~service3_methodD_args() throw() {}
-
   int32_t i;
   struct1 j;
   double k;
@@ -489,17 +495,21 @@ class service3_methodD_args : public apache::thrift::TStructType<service3_method
 
   bool operator < (const service3_methodD_args & ) const;
 
-  void readFromJson(const char* jsonText, size_t len);
-  void readFromJson(const char* jsonText);
+  void readFromJson(const char* jsonText, size_t len, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
+  void readFromJson(const char* jsonText, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class service3_methodD_args;
 void merge(const service3_methodD_args& from, service3_methodD_args& to);
 void merge(service3_methodD_args&& from, service3_methodD_args& to);
-class service3_methodD_pargs : public apache::thrift::TStructType<service3_methodD_pargs> {
+class service3_methodD_pargs final : public apache::thrift::TStructType<service3_methodD_pargs> {
  public:
 
   static const uint64_t _reflection_id = 14222345848529450572U;
@@ -541,23 +551,24 @@ class service3_methodD_pargs : public apache::thrift::TStructType<service3_metho
   {
     k = arg.move();
   }
-
-  virtual ~service3_methodD_pargs() throw() {}
-
   const int32_t* i;
   const struct1* j;
   const double* k;
 
-  void readFromJson(const char* jsonText, size_t len);
-  void readFromJson(const char* jsonText);
+  void readFromJson(const char* jsonText, size_t len, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
+  void readFromJson(const char* jsonText, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class service3_methodD_pargs;
 void merge(const service3_methodD_pargs& from, service3_methodD_pargs& to);
 void merge(service3_methodD_pargs&& from, service3_methodD_pargs& to);
-class service3_methodD_presult : public apache::thrift::TStructType<service3_methodD_presult> {
+class service3_methodD_presult final : public apache::thrift::TStructType<service3_methodD_presult> {
  public:
 
   static const uint64_t _reflection_id = 16682840901832895980U;
@@ -576,9 +587,6 @@ class service3_methodD_presult : public apache::thrift::TStructType<service3_met
     success = arg.move();
     __isset.success = true;
   }
-
-  virtual ~service3_methodD_presult() throw() {}
-
   int32_t* success;
 
   struct __isset {
@@ -589,17 +597,21 @@ class service3_methodD_presult : public apache::thrift::TStructType<service3_met
     bool success;
   } __isset;
 
-  void readFromJson(const char* jsonText, size_t len);
-  void readFromJson(const char* jsonText);
+  void readFromJson(const char* jsonText, size_t len, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
+  void readFromJson(const char* jsonText, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class service3_methodD_presult;
 void merge(const service3_methodD_presult& from, service3_methodD_presult& to);
 void merge(service3_methodD_presult&& from, service3_methodD_presult& to);
-class service3_methodE_args : public apache::thrift::TStructType<service3_methodE_args> {
+class service3_methodE_args final : public apache::thrift::TStructType<service3_methodE_args> {
  public:
 
   static const uint64_t _reflection_id = 9643611769818094796U;
@@ -614,9 +626,6 @@ class service3_methodE_args : public apache::thrift::TStructType<service3_method
 
   void __clear();
 
-  virtual ~service3_methodE_args() throw() {}
-
-
   bool operator == (const service3_methodE_args &) const;
   bool operator != (const service3_methodE_args& rhs) const {
     return !(*this == rhs);
@@ -624,36 +633,41 @@ class service3_methodE_args : public apache::thrift::TStructType<service3_method
 
   bool operator < (const service3_methodE_args & ) const;
 
-  void readFromJson(const char* jsonText, size_t len);
-  void readFromJson(const char* jsonText);
+  void readFromJson(const char* jsonText, size_t len, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
+  void readFromJson(const char* jsonText, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class service3_methodE_args;
 void merge(const service3_methodE_args& from, service3_methodE_args& to);
 void merge(service3_methodE_args&& from, service3_methodE_args& to);
-class service3_methodE_pargs : public apache::thrift::TStructType<service3_methodE_pargs> {
+class service3_methodE_pargs final : public apache::thrift::TStructType<service3_methodE_pargs> {
  public:
 
   static const uint64_t _reflection_id = 17841105104530712364U;
   static void _reflection_register(::apache::thrift::reflection::Schema&);
   service3_methodE_pargs() = default;
 
-  virtual ~service3_methodE_pargs() throw() {}
-
-
-  void readFromJson(const char* jsonText, size_t len);
-  void readFromJson(const char* jsonText);
+  void readFromJson(const char* jsonText, size_t len, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
+  void readFromJson(const char* jsonText, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class service3_methodE_pargs;
 void merge(const service3_methodE_pargs& from, service3_methodE_pargs& to);
 void merge(service3_methodE_pargs&& from, service3_methodE_pargs& to);
-class service3_methodE_presult : public apache::thrift::TStructType<service3_methodE_presult> {
+class service3_methodE_presult final : public apache::thrift::TStructType<service3_methodE_presult> {
  public:
 
   static const uint64_t _reflection_id = 11289728029959710508U;
@@ -672,9 +686,6 @@ class service3_methodE_presult : public apache::thrift::TStructType<service3_met
     success = arg.move();
     __isset.success = true;
   }
-
-  virtual ~service3_methodE_presult() throw() {}
-
   struct2* success;
 
   struct __isset {
@@ -685,17 +696,21 @@ class service3_methodE_presult : public apache::thrift::TStructType<service3_met
     bool success;
   } __isset;
 
-  void readFromJson(const char* jsonText, size_t len);
-  void readFromJson(const char* jsonText);
+  void readFromJson(const char* jsonText, size_t len, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
+  void readFromJson(const char* jsonText, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class service3_methodE_presult;
 void merge(const service3_methodE_presult& from, service3_methodE_presult& to);
 void merge(service3_methodE_presult&& from, service3_methodE_presult& to);
-class service3_methodF_args : public apache::thrift::TStructType<service3_methodF_args> {
+class service3_methodF_args final : public apache::thrift::TStructType<service3_methodF_args> {
  public:
 
   static const uint64_t _reflection_id = 8319194992443847756U;
@@ -748,9 +763,6 @@ class service3_methodF_args : public apache::thrift::TStructType<service3_method
   service3_methodF_args& operator=(service3_methodF_args&&) = default;
 
   void __clear();
-
-  virtual ~service3_methodF_args() throw() {}
-
   int32_t l;
   struct1 m;
   double n;
@@ -774,17 +786,21 @@ class service3_methodF_args : public apache::thrift::TStructType<service3_method
 
   bool operator < (const service3_methodF_args & ) const;
 
-  void readFromJson(const char* jsonText, size_t len);
-  void readFromJson(const char* jsonText);
+  void readFromJson(const char* jsonText, size_t len, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
+  void readFromJson(const char* jsonText, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class service3_methodF_args;
 void merge(const service3_methodF_args& from, service3_methodF_args& to);
 void merge(service3_methodF_args&& from, service3_methodF_args& to);
-class service3_methodF_pargs : public apache::thrift::TStructType<service3_methodF_pargs> {
+class service3_methodF_pargs final : public apache::thrift::TStructType<service3_methodF_pargs> {
  public:
 
   static const uint64_t _reflection_id = 1484657056518808364U;
@@ -826,23 +842,24 @@ class service3_methodF_pargs : public apache::thrift::TStructType<service3_metho
   {
     n = arg.move();
   }
-
-  virtual ~service3_methodF_pargs() throw() {}
-
   const int32_t* l;
   const struct1* m;
   const double* n;
 
-  void readFromJson(const char* jsonText, size_t len);
-  void readFromJson(const char* jsonText);
+  void readFromJson(const char* jsonText, size_t len, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
+  void readFromJson(const char* jsonText, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class service3_methodF_pargs;
 void merge(const service3_methodF_pargs& from, service3_methodF_pargs& to);
 void merge(service3_methodF_pargs&& from, service3_methodF_pargs& to);
-class service3_methodF_presult : public apache::thrift::TStructType<service3_methodF_presult> {
+class service3_methodF_presult final : public apache::thrift::TStructType<service3_methodF_presult> {
  public:
 
   static const uint64_t _reflection_id = 16146326422060352812U;
@@ -861,9 +878,6 @@ class service3_methodF_presult : public apache::thrift::TStructType<service3_met
     success = arg.move();
     __isset.success = true;
   }
-
-  virtual ~service3_methodF_presult() throw() {}
-
   struct3* success;
 
   struct __isset {
@@ -874,11 +888,15 @@ class service3_methodF_presult : public apache::thrift::TStructType<service3_met
     bool success;
   } __isset;
 
-  void readFromJson(const char* jsonText, size_t len);
-  void readFromJson(const char* jsonText);
+  void readFromJson(const char* jsonText, size_t len, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
+  void readFromJson(const char* jsonText, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class service3_methodF_presult;

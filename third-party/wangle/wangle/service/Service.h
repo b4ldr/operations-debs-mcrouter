@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #pragma once
@@ -62,13 +68,13 @@ class ServiceFilter : public Service<ReqA, RespA> {
   public:
   explicit ServiceFilter(std::shared_ptr<Service<ReqB, RespB>> service)
       : service_(service) {}
-  virtual ~ServiceFilter() = default;
+  ~ServiceFilter() override = default;
 
-  virtual folly::Future<folly::Unit> close() override {
+  folly::Future<folly::Unit> close() override {
     return service_->close();
   }
 
-  virtual bool isAvailable() override {
+  bool isAvailable() override {
     return service_->isAvailable();
   }
 
@@ -99,8 +105,8 @@ class ConstFactory : public ServiceFactory<Pipeline, Req, Resp> {
   explicit ConstFactory(std::shared_ptr<Service<Req, Resp>> service)
       : service_(service) {}
 
-  virtual folly::Future<std::shared_ptr<Service<Req, Resp>>> operator()(
-    std::shared_ptr<ClientBootstrap<Pipeline>> client) {
+  folly::Future<std::shared_ptr<Service<Req, Resp>>> operator()(
+      std::shared_ptr<ClientBootstrap<Pipeline>> /* client */) override {
     return service_;
   }
  private:
@@ -115,7 +121,7 @@ class ServiceFactoryFilter : public ServiceFactory<Pipeline, ReqA, RespA> {
     std::shared_ptr<ServiceFactory<Pipeline, ReqB, RespB>> serviceFactory)
       : serviceFactory_(std::move(serviceFactory)) {}
 
-  virtual ~ServiceFactoryFilter() = default;
+  ~ServiceFactoryFilter() override = default;
 
  protected:
   std::shared_ptr<ServiceFactory<Pipeline, ReqB, RespB>> serviceFactory_;
@@ -127,9 +133,9 @@ class FactoryToService : public Service<Req, Resp> {
   explicit FactoryToService(
     std::shared_ptr<ServiceFactory<Pipeline, Req, Resp>> factory)
       : factory_(factory) {}
-  virtual ~FactoryToService() = default;
+  ~FactoryToService() override = default;
 
-  virtual folly::Future<Resp> operator()(Req request) override {
+  folly::Future<Resp> operator()(Req request) override {
     DCHECK(factory_);
     return ((*factory_)(nullptr)).then(
       [=](std::shared_ptr<Service<Req, Resp>> service)

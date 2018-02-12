@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2013-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,26 +13,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include <folly/detail/Futex.h>
+#include <folly/ScopeGuard.h>
+#include <folly/hash/Hash.h>
+#include <folly/portability/SysSyscall.h>
 #include <stdint.h>
 #include <string.h>
-#include <condition_variable>
-#include <mutex>
-#include <boost/intrusive/list.hpp>
-#include <folly/CallOnce.h>
-#include <folly/Hash.h>
-#include <folly/ScopeGuard.h>
+#include <array>
+#include <cerrno>
+
+#include <folly/synchronization/ParkingLot.h>
 
 #ifdef __linux__
-# include <errno.h>
-# include <linux/futex.h>
-# include <sys/syscall.h>
+#include <linux/futex.h>
 #endif
 
 using namespace std::chrono;
 
-namespace folly { namespace detail {
+namespace folly {
+namespace detail {
 
 namespace {
 
@@ -98,11 +97,12 @@ timeSpecFromTimePoint(time_point<Clock> absTime)
   return result;
 }
 
-FutexResult nativeFutexWaitImpl(void* addr,
-                                uint32_t expected,
-                                time_point<system_clock>* absSystemTime,
-                                time_point<steady_clock>* absSteadyTime,
-                                uint32_t waitMask) {
+FutexResult nativeFutexWaitImpl(
+    void* addr,
+    uint32_t expected,
+    system_clock::time_point const* absSystemTime,
+    steady_clock::time_point const* absSteadyTime,
+    uint32_t waitMask) {
   assert(absSystemTime == nullptr || absSteadyTime == nullptr);
 
   int op = FUTEX_WAIT_BITSET | FUTEX_PRIVATE_FLAG;
@@ -159,121 +159,67 @@ FutexResult nativeFutexWaitImpl(void* addr,
 ///////////////////////////////////////////////////////
 // compatibility implementation using standard C++ API
 
-// Our emulated futex uses 4096 lists of wait nodes.  There are two levels
-// of locking: a per-list mutex that controls access to the list and a
-// per-node mutex, condvar, and bool that are used for the actual wakeups.
-// The per-node mutex allows us to do precise wakeups without thundering
-// herds.
-
-struct EmulatedFutexWaitNode : public boost::intrusive::list_base_hook<> {
-  void* const addr_;
-  const uint32_t waitMask_;
-
-  // tricky: hold both bucket and node mutex to write, either to read
-  bool signaled_;
-  std::mutex mutex_;
-  std::condition_variable cond_;
-
-  EmulatedFutexWaitNode(void* addr, uint32_t waitMask)
-    : addr_(addr)
-    , waitMask_(waitMask)
-    , signaled_(false)
-  {
-  }
-};
-
-struct EmulatedFutexBucket {
-  std::mutex mutex_;
-  boost::intrusive::list<EmulatedFutexWaitNode> waiters_;
-
-  static const size_t kNumBuckets = 4096;
-  static EmulatedFutexBucket* gBuckets;
-  static folly::once_flag gBucketInit;
-
-  static EmulatedFutexBucket& bucketFor(void* addr) {
-    folly::call_once(gBucketInit, [](){
-      gBuckets = new EmulatedFutexBucket[kNumBuckets];
-    });
-    uint64_t mixedBits = folly::hash::twang_mix64(
-        reinterpret_cast<uintptr_t>(addr));
-    return gBuckets[mixedBits % kNumBuckets];
-  }
-};
-
-EmulatedFutexBucket* EmulatedFutexBucket::gBuckets;
-folly::once_flag EmulatedFutexBucket::gBucketInit;
+using Lot = ParkingLot<uint32_t>;
+Lot parkingLot;
 
 int emulatedFutexWake(void* addr, int count, uint32_t waitMask) {
-  auto& bucket = EmulatedFutexBucket::bucketFor(addr);
-  std::unique_lock<std::mutex> bucketLock(bucket.mutex_);
-
-  int numAwoken = 0;
-  for (auto iter = bucket.waiters_.begin();
-       numAwoken < count && iter != bucket.waiters_.end(); ) {
-    auto current = iter;
-    auto& node = *iter++;
-    if (node.addr_ == addr && (node.waitMask_ & waitMask) != 0) {
-      ++numAwoken;
-
-      // we unlink, but waiter destroys the node
-      bucket.waiters_.erase(current);
-
-      std::unique_lock<std::mutex> nodeLock(node.mutex_);
-      node.signaled_ = true;
-      node.cond_.notify_one();
+  int woken = 0;
+  parkingLot.unpark(addr, [&](const uint32_t& mask) {
+    if ((mask & waitMask) == 0) {
+      return UnparkControl::RetainContinue;
     }
-  }
-  return numAwoken;
+    assert(count > 0);
+    count--;
+    woken++;
+    return count > 0 ? UnparkControl::RemoveContinue
+                     : UnparkControl::RemoveBreak;
+  });
+  return woken;
 }
 
+template <typename F>
 FutexResult emulatedFutexWaitImpl(
-        void* addr,
-        uint32_t expected,
-        time_point<system_clock>* absSystemTime,
-        time_point<steady_clock>* absSteadyTime,
-        uint32_t waitMask) {
-  auto& bucket = EmulatedFutexBucket::bucketFor(addr);
-  EmulatedFutexWaitNode node(addr, waitMask);
-
-  {
-    std::unique_lock<std::mutex> bucketLock(bucket.mutex_);
-
-    uint32_t actual;
-    memcpy(&actual, addr, sizeof(uint32_t));
-    if (actual != expected) {
-      return FutexResult::VALUE_CHANGED;
-    }
-
-    bucket.waiters_.push_back(node);
-  } // bucketLock scope
-
-  std::cv_status status = std::cv_status::no_timeout;
-  {
-    std::unique_lock<std::mutex> nodeLock(node.mutex_);
-    while (!node.signaled_ && status != std::cv_status::timeout) {
-      if (absSystemTime != nullptr) {
-        status = node.cond_.wait_until(nodeLock, *absSystemTime);
-      } else if (absSteadyTime != nullptr) {
-        status = node.cond_.wait_until(nodeLock, *absSteadyTime);
-      } else {
-        node.cond_.wait(nodeLock);
-      }
-    }
-  } // nodeLock scope
-
-  if (status == std::cv_status::timeout) {
-    // it's not really a timeout until we unlink the unsignaled node
-    std::unique_lock<std::mutex> bucketLock(bucket.mutex_);
-    if (!node.signaled_) {
-      bucket.waiters_.erase(bucket.waiters_.iterator_to(node));
-      return FutexResult::TIMEDOUT;
-    }
+    F* futex,
+    uint32_t expected,
+    system_clock::time_point const* absSystemTime,
+    steady_clock::time_point const* absSteadyTime,
+    uint32_t waitMask) {
+  static_assert(
+      std::is_same<F, Futex<std::atomic>>::value ||
+          std::is_same<F, Futex<EmulatedFutexAtomic>>::value,
+      "Type F must be either Futex<std::atomic> or Futex<EmulatedFutexAtomic>");
+  ParkResult res;
+  if (absSystemTime) {
+    res = parkingLot.park_until(
+        futex,
+        waitMask,
+        [&] { return *futex == expected; },
+        [] {},
+        *absSystemTime);
+  } else if (absSteadyTime) {
+    res = parkingLot.park_until(
+        futex,
+        waitMask,
+        [&] { return *futex == expected; },
+        [] {},
+        *absSteadyTime);
+  } else {
+    res = parkingLot.park(
+        futex, waitMask, [&] { return *futex == expected; }, [] {});
   }
-  return FutexResult::AWOKEN;
+  switch (res) {
+    case ParkResult::Skip:
+      return FutexResult::VALUE_CHANGED;
+    case ParkResult::Unpark:
+      return FutexResult::AWOKEN;
+    case ParkResult::Timeout:
+      return FutexResult::TIMEDOUT;
+  }
+
+  return FutexResult::INTERRUPTED;
 }
 
-} // anon namespace
-
+} // namespace
 
 /////////////////////////////////
 // Futex<> specializations
@@ -295,11 +241,11 @@ Futex<EmulatedFutexAtomic>::futexWake(int count, uint32_t wakeMask) {
 }
 
 template <>
-FutexResult
-Futex<std::atomic>::futexWaitImpl(uint32_t expected,
-                                  time_point<system_clock>* absSystemTime,
-                                  time_point<steady_clock>* absSteadyTime,
-                                  uint32_t waitMask) {
+FutexResult Futex<std::atomic>::futexWaitImpl(
+    uint32_t expected,
+    system_clock::time_point const* absSystemTime,
+    steady_clock::time_point const* absSteadyTime,
+    uint32_t waitMask) {
 #ifdef __linux__
   return nativeFutexWaitImpl(
       this, expected, absSystemTime, absSteadyTime, waitMask);
@@ -310,14 +256,14 @@ Futex<std::atomic>::futexWaitImpl(uint32_t expected,
 }
 
 template <>
-FutexResult
-Futex<EmulatedFutexAtomic>::futexWaitImpl(
-        uint32_t expected,
-        time_point<system_clock>* absSystemTime,
-        time_point<steady_clock>* absSteadyTime,
-        uint32_t waitMask) {
+FutexResult Futex<EmulatedFutexAtomic>::futexWaitImpl(
+    uint32_t expected,
+    system_clock::time_point const* absSystemTime,
+    steady_clock::time_point const* absSteadyTime,
+    uint32_t waitMask) {
   return emulatedFutexWaitImpl(
       this, expected, absSystemTime, absSteadyTime, waitMask);
 }
 
-}} // namespace folly::detail
+} // namespace detail
+} // namespace folly

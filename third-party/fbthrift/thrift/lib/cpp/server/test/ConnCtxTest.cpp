@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2014-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,21 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include <thrift/lib/cpp/concurrency/PosixThreadFactory.h>
 #include <thrift/lib/cpp/concurrency/Util.h>
 #include <thrift/lib/cpp/protocol/TBinaryProtocol.h>
 #include <thrift/lib/cpp/server/TConnectionContext.h>
+#include <thrift/lib/cpp/server/TServer.h>
 #include <thrift/lib/cpp/server/test/gen-cpp/ConnCtxService.h>
 #include <thrift/lib/cpp/test/NetworkUtil.h>
 #include <thrift/lib/cpp/transport/TBufferTransports.h>
 #include <thrift/lib/cpp/transport/TSocket.h>
 #include <thrift/lib/cpp/util/ScopedServerThread.h>
-#include <thrift/lib/cpp/util/example/TSimpleServerCreator.h>
 #include <thrift/lib/cpp/util/TThreadedServerCreator.h>
-#include <thrift/lib/cpp/util/example/TThreadPoolServerCreator.h>
-#include <thrift/lib/cpp/async/TEventServer.h>
-#include <thrift/lib/cpp/util/TEventServerCreator.h>
 
 #include <iostream>
 #include <gtest/gtest.h>
@@ -51,10 +47,7 @@ using apache::thrift::transport::TSocket;
 using folly::SocketAddress;
 using apache::thrift::util::ScopedServerThread;
 using apache::thrift::util::ServerCreator;
-using apache::thrift::util::TEventServerCreator;
-using apache::thrift::util::TSimpleServerCreator;
 using apache::thrift::util::TThreadedServerCreator;
-using apache::thrift::util::TThreadPoolServerCreator;
 using apache::thrift::test::getLocalAddresses;
 
 class ConnCtxHandler : public ConnCtxServiceIf {
@@ -222,27 +215,6 @@ void runTest() {
   runTest(handler, &serverCreator);
 }
 
-TEST(ConnCtxTest, TSimpleServerTest) {
-  // "For testing TSimpleServerCreator"
-  #pragma GCC diagnostic push
-  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-  runTest<TSimpleServerCreator>();
-  #pragma GCC diagnostic pop
-}
-
 TEST(ConnCtxTest, TThreadedServerTest) {
   runTest<TThreadedServerCreator>();
-}
-
-TEST(ConnCtxTest, TThreadPoolServerTest) {
-  // "For testing TThreadPoolServerCreator"
-  #pragma GCC diagnostic push
-  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-  runTest<TThreadPoolServerCreator>();
-  #pragma GCC diagnostic pop
-}
-
-TEST(ConnCtxTest, TEventServerTest) {
-  // "For testing TEventServerCreator"
-  runTest<TEventServerCreator>();
 }

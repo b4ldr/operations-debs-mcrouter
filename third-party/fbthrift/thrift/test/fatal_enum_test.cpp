@@ -24,14 +24,10 @@
 namespace test_cpp2 {
 namespace cpp_reflection {
 
-FATAL_STR(enum1s, "enum1");
-FATAL_STR(field0s, "field0");
-FATAL_STR(field1s, "field1");
-FATAL_STR(field2s, "field2");
-
-using field0v = std::integral_constant<enum1, enum1::field0>;
-using field1v = std::integral_constant<enum1, enum1::field1>;
-using field2v = std::integral_constant<enum1, enum1::field2>;
+FATAL_S(enum1s, "enum1");
+FATAL_S(field0s, "field0");
+FATAL_S(field1s, "field1");
+FATAL_S(field2s, "field2");
 
 TEST(fatal_enum, sanity_check) {
   using traits = fatal::enum_traits<enum1>;
@@ -40,35 +36,47 @@ TEST(fatal_enum, sanity_check) {
   EXPECT_SAME<enum1s, traits::name>();
   EXPECT_SAME<std::underlying_type<enum1>::type, traits::int_type>();
 
-  EXPECT_SAME<field0s, traits::str::field0>();
-  EXPECT_SAME<field1s, traits::str::field1>();
-  EXPECT_SAME<field2s, traits::str::field2>();
+  EXPECT_SAME<field0s, traits::member::field0::name>();
+  EXPECT_SAME<field1s, traits::member::field1::name>();
+  EXPECT_SAME<field2s, traits::member::field2::name>();
 
   EXPECT_SAME<
-    fatal::build_type_map<
-      field0s, field0v,
-      field1s, field1v,
-      field2s, field2v
-    >,
-    traits::name_to_value
+    std::integral_constant<enum1, enum1::field0>,
+    traits::member::field0::value
+  >();
+  EXPECT_SAME<
+    std::integral_constant<enum1, enum1::field1>,
+    traits::member::field1::value
+  >();
+  EXPECT_SAME<
+    std::integral_constant<enum1, enum1::field2>,
+    traits::member::field2::value
   >();
 
   EXPECT_SAME<
-    fatal::build_type_map<
-      field0v, field0s,
-      field1v, field1s,
-      field2v, field2s
-    >,
-    traits::value_to_name
+    fatal::list<field0s, field1s, field2s>,
+    fatal::transform<traits::fields, fatal::get_type::name>
+  >();
+  EXPECT_SAME<
+    fatal::value_list<enum1, enum1::field0, enum1::field1, enum1::field2>,
+    fatal::transform<traits::fields, fatal::get_type::value>
   >();
 
-  using names = fatal::type_list<field0s, field1s, field2s>;
-  EXPECT_SAME<names, traits::names>();
-  EXPECT_SAME<fatal::type_list<field0v, field1v, field2v>, traits::values>();
+  EXPECT_SAME<field0s, traits::name_of<enum1::field0>>();
+  EXPECT_SAME<field1s, traits::name_of<enum1::field1>>();
+  EXPECT_SAME<field2s, traits::name_of<enum1::field2>>();
 
   EXPECT_SAME<
-    names::apply<fatal::build_type_prefix_tree<>::from>,
-    traits::prefix_tree
+    std::integral_constant<enum1, enum1::field0>,
+    traits::value_of<field0s>
+  >();
+  EXPECT_SAME<
+    std::integral_constant<enum1, enum1::field1>,
+    traits::value_of<field1s>
+  >();
+  EXPECT_SAME<
+    std::integral_constant<enum1, enum1::field2>,
+    traits::value_of<field2s>
   >();
 
   EXPECT_EQ("field0", fatal::enum_to_string(enum1::field0));
@@ -97,27 +105,27 @@ TEST(fatal_enum, sanity_check) {
   EXPECT_EQ(enum1::field2, e);
 }
 
-FATAL_STR(enum3_annotation1k, "_now.with.an.underscore");
-FATAL_STR(enum3_annotation1v, "_now.with.an.underscore");
-FATAL_STR(enum3_annotation2k, "another.there");
-FATAL_STR(enum3_annotation2v, ".");
-FATAL_STR(enum3_annotation3k, "duplicate_id_annotation_1");
-FATAL_STR(enum3_annotation3v, "duplicate id annotation");
-FATAL_STR(enum3_annotation4k, "duplicate_id_annotation_2");
-FATAL_STR(enum3_annotation4v, "duplicate.id.annotation");
-FATAL_STR(enum3_annotation5k, "one.here");
-FATAL_STR(enum3_annotation5v, "with some value associated");
-FATAL_STR(enum3_annotation6k, "yet.another");
-FATAL_STR(enum3_annotation6v, "and yet more text - it's that easy");
+FATAL_S(enum3_annotation1k, "_now.with.an.underscore");
+FATAL_S(enum3_annotation1v, "_now.with.an.underscore");
+FATAL_S(enum3_annotation2k, "another.there");
+FATAL_S(enum3_annotation2v, ".");
+FATAL_S(enum3_annotation3k, "duplicate_id_annotation_1");
+FATAL_S(enum3_annotation3v, "duplicate id annotation");
+FATAL_S(enum3_annotation4k, "duplicate_id_annotation_2");
+FATAL_S(enum3_annotation4v, "duplicate.id.annotation");
+FATAL_S(enum3_annotation5k, "one.here");
+FATAL_S(enum3_annotation5v, "with some value associated");
+FATAL_S(enum3_annotation6k, "yet.another");
+FATAL_S(enum3_annotation6v, "and yet more text - it's that easy");
 
 TEST(fatal_enum, annotations) {
   EXPECT_SAME<
-    fatal::type_map<>,
+    fatal::list<>,
     apache::thrift::reflect_enum<enum1>::annotations::map
   >();
 
   EXPECT_SAME<
-    fatal::type_map<>,
+    fatal::list<>,
     apache::thrift::reflect_enum<enum2>::annotations::map
   >();
 
@@ -173,15 +181,104 @@ TEST(fatal_enum, annotations) {
   >();
 
   EXPECT_SAME<
-    fatal::build_type_map<
-      enum3_annotation1k, enum3_annotation1v,
-      enum3_annotation2k, enum3_annotation2v,
-      enum3_annotation3k, enum3_annotation3v,
-      enum3_annotation4k, enum3_annotation4v,
-      enum3_annotation5k, enum3_annotation5v,
-      enum3_annotation6k, enum3_annotation6v
+    fatal::list<
+      apache::thrift::annotation<
+        enum3_annotation1k,
+        enum3_annotation1v
+      >,
+      apache::thrift::annotation<
+        enum3_annotation2k,
+        enum3_annotation2v
+      >,
+      apache::thrift::annotation<
+        enum3_annotation3k,
+        enum3_annotation3v
+      >,
+      apache::thrift::annotation<
+        enum3_annotation4k,
+        enum3_annotation4v
+      >,
+      apache::thrift::annotation<
+        enum3_annotation5k,
+        enum3_annotation5v
+      >,
+      apache::thrift::annotation<
+        enum3_annotation6k,
+        enum3_annotation6v
+      >
     >,
     enum3_annotations::map
+  >();
+}
+
+FATAL_S(field_annotation, "field_annotation");
+FATAL_S(field_annotated, "field annotated");
+FATAL_S(field_structured_annotation, "field_structured_annotation");
+FATAL_S(
+  field_structured_annotation_text,
+  R"({"a": "foo", "b": 567, "c": true})"
+);
+FATAL_S(some_other_text, "some other text");
+FATAL_S(a, "a");
+FATAL_S(b, "b");
+FATAL_S(c, "c");
+FATAL_S(foo, "foo");
+
+TEST(fatal_enum, field_annotations) {
+  using info = fatal::enum_traits<enum3>;
+  using field0 = info::member::field0_3::annotations;
+  using field1 = info::member::field1_3::annotations;
+  using field2 = info::member::field2_3::annotations;
+
+  EXPECT_SAME<
+    field_annotation,
+    field1::keys::field_annotation
+  >();
+  EXPECT_SAME<
+    field_annotated,
+    field1::values::field_annotation
+  >();
+  EXPECT_SAME<
+    field_structured_annotation,
+    field2::keys::field_structured_annotation
+  >();
+  EXPECT_SAME<
+    field_structured_annotation_text,
+    field2::values::field_structured_annotation
+  >();
+  EXPECT_SAME<
+    field_annotation,
+    field2::keys::field_annotation
+  >();
+  EXPECT_SAME<
+    some_other_text,
+    field2::values::field_annotation
+  >();
+
+  EXPECT_SAME<
+    fatal::list<>,
+    field0::map
+  >();
+  EXPECT_SAME<
+    fatal::list<
+      apache::thrift::annotation<field_annotation, field_annotated>
+    >,
+    field1::map
+  >();
+  EXPECT_SAME<
+    fatal::list<
+      apache::thrift::annotation<field_annotation, some_other_text>,
+      apache::thrift::annotation<
+        field_structured_annotation,
+        field_structured_annotation_text,
+        fatal::list<
+          fatal::pair<a, foo>,
+          fatal::pair<b, std::integral_constant<std::uintmax_t, 567>>,
+          fatal::pair<c, std::true_type>
+        >
+      >
+    >,
+    field2::map
   >();
 }
 

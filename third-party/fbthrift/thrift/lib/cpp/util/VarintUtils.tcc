@@ -1,4 +1,6 @@
 /*
+ * Copyright 2017-present Facebook, Inc.
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements. See the NOTICE file
  * distributed with this work for additional information
@@ -16,7 +18,6 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-
 #include <folly/io/Cursor.h>
 
 namespace apache { namespace thrift {
@@ -25,11 +26,13 @@ namespace util {
 
 namespace detail {
 
-template <class T, class CursorT,
-          typename std::enable_if<
-            std::is_constructible<folly::io::Cursor, const CursorT&>::value,
-            bool>::type = false>
-uint8_t readVarintSlow(CursorT& c, T& value) {
+template <
+    class T,
+    class CursorT,
+    typename std::enable_if<
+        std::is_constructible<folly::io::Cursor, const CursorT&>::value,
+        bool>::type = false>
+void readVarintSlow(CursorT& c, T& value) {
   // ceil(sizeof(T) * 8) / 7
   static const size_t maxSize = (8 * sizeof(T) + 6) / 7;
   T retVal = 0;
@@ -42,7 +45,7 @@ uint8_t readVarintSlow(CursorT& c, T& value) {
     shift += 7;
     if (!(byte & 0x80)) {
       value = retVal;
-      return rsize;
+      return;
     }
     if (rsize >= maxSize) {
       // Too big for return type
@@ -54,13 +57,15 @@ uint8_t readVarintSlow(CursorT& c, T& value) {
 // This is a simple function that just throws an exception. It is defined out
 // line to make the caller (readVarint) smaller and simpler (assembly-wise),
 // which gives us 5% perf win (even when the exception is not actually thrown).
-void throwInvalidVarint();
+[[noreturn]] void throwInvalidVarint();
 
-template <class T, class CursorT,
-          typename std::enable_if<
-            std::is_constructible<folly::io::Cursor, const CursorT&>::value,
-            bool>::type = false>
-uint8_t readVarintMediumSlow(CursorT& c, T& value, const uint8_t* p, size_t len) {
+template <
+    class T,
+    class CursorT,
+    typename std::enable_if<
+        std::is_constructible<folly::io::Cursor, const CursorT&>::value,
+        bool>::type = false>
+void readVarintMediumSlow(CursorT& c, T& value, const uint8_t* p, size_t len) {
   enum { maxSize = (8 * sizeof(T) + 6) / 7 };
 
   // check that the available data is more than the longest possible varint or
@@ -86,29 +91,29 @@ uint8_t readVarintMediumSlow(CursorT& c, T& value, const uint8_t* p, size_t len)
       throwInvalidVarint();
     } while (false);
     value = static_cast<T>(result);
-    c.skip(p - start);
-    return p - start;
+    c.skipNoAdvance(p - start);
   } else {
-    return readVarintSlow<T, CursorT>(c, value);
+    readVarintSlow<T, CursorT>(c, value);
   }
 }
 
 } // namespace detail
 
-template <class T, class CursorT,
-          typename std::enable_if<
-            std::is_constructible<folly::io::Cursor, const CursorT&>::value,
-            bool>::type = false>
-uint8_t readVarint(CursorT& c, T& value) {
+template <
+    class T,
+    class CursorT,
+    typename std::enable_if<
+        std::is_constructible<folly::io::Cursor, const CursorT&>::value,
+        bool>::type = false>
+void readVarint(CursorT& c, T& value) {
   const uint8_t* p = c.data();
   size_t len = c.length();
-  if (LIKELY(len > 0 && !(*p & 0x80))) {
+  if (len > 0 && !(*p & 0x80)) {
     value = static_cast<T>(*p);
-    c.skip(1);
-    return 1;
+    c.skipNoAdvance(1);
+  } else {
+    detail::readVarintMediumSlow<T, CursorT>(c, value, p, len);
   }
-
-  return detail::readVarintMediumSlow<T, CursorT>(c, value, p, len);
 }
 
 template <class T, class CursorT,
@@ -202,12 +207,12 @@ inline int64_t zigzagToI64(uint64_t n) {
   return (n >> 1) ^ -(n & 1);
 }
 
-inline uint32_t i32ToZigzag(const int32_t n) {
-  return (n << 1) ^ (n >> 31);
+constexpr inline uint32_t i32ToZigzag(const int32_t n) {
+  return (static_cast<uint32_t>(n) << 1) ^ static_cast<uint32_t>(n >> 31);
 }
 
-inline uint64_t i64ToZigzag(const int64_t l) {
-  return (l << 1) ^ (l >> 63);
+constexpr inline uint64_t i64ToZigzag(const int64_t l) {
+  return (static_cast<uint64_t>(l) << 1) ^ static_cast<uint64_t>(l >> 63);
 }
 
 }}} // apache::thrift::util

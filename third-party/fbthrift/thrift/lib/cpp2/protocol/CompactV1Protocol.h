@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2016-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -100,15 +100,15 @@ class CompactV1ProtocolReader : protected CompactProtocolReader {
 
   using CompactProtocolReader::CompactProtocolReader;
   using CompactProtocolReader::protocolType;
+  using CompactProtocolReader::kUsesFieldNames;
+  using CompactProtocolReader::kOmitsContainerSizes;
 
   using CompactProtocolReader::setStringSizeLimit;
   using CompactProtocolReader::setContainerSizeLimit;
   using CompactProtocolReader::setInput;
 
-  inline uint32_t readMessageBegin(
-      std::string& name,
-      MessageType& messageType,
-      int32_t& seqid);
+  inline void
+  readMessageBegin(std::string& name, MessageType& messageType, int32_t& seqid);
   using CompactProtocolReader::readMessageEnd;
   using CompactProtocolReader::readStructBegin;
   using CompactProtocolReader::readStructEnd;
@@ -125,7 +125,7 @@ class CompactV1ProtocolReader : protected CompactProtocolReader {
   using CompactProtocolReader::readI16;
   using CompactProtocolReader::readI32;
   using CompactProtocolReader::readI64;
-  inline uint32_t readDouble(double& dub);
+  inline void readDouble(double& dub);
   using CompactProtocolReader::readFloat;
   using CompactProtocolReader::readString;
   using CompactProtocolReader::readBinary;
@@ -141,4 +141,4 @@ class CompactV1ProtocolReader : protected CompactProtocolReader {
 
 }}
 
-#include "CompactV1Protocol.tcc"
+#include <thrift/lib/cpp2/protocol/CompactV1Protocol.tcc>

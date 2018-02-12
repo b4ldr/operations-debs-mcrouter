@@ -11,8 +11,7 @@
 #include <folly/io/IOBuf.h>
 #include <folly/io/IOBufQueue.h>
 #include <thrift/lib/cpp/transport/THeader.h>
-#include <thrift/lib/cpp2/server/Cpp2ConnContext.h>
-#include <thrift/lib/cpp2/GeneratedCodeHelper.h>
+#include <thrift/lib/cpp2/GeneratedSerializationCodeHelper.h>
 
 #include <thrift/lib/cpp2/protocol/BinaryProtocol.h>
 #include <thrift/lib/cpp2/protocol/CompactProtocol.h>
@@ -29,67 +28,60 @@ namespace cpp2 {
 
 template <class Protocol_>
 uint32_t MyStruct::read(Protocol_* iprot) {
-  uint32_t xfer = 0;
-  std::string fname;
-  apache::thrift::protocol::TType ftype;
+  auto _xferStart = iprot->getCurrentPosition().getCurrentPosition();
+  std::string _fname;
+  apache::thrift::protocol::TType _ftype;
   int16_t fid;
 
-  xfer += iprot->readStructBegin(fname);
+  iprot->readStructBegin(_fname);
 
   using apache::thrift::TProtocolException;
 
 
   while (true) {
-    xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == apache::thrift::protocol::T_STOP) {
+    iprot->readFieldBegin(_fname, _ftype, fid);
+    if (_ftype == apache::thrift::protocol::T_STOP) {
       break;
     }
-    if (fid == std::numeric_limits<int16_t>::min()) {
-      if (fname == "MyIntField") {
-        fid = 1;
-        ftype = apache::thrift::protocol::T_I64;
-      }
-      else if (fname == "MyStringField") {
-        fid = 2;
-        ftype = apache::thrift::protocol::T_STRING;
-      }
+    if (iprot->kUsesFieldNames()) {
+      this->translateFieldName(_fname, fid, _ftype);
     }
     switch (fid) {
       case 1:
       {
-        if (ftype == apache::thrift::protocol::T_I64) {
-          xfer += iprot->readI64(this->MyIntField);
+        if (_ftype == apache::thrift::protocol::T_I64) {
+          iprot->readI64(this->MyIntField);
           this->__isset.MyIntField = true;
         } else {
-          xfer += iprot->skip(ftype);
+          iprot->skip(_ftype);
         }
         break;
       }
       case 2:
       {
-        if (ftype == apache::thrift::protocol::T_STRING) {
-          xfer += iprot->readString(this->MyStringField);
+        if (_ftype == apache::thrift::protocol::T_STRING) {
+          iprot->readString(this->MyStringField);
           this->__isset.MyStringField = true;
         } else {
-          xfer += iprot->skip(ftype);
+          iprot->skip(_ftype);
         }
         break;
       }
       default:
       {
-        xfer += iprot->skip(ftype);
+        iprot->skip(_ftype);
         break;
       }
     }
-    xfer += iprot->readFieldEnd();
+    iprot->readFieldEnd();
   }
-  xfer += iprot->readStructEnd();
+  iprot->readStructEnd();
 
-  return xfer;
+  return iprot->getCurrentPosition().getCurrentPosition() - _xferStart;
 }
 
 template <class Protocol_>
-uint32_t MyStruct::serializedSize(Protocol_* prot_) const {
+uint32_t MyStruct::serializedSize(Protocol_ const* prot_) const {
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("MyStruct");
   xfer += prot_->serializedFieldSize("MyIntField", apache::thrift::protocol::T_I64, 1);
@@ -101,7 +93,7 @@ uint32_t MyStruct::serializedSize(Protocol_* prot_) const {
 }
 
 template <class Protocol_>
-uint32_t MyStruct::serializedSizeZC(Protocol_* prot_) const {
+uint32_t MyStruct::serializedSizeZC(Protocol_ const* prot_) const {
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("MyStruct");
   xfer += prot_->serializedFieldSize("MyIntField", apache::thrift::protocol::T_I64, 1);

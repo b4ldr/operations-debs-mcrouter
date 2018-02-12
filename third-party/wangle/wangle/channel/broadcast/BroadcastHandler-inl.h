@@ -1,18 +1,24 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #pragma once
 
 namespace wangle {
 
 template <typename T, typename R>
-void BroadcastHandler<T, R>::read(Context* ctx, T data) {
+void BroadcastHandler<T, R>::read(Context*, T data) {
   onData(data);
   forEachSubscriber([&](Subscriber<T, R>* s) {
     s->onNext(data);
@@ -20,7 +26,7 @@ void BroadcastHandler<T, R>::read(Context* ctx, T data) {
 }
 
 template <typename T, typename R>
-void BroadcastHandler<T, R>::readEOF(Context* ctx) {
+void BroadcastHandler<T, R>::readEOF(Context*) {
   forEachSubscriber([&](Subscriber<T, R>* s) {
     s->onCompleted();
   });
@@ -29,7 +35,7 @@ void BroadcastHandler<T, R>::readEOF(Context* ctx) {
 }
 
 template <typename T, typename R>
-void BroadcastHandler<T, R>::readException(Context* ctx,
+void BroadcastHandler<T, R>::readException(Context*,
                                         folly::exception_wrapper ex) {
   LOG(ERROR) << "Error while reading from upstream for broadcast: "
              << exceptionStr(ex);
@@ -68,6 +74,12 @@ void BroadcastHandler<T, R>::closeIfIdle() {
     // This will delete the broadcast from the pool.
     this->close(this->getContext());
   }
+}
+
+template <typename T, typename R>
+uint64_t BroadcastHandler<T, R>::getArbitraryIdentifier() {
+  static std::atomic<uint64_t> identifierCounter{42};
+  return identifier_ ? identifier_ : (identifier_ = ++identifierCounter);
 }
 
 } // namespace wangle

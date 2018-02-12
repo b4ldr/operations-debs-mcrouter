@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #pragma once
 
@@ -14,8 +20,8 @@
 #include <folly/FileUtil.h>
 #include <folly/json.h>
 #include <folly/ScopeGuard.h>
+#include <folly/portability/SysTime.h>
 #include <functional>
-#include <sys/time.h>
 
 namespace wangle {
 
@@ -29,14 +35,16 @@ LRUPersistentCache<K, V, MutexT>::LRUPersistentCache(
   stopSyncer_(false),
   syncInterval_(syncInterval),
   nSyncRetries_(nSyncRetries),
-  persistence_(nullptr),
-  syncer_(&LRUPersistentCache<K, V, MutexT>::syncThreadMain, this) {
+  persistence_(nullptr) {
 
   // load the cache. be silent if load fails, we just drop the cache
   // and start from scratch.
   if (persistence) {
     setPersistenceHelper(std::move(persistence), true);
   }
+  // start the syncer thread. done at the end of construction so that the cache
+  // is fully initialized before being passed to the syncer thread.
+  syncer_ = std::thread(&LRUPersistentCache<K, V, MutexT>::syncThreadMain, this);
 }
 
 template<typename K, typename V, typename MutexT>

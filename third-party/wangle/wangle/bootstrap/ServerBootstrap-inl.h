@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #pragma once
 
@@ -18,7 +24,7 @@
 #include <wangle/bootstrap/ServerSocketFactory.h>
 #include <wangle/channel/Handler.h>
 #include <wangle/channel/Pipeline.h>
-#include <wangle/concurrent/IOThreadPoolExecutor.h>
+#include <folly/executors/IOThreadPoolExecutor.h>
 #include <wangle/ssl/SSLStats.h>
 
 namespace wangle {
@@ -30,20 +36,29 @@ class AcceptorException : public std::runtime_error {
     TIMED_OUT = 1,
     DROPPED = 2,
     ACCEPT_STOPPED = 3,
-    FORCE_STOP = 4,
-    INTERNAL_ERROR = 5,
+    DRAIN_CONN_PCT = 4,
+    DROP_CONN_PCT = 5,
+    FORCE_STOP = 6,
+    INTERNAL_ERROR = 7,
   };
 
   explicit AcceptorException(ExceptionType type) :
-      std::runtime_error(""), type_(type) {}
+      std::runtime_error(""), type_(type), pct_(0.0) {}
 
-  AcceptorException(ExceptionType type, const std::string& message) :
-      std::runtime_error(message), type_(type) {}
+  explicit AcceptorException(ExceptionType type, const std::string& message) :
+      std::runtime_error(message), type_(type), pct_(0.0) {}
+
+  explicit AcceptorException(ExceptionType type, const std::string& message,
+                             double pct) :
+      std::runtime_error(message), type_(type), pct_(pct) {}
 
   ExceptionType getType() const noexcept { return type_; }
+  double getPct() const noexcept { return pct_; }
 
  protected:
   const ExceptionType type_;
+  // the percentage of connections to be drained or dropped during the shutdown
+  const double pct_;
 };
 
 template <typename Pipeline>
@@ -65,20 +80,18 @@ class ServerAcceptor
       pipeline_->readException(ew);
     }
 
-    void describe(std::ostream& os) const override {}
+    void describe(std::ostream&) const override {}
     bool isBusy() const override {
       return true;
     }
     void notifyPendingShutdown() override {}
     void closeWhenIdle() override {}
     void dropConnection() override {
-      DestructorGuard dg(this);
       auto ew = folly::make_exception_wrapper<AcceptorException>(
           AcceptorException::ExceptionType::DROPPED, "dropped");
       pipeline_->readException(ew);
-      destroy();
     }
-    void dumpConnectionState(uint8_t loglevel) override {}
+    void dumpConnectionState(uint8_t /* loglevel */) override {}
 
     void deletePipeline(wangle::PipelineBase* p) override {
       CHECK(p == pipeline_.get());
@@ -94,7 +107,7 @@ class ServerAcceptor
     }
 
    private:
-    ~ServerConnection() {
+    ~ServerConnection() override {
       pipeline_->setPipelineManager(nullptr);
     }
     typename Pipeline::Ptr pipeline_;
@@ -125,7 +138,7 @@ class ServerAcceptor
     acceptPipeline_->finalize();
   }
 
-  void read(Context* ctx, AcceptPipelineType conn) override {
+  void read(Context*, AcceptPipelineType conn) override {
     if (conn.type() != typeid(ConnInfo&)) {
       return;
     }
@@ -140,7 +153,7 @@ class ServerAcceptor
     transport->getLocalAddress(tInfoPtr->localAddr.get());
     tInfoPtr->remoteAddr =
       std::make_shared<folly::SocketAddress>(*connInfo.clientAddr);
-    tInfoPtr->sslNextProtocol =
+    tInfoPtr->appProtocol =
       std::make_shared<std::string>(connInfo.nextProtoName);
 
     auto pipeline = childPipelineFactory_->newPipeline(
@@ -154,9 +167,8 @@ class ServerAcceptor
 
   // Null implementation to terminate the call in this handler
   // and suppress warnings
-  void readEOF(Context* ctx) override {}
-  void readException(Context* ctx,
-                     folly::exception_wrapper ex) override {}
+  void readEOF(Context*) override {}
+  void readException(Context*, folly::exception_wrapper) override {}
 
   /* See Acceptor::onNewConnection for details */
   void onNewConnection(folly::AsyncTransportWrapper::UniquePtr transport,
@@ -179,6 +191,24 @@ class ServerAcceptor
     Acceptor::acceptStopped();
   }
 
+  void drainConnections(double pct) noexcept override {
+    auto ew = folly::make_exception_wrapper<AcceptorException>(
+      AcceptorException::ExceptionType::DRAIN_CONN_PCT,
+      "draining some connections", pct);
+
+    acceptPipeline_->readException(ew);
+    Acceptor::drainConnections(pct);
+  }
+
+  void dropConnections(double pct) noexcept override {
+    auto ew = folly::make_exception_wrapper<AcceptorException>(
+      AcceptorException::ExceptionType::DROP_CONN_PCT,
+      "dropping some connections", pct);
+
+    acceptPipeline_->readException(ew);
+    Acceptor::dropConnections(pct);
+  }
+
   void forceStop() noexcept override {
     auto ew = folly::make_exception_wrapper<AcceptorException>(
       AcceptorException::ExceptionType::FORCE_STOP,
@@ -192,7 +222,7 @@ class ServerAcceptor
   void onDataAvailable(std::shared_ptr<folly::AsyncUDPSocket> socket,
                        const folly::SocketAddress& addr,
                        std::unique_ptr<folly::IOBuf> buf,
-                       bool truncated) noexcept override {
+                       bool /* truncated */) noexcept override {
     acceptPipeline_->read(
         AcceptPipelineType(make_tuple(buf.release(), socket, addr)));
   }
@@ -227,7 +257,7 @@ class ServerAcceptorFactory : public AcceptorFactory {
         childPipelineFactory_(childPipelineFactory),
         accConfig_(accConfig) {}
 
-  std::shared_ptr<Acceptor> newAcceptor(folly::EventBase* base) {
+  std::shared_ptr<Acceptor> newAcceptor(folly::EventBase* base) override {
     auto acceptor = std::make_shared<ServerAcceptor<Pipeline>>(
         acceptPipelineFactory_, childPipelineFactory_, accConfig_);
     acceptor->init(nullptr, base, nullptr);
@@ -240,11 +270,11 @@ class ServerAcceptorFactory : public AcceptorFactory {
   ServerSocketConfig accConfig_;
 };
 
-class ServerWorkerPool : public wangle::ThreadPoolExecutor::Observer {
+class ServerWorkerPool : public folly::ThreadPoolExecutor::Observer {
  public:
   explicit ServerWorkerPool(
     std::shared_ptr<AcceptorFactory> acceptorFactory,
-    wangle::IOThreadPoolExecutor* exec,
+    folly::IOThreadPoolExecutor* exec,
     std::shared_ptr<std::vector<std::shared_ptr<folly::AsyncSocketBase>>> sockets,
     std::shared_ptr<ServerSocketFactory> socketFactory)
       : workers_(std::make_shared<WorkerMap>())
@@ -259,28 +289,26 @@ class ServerWorkerPool : public wangle::ThreadPoolExecutor::Observer {
   template <typename F>
   void forEachWorker(F&& f) const;
 
-  void threadStarted(
-    wangle::ThreadPoolExecutor::ThreadHandle*);
-  void threadStopped(
-    wangle::ThreadPoolExecutor::ThreadHandle*);
+  void threadStarted(folly::ThreadPoolExecutor::ThreadHandle*) override;
+  void threadStopped(folly::ThreadPoolExecutor::ThreadHandle*) override;
   void threadPreviouslyStarted(
-      wangle::ThreadPoolExecutor::ThreadHandle* thread) {
+      folly::ThreadPoolExecutor::ThreadHandle* thread) override {
     threadStarted(thread);
   }
   void threadNotYetStopped(
-      wangle::ThreadPoolExecutor::ThreadHandle* thread) {
+      folly::ThreadPoolExecutor::ThreadHandle* thread) override {
     threadStopped(thread);
   }
 
  private:
-  using WorkerMap = std::map<wangle::ThreadPoolExecutor::ThreadHandle*,
+  using WorkerMap = std::map<folly::ThreadPoolExecutor::ThreadHandle*,
         std::shared_ptr<Acceptor>>;
   using Mutex = folly::SharedMutexReadPriority;
 
   std::shared_ptr<WorkerMap> workers_;
   std::shared_ptr<Mutex> workersMutex_;
   std::shared_ptr<AcceptorFactory> acceptorFactory_;
-  wangle::IOThreadPoolExecutor* exec_{nullptr};
+  folly::IOThreadPoolExecutor* exec_{nullptr};
   std::shared_ptr<std::vector<std::shared_ptr<folly::AsyncSocketBase>>>
       sockets_;
   std::shared_ptr<ServerSocketFactory> socketFactory_;
@@ -296,7 +324,7 @@ void ServerWorkerPool::forEachWorker(F&& f) const {
 
 class DefaultAcceptPipelineFactory : public AcceptPipelineFactory {
  public:
-  typename AcceptPipeline::Ptr newPipeline(Acceptor* acceptor) {
+  typename AcceptPipeline::Ptr newPipeline(Acceptor*) override {
     return AcceptPipeline::create();
   }
 };

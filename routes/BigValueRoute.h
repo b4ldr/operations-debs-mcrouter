@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
+ *  Copyright (c) 2017, Facebook, Inc.
  *  All rights reserved.
  *
  *  This source code is licensed under the BSD-style license found in the
@@ -12,19 +12,23 @@
 #include <vector>
 
 #include <folly/Format.h>
+#include <folly/Traits.h>
 
-#include "mcrouter/lib/McOperation.h"
-#include "mcrouter/lib/OperationTraits.h"
-#include "mcrouter/lib/RouteHandleTraverser.h"
 #include "mcrouter/ProxyRequestContext.h"
+#include "mcrouter/lib/McOperation.h"
+#include "mcrouter/lib/Operation.h"
+#include "mcrouter/lib/RouteHandleTraverser.h"
+#include "mcrouter/lib/carbon/RoutingGroups.h"
+#include "mcrouter/lib/network/gen/MemcacheRouteHandleIf.h"
 #include "mcrouter/routes/BigValueRouteIf.h"
-#include "mcrouter/routes/McrouterRouteHandle.h"
 
 namespace folly {
 class IOBuf;
 } // folly
 
-namespace facebook { namespace memcache { namespace mcrouter {
+namespace facebook {
+namespace memcache {
+namespace mcrouter {
 
 /**
  * For get-like request:
@@ -33,6 +37,9 @@ namespace facebook { namespace memcache { namespace mcrouter {
  * getlike requests and forward to child route handle.
  * Merge all the replies and return it.
  * 3. Else return the reply.
+ *
+ * Note that the above describes how lease-get logically works, but the
+ * actual implementation of BigValueRoute for lease-gets is more complicated.
  *
  * For update-like request:
  * 1. If value size is below or equal to threshold option,
@@ -48,34 +55,46 @@ namespace facebook { namespace memcache { namespace mcrouter {
  */
 class BigValueRoute {
  public:
-  static std::string routeName() { return "big-value"; }
+  static std::string routeName() {
+    return "big-value";
+  }
 
   template <class Request>
-  void traverse(const Request& req,
-                const RouteHandleTraverser<McrouterRouteHandleIf>& t) const;
+  void traverse(
+      const Request& req,
+      const RouteHandleTraverser<MemcacheRouteHandleIf>& t) const;
 
-  BigValueRoute(McrouterRouteHandlePtr ch,
-                BigValueRouteOptions options);
+  BigValueRoute(
+      std::shared_ptr<MemcacheRouteHandleIf> ch,
+      BigValueRouteOptions options);
 
   template <class Request>
-  ReplyT<Request> route(const Request& req, GetLikeT<Request> = 0) const;
+  typename std::enable_if<
+      folly::IsOneOf<Request, McGetRequest, McGetsRequest>::value,
+      ReplyT<Request>>::type
+  route(const Request& req) const;
+
+  McMetagetReply route(const McMetagetRequest& req) const;
+  McLeaseGetReply route(const McLeaseGetRequest& req) const;
 
   template <class Request>
-  ReplyT<Request> route(const Request& req, UpdateLikeT<Request> = 0) const;
+  ReplyT<Request> route(const Request& req, carbon::UpdateLikeT<Request> = 0)
+      const;
 
   template <class Request>
   ReplyT<Request> route(
-    const Request& req,
-    OtherThanT<Request, GetLike<>, UpdateLike<>> = 0) const;
+      const Request& req,
+      carbon::OtherThanT<Request, carbon::GetLike<>, carbon::UpdateLike<>> =
+          0) const;
 
  private:
-  const McrouterRouteHandlePtr ch_;
+  const std::shared_ptr<MemcacheRouteHandleIf> ch_;
   const BigValueRouteOptions options_;
 
   class ChunksInfo {
    public:
-    explicit ChunksInfo(folly::StringPiece reply_value);
-    explicit ChunksInfo(uint32_t num_chunks);
+    explicit ChunksInfo(folly::StringPiece replyValue);
+    explicit ChunksInfo(uint32_t numChunks);
 
     folly::IOBuf toStringType() const;
     uint32_t numChunks() const;
@@ -89,58 +108,36 @@ class BigValueRoute {
     bool valid_;
   };
 
-  /**
-   * Type of request to use when chunking get-like requests.
-   */
-  template <class Request>
-  struct ChunkGet;
-  template <class M>
-  struct ChunkGet<TypedThriftRequest<M>> {
-    using type = TypedThriftRequest<cpp2::McGetRequest>;
-  };
-  template <int op>
-  struct ChunkGet<McRequestWithMcOp<op>> {
-    using type = McRequestWithMcOp<mc_op_get>;
-  };
-  template <class Request>
-  using ChunkGetT = typename ChunkGet<Request>::type;
+  McLeaseGetReply doLeaseGetRoute(
+      const McLeaseGetRequest& req,
+      size_t retriesLeft) const;
 
-  /**
-   * Type of request to use when chunking update-like requests.
-   */
-  template <class Request>
-  struct ChunkUpdate;
-  template <class M>
-  struct ChunkUpdate<TypedThriftRequest<M>> {
-    using type = TypedThriftRequest<cpp2::McSetRequest>;
-  };
-  template <int op>
-  struct ChunkUpdate<McRequestWithMcOp<op>> {
-    using type = McRequestWithMcOp<mc_op_set>;
-  };
-  template <class Request>
-  using ChunkUpdateT = typename ChunkUpdate<Request>::type;
+  template <class FuncIt>
+  std::vector<typename std::result_of<
+      typename std::iterator_traits<FuncIt>::value_type()>::type>
+  collectAllByBatches(FuncIt beginF, FuncIt endF) const;
 
-  template <class Reply>
-  std::vector<Reply> collectAllByBatches(
-    std::vector<std::function<Reply()>>& fs) const;
+  template <class FromRequest>
+  std::pair<std::vector<McSetRequest>, ChunksInfo> chunkUpdateRequests(
+      const FromRequest& req) const;
 
-  template <class ToRequest, class FromRequest>
-  std::pair<std::vector<ToRequest>, ChunksInfo>
-  chunkUpdateRequests(const FromRequest& req) const;
-
-  template <class ToRequest, class FromRequest>
-  std::vector<ToRequest> chunkGetRequests(const FromRequest& req,
-                                          const ChunksInfo& info) const;
+  template <class FromRequest>
+  std::vector<McGetRequest> chunkGetRequests(
+      const FromRequest& req,
+      const ChunksInfo& info) const;
 
   template <typename InputIterator, class Reply>
   Reply mergeChunkGetReplies(
-      InputIterator begin, InputIterator end, Reply&& init_reply) const;
+      InputIterator begin,
+      InputIterator end,
+      Reply&& initReply) const;
 
-  folly::IOBuf createChunkKey(
-    folly::StringPiece key, uint32_t index, uint64_t suffix) const;
+  folly::IOBuf
+  createChunkKey(folly::StringPiece key, uint32_t index, uint64_t suffix) const;
 };
 
-}}} // facebook::memcache::mcrouter
+} // mcrouter
+} // memcache
+} // facebook
 
 #include "BigValueRoute-inl.h"

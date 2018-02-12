@@ -20,8 +20,6 @@
 #include <math.h>
 
 #include <thrift/lib/cpp/Thrift.h>
-
-using namespace folly::json;
 namespace apache { namespace thrift { namespace reflection {
 class Schema;
 }}}
@@ -34,7 +32,7 @@ class StructUsingOtherNamespace;
 
 void swap(StructUsingOtherNamespace &a, StructUsingOtherNamespace &b);
 
-class StructUsingOtherNamespace : public apache::thrift::TStructType<StructUsingOtherNamespace> {
+class StructUsingOtherNamespace final : public apache::thrift::TStructType<StructUsingOtherNamespace> {
  public:
 
   static const uint64_t _reflection_id = 8285996275179549516U;
@@ -51,7 +49,7 @@ class StructUsingOtherNamespace : public apache::thrift::TStructType<StructUsing
   ):
     StructUsingOtherNamespace(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
   {
-    other = arg.move();
+    other = std::make_unique<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
   }
 
   StructUsingOtherNamespace(const StructUsingOtherNamespace&);
@@ -64,9 +62,6 @@ class StructUsingOtherNamespace : public apache::thrift::TStructType<StructUsing
   StructUsingOtherNamespace& operator=(StructUsingOtherNamespace&&) = default;
 
   void __clear();
-
-  virtual ~StructUsingOtherNamespace() throw() {}
-
   std::unique_ptr< ::cpp1::Included> other;
 
   struct __isset {
@@ -82,11 +77,15 @@ class StructUsingOtherNamespace : public apache::thrift::TStructType<StructUsing
 
   bool operator < (const StructUsingOtherNamespace & ) const;
 
-  void readFromJson(const char* jsonText, size_t len);
-  void readFromJson(const char* jsonText);
+  void readFromJson(const char* jsonText, size_t len, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
+  void readFromJson(const char* jsonText, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class StructUsingOtherNamespace;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2016-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,8 @@
 
 #include <type_traits>
 #include <utility>
+
+#include <thrift/lib/cpp2/fatal/internal/folly_dynamic-inl-pre.h>
 
 /**
  * READ ME FIRST: this header enhances Thrift support for the `folly::dynamic`
@@ -90,10 +92,6 @@ enum class format_adherence {
   LENIENT
 };
 
-namespace detail {
-template <thrift_category> struct dynamic_converter_impl;
-} // namespace detail {
-
 /**
  * Converts an object to its `folly::dynamic` representation using Thrift's
  * reflection support.
@@ -108,7 +106,7 @@ template <thrift_category> struct dynamic_converter_impl;
 template <typename T>
 void to_dynamic(folly::dynamic &out, T &&input, dynamic_format format) {
   using impl = detail::dynamic_converter_impl<
-    reflect_category<typename std::decay<T>::type>::value
+    reflect_type_class<typename std::decay<T>::type>
   >;
 
   static_assert(
@@ -156,7 +154,7 @@ void from_dynamic(
   format_adherence adherence = format_adherence::STRICT
 ) {
   using impl = detail::dynamic_converter_impl<
-    reflect_category<typename std::decay<T>::type>::value
+    reflect_type_class<typename std::decay<T>::type>
   >;
 
   static_assert(
@@ -166,6 +164,13 @@ void from_dynamic(
 
   impl::from(out, input, format, adherence);
 }
+template <typename T>
+void from_dynamic(
+  T &out,
+  folly::StringPiece input,
+  dynamic_format format,
+  format_adherence adherence = format_adherence::STRICT
+) = delete;
 
 /**
  * Converts an object from its `folly::dynamic` representation using Thrift's
@@ -188,9 +193,15 @@ T from_dynamic(
 
   return result;
 }
+template <typename T>
+T from_dynamic(
+  folly::StringPiece input,
+  dynamic_format format,
+  format_adherence adherence = format_adherence::STRICT
+) = delete;
 
 }} // apache::thrift
 
-#include <thrift/lib/cpp2/fatal/folly_dynamic-inl.h>
+#include <thrift/lib/cpp2/fatal/internal/folly_dynamic-inl-post.h>
 
 #endif // THRIFT_FATAL_FOLLY_DYNAMIC_H_

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2014-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,12 +22,12 @@
 #include <vector>
 
 #include <folly/Optional.h>
+#include <folly/String.h>
+#include <folly/portability/Unistd.h>
 #include <thrift/lib/cpp/protocol/TProtocolTypes.h>
 #include <thrift/lib/cpp/concurrency/Thread.h>
 
 #include <bitset>
-#include <pwd.h>
-#include <unistd.h>
 #include <chrono>
 
 // Don't include the unknown client.
@@ -73,7 +73,7 @@ using apache::thrift::protocol::T_BINARY_PROTOCOL;
  * Class that will take an IOBuf and wrap it in some thrift headers.
  * see thrift/doc/HeaderFormat.txt for details.
  *
- * Supports transforms: zlib snappy qlz
+ * Supports transforms: zlib snappy zstd
  * Supports headers: http-style key/value per request and per connection
  * other: Protocol Id and seq ID in header.
  *
@@ -154,7 +154,7 @@ class THeader {
    */
   std::unique_ptr<THeader> clone();
 
-  uint16_t getNumTransforms(std::vector<uint16_t>& transforms) const {
+  static uint16_t getNumTransforms(const std::vector<uint16_t>& transforms) {
     return transforms.size();
   }
 
@@ -175,6 +175,7 @@ class THeader {
 
   // these work with write headers
   void setHeader(const std::string& key, const std::string& value);
+  void setHeader(const std::string& key, std::string&& value);
   void setHeader(const char* key, size_t keyLength, const char* value,
                  size_t valueLength);
   void setHeaders(StringToStringMap&&);
@@ -186,9 +187,13 @@ class THeader {
   StringToStringMap&& releaseWriteHeaders() {
     return std::move(writeHeaders_);
   }
+  const StringToStringMap& getWriteHeaders() const {
+    return writeHeaders_;
+  }
 
   // these work with read headers
   void setReadHeaders(StringToStringMap&&);
+  void eraseReadHeader(const std::string& key);
   const StringToStringMap& getHeaders() const { return readHeaders_; }
 
   StringToStringMap releaseHeaders() {
@@ -200,6 +205,9 @@ class THeader {
   void setExtraWriteHeaders(StringToStringMap* extraWriteHeaders) {
     extraWriteHeaders_ = extraWriteHeaders;
   }
+  StringToStringMap* getExtraWriteHeaders() const {
+    return extraWriteHeaders_;
+  }
 
   std::string getPeerIdentity();
   void setIdentity(const std::string& identity);
@@ -209,11 +217,15 @@ class THeader {
   void setSequenceNumber(uint32_t sid) { this->seqId = sid; }
 
   enum TRANSFORMS {
-    NONE = 0x0,
+    NONE = 0x00,
     ZLIB_TRANSFORM = 0x01,
-    HMAC_TRANSFORM = 0x02, // Deprecated and no longer supported
+    HMAC_TRANSFORM = 0x02,         // Deprecated and no longer supported
     SNAPPY_TRANSFORM = 0x03,
-    QLZ_TRANSFORM = 0x04,
+    QLZ_TRANSFORM = 0x04,          // Deprecated and no longer supported
+    ZSTD_TRANSFORM = 0x05,
+
+    // DO NOT USE. Sentinel value for enum count. Always keep as last value.
+    TRANSFORM_LAST_FIELD = 0x06,
   };
 
   /* IOBuf interface */
@@ -273,6 +285,14 @@ class THeader {
 
   void setHttpClientParser(
       std::shared_ptr<apache::thrift::util::THttpClientParser>);
+
+  void setClientTimeout(std::chrono::milliseconds timeout);
+  void setClientQueueTimeout(std::chrono::milliseconds timeout);
+  void setCallPriority(apache::thrift::concurrency::PRIORITY priority);
+
+  // Utility method for converting TRANSFORMS enum to string
+  static const folly::StringPiece getStringTransform(
+      const TRANSFORMS transform);
 
   static CLIENT_TYPE getClientType(uint32_t f, uint32_t s);
 
@@ -340,6 +360,12 @@ class THeader {
   // Won't be cleared when flushing
   StringToStringMap* extraWriteHeaders_{nullptr};
 
+  // If these values are set, they are used instead of looking inside
+  // the header map.
+  folly::Optional<std::chrono::milliseconds> clientTimeout_;
+  folly::Optional<std::chrono::milliseconds> queueTimeout_;
+  folly::Optional<apache::thrift::concurrency::PRIORITY> priority_;
+
   static const std::string IDENTITY_HEADER;
   static const std::string ID_VERSION_HEADER;
   static const std::string ID_VERSION;
@@ -368,6 +394,7 @@ class THeader {
       END        // signal the end of infoIds we can handle
     };
   };
+
 };
 
 }}} // apache::thrift::transport

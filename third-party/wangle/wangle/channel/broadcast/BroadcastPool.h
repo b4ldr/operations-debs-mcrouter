@@ -1,32 +1,41 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #pragma once
 
 #include <folly/ThreadLocal.h>
 #include <folly/futures/SharedPromise.h>
+#include <folly/io/async/DelayedDestruction.h>
+#include <wangle/bootstrap/BaseClientBootstrap.h>
 #include <wangle/bootstrap/ClientBootstrap.h>
+#include <wangle/channel/Pipeline.h>
 #include <wangle/channel/broadcast/BroadcastHandler.h>
 
 namespace wangle {
 
-template <typename R>
+template <typename R, typename P = DefaultPipeline>
 class ServerPool {
  public:
   virtual ~ServerPool() {}
 
   /**
-   * Kick off an upstream connect request given the ClientBootstrap
+   * Kick off an upstream connect request given the BaseClientBootstrap
    * when a broadcast is not available locally.
    */
-  virtual folly::Future<DefaultPipeline*> connect(
-      ClientBootstrap<DefaultPipeline>* client,
+  virtual folly::Future<P*> connect(
+      BaseClientBootstrap<P>* client,
       const R& routingData) noexcept = 0;
 };
 
@@ -37,19 +46,27 @@ class ServerPool {
  *
  * Meant to be used as a thread-local instance.
  */
-template <typename T, typename R>
+template <typename T, typename R, typename P = DefaultPipeline>
 class BroadcastPool {
  public:
-  class BroadcastManager : PipelineManager {
+  class BroadcastManager : public PipelineManager,
+                           public folly::DelayedDestruction {
    public:
-    BroadcastManager(BroadcastPool<T, R>* broadcastPool, const R& routingData)
-        : broadcastPool_(broadcastPool), routingData_(routingData) {
-      client_.pipelineFactory(broadcastPool_->broadcastPipelineFactory_);
+    using UniquePtr = std::unique_ptr<
+      BroadcastManager, folly::DelayedDestruction::Destructor>;
+
+    BroadcastManager(
+        BroadcastPool<T, R, P>* broadcastPool,
+        const R& routingData)
+        : broadcastPool_(broadcastPool),
+          routingData_(routingData),
+          client_(broadcastPool_->clientBootstrapFactory_->newClient()) {
+      client_->pipelineFactory(broadcastPool_->broadcastPipelineFactory_);
     }
 
-    virtual ~BroadcastManager() {
-      if (client_.getPipeline()) {
-        client_.getPipeline()->setPipelineManager(nullptr);
+    ~BroadcastManager() override {
+      if (client_->getPipeline()) {
+        client_->getPipeline()->setPipelineManager(nullptr);
       }
     }
 
@@ -61,17 +78,24 @@ class BroadcastPool {
    private:
     void handleConnectError(const std::exception& ex) noexcept;
 
-    BroadcastPool<T, R>* broadcastPool_{nullptr};
+    BroadcastPool<T, R, P>* broadcastPool_{nullptr};
     R routingData_;
-    ClientBootstrap<DefaultPipeline> client_;
+
+    std::unique_ptr<BaseClientBootstrap<P>> client_;
 
     bool connectStarted_{false};
+    bool deletingBroadcast_{false};
     folly::SharedPromise<BroadcastHandler<T, R>*> sharedPromise_;
   };
 
-  BroadcastPool(std::shared_ptr<ServerPool<R>> serverPool,
-                std::shared_ptr<BroadcastPipelineFactory<T, R>> pipelineFactory)
-      : serverPool_(serverPool), broadcastPipelineFactory_(pipelineFactory) {}
+  BroadcastPool(
+      std::shared_ptr<ServerPool<R, P>> serverPool,
+      std::shared_ptr<BroadcastPipelineFactory<T, R>> pipelineFactory,
+      std::shared_ptr<BaseClientBootstrapFactory<>> clientFactory =
+          std::make_shared<ClientBootstrapFactory>())
+      : serverPool_(serverPool),
+        broadcastPipelineFactory_(pipelineFactory),
+        clientBootstrapFactory_(clientFactory) {}
 
   virtual ~BroadcastPool() {}
 
@@ -94,6 +118,9 @@ class BroadcastPool {
    *
    * Caller should immediately subscribe to the returned BroadcastHandler
    * to prevent it from being garbage collected.
+   * Note that to ensure that this works correctly, the returned future
+   * completes on an InlineExecutor such that .then will be called inline with
+   * satisfaction of the underlying promise.
    */
   virtual folly::Future<BroadcastHandler<T, R>*> getHandler(
       const R& routingData);
@@ -105,12 +132,15 @@ class BroadcastPool {
     return (broadcasts_.find(routingData) != broadcasts_.end());
   }
 
- private:
-  void deleteBroadcast(const R& routingData) { broadcasts_.erase(routingData); }
+  virtual void deleteBroadcast(const R& routingData) {
+    broadcasts_.erase(routingData);
+  }
 
-  std::shared_ptr<ServerPool<R>> serverPool_;
+ private:
+  std::shared_ptr<ServerPool<R, P>> serverPool_;
   std::shared_ptr<BroadcastPipelineFactory<T, R>> broadcastPipelineFactory_;
-  std::map<R, std::unique_ptr<BroadcastManager>> broadcasts_;
+  std::shared_ptr<BaseClientBootstrapFactory<>> clientBootstrapFactory_;
+  std::map<R, typename BroadcastManager::UniquePtr> broadcasts_;
 };
 
 } // namespace wangle

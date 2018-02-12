@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2004-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,51 @@
 
 #include <thrift/lib/cpp2/protocol/JSONProtocolCommon.h>
 
+#include <type_traits>
+
+#include <folly/Format.h>
+
+namespace {
+
+class WrappedIOBufQueueAppender {
+ public:
+  explicit WrappedIOBufQueueAppender(folly::io::QueueAppender& out)
+      : out_(out) {}
+
+  void append(const char* s, const size_t n) {
+    if (n == 0)
+      return;
+    out_.push(reinterpret_cast<const uint8_t*>(CHECK_NOTNULL(s)), n);
+    length_ += n;
+  }
+
+  void push_back(const char c) {
+    append(&c, 1);
+  }
+
+  WrappedIOBufQueueAppender& operator+=(const char c) {
+    push_back(c);
+    return *this;
+  }
+
+  size_t size() const {
+    return length_;
+  }
+
+ private:
+  folly::io::QueueAppender& out_;
+  size_t length_ = 0;
+};
+
+}  // namespace
+
+namespace folly {
+
+template <>
+struct IsSomeString<WrappedIOBufQueueAppender> : std::true_type {};
+
+}  // namespace folly
+
 namespace apache { namespace thrift {
 
 // This table describes the handling for the first 0x30 characters
@@ -29,10 +74,7 @@ const uint8_t JSONProtocolWriterCommon::kJSONCharTable[0x30] = {
     1,  1,'"',  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, // 2
 };
 
-// This string's characters must match up with the elements in kEscapeCharVals
-// I don't have '/' on this list even though it appears on www.json.org --
-// it is not in the RFC
-const std::string JSONProtocolReaderCommon::kEscapeChars("\"\\/bfnrt");
+constexpr folly::StringPiece JSONProtocolReaderCommon::kEscapeChars;
 
 // The elements of this array must match up with the sequence of characters in
 // kEscapeChars
@@ -40,4 +82,93 @@ const uint8_t JSONProtocolReaderCommon::kEscapeCharVals[8] = {
   '"', '\\', '/', '\b', '\f', '\n', '\r', '\t',
 };
 
+uint32_t JSONProtocolWriterCommon::writeJSONDoubleInternal(double dbl) {
+  WrappedIOBufQueueAppender appender(out_);
+  folly::toAppend(dbl, &appender);
+  return appender.size();
+}
+
+uint32_t JSONProtocolWriterCommon::writeJSONIntInternal(int64_t num) {
+  WrappedIOBufQueueAppender appender(out_);
+  if (!context.empty() && context.back().type == ContextType::MAP &&
+      context.back().meta % 2 == 1) {
+    folly::toAppend('"', num, '"', &appender);
+  } else {
+    folly::toAppend(num, &appender);
+  }
+  return appender.size();
+}
+
+static inline folly::StringPiece sp(char const& ch) {
+  return {&ch, 1};
+}
+
+[[noreturn]] void JSONProtocolReaderCommon::throwBadVersion() {
+  throw TProtocolException(
+      TProtocolException::BAD_VERSION, "Message contained bad version.");
+}
+
+[[noreturn]] void JSONProtocolReaderCommon::throwUnrecognizableAsBoolean(
+    std::string const& s) {
+  throw TProtocolException(
+      TProtocolException::INVALID_DATA, s + " is not a valid bool");
+}
+
+[[noreturn]] void JSONProtocolReaderCommon::throwUnrecognizableAsIntegral(
+    folly::StringPiece s,
+    std::type_info const& type) {
+  throw TProtocolException(
+      TProtocolException::INVALID_DATA,
+      folly::to<std::string>(s, " is not a valid ", type.name()));
+}
+
+[[noreturn]] void JSONProtocolReaderCommon::throwUnrecognizableAsFloatingPoint(
+    std::string const& s) {
+  throw TProtocolException(
+      TProtocolException::INVALID_DATA, s + " is not a valid float/double");
+}
+
+[[noreturn]] void JSONProtocolReaderCommon::throwUnrecognizableAsString(
+    std::string const& s,
+    std::exception const& e) {
+  throw TProtocolException(
+      TProtocolException::INVALID_DATA,
+      s + " is not a valid JSON string: " + e.what());
+}
+
+[[noreturn]] void JSONProtocolReaderCommon::throwUnrecognizableAsAny(
+    std::string const& s) {
+  throw TProtocolException(
+      TProtocolException::INVALID_DATA, s + " is not valid JSON");
+}
+
+[[noreturn]] void JSONProtocolReaderCommon::throwInvalidFieldStart(
+    char const ch) {
+  throw TProtocolException(
+      TProtocolException::INVALID_DATA,
+      std::string(1, ch) + " is not a valid start to a JSON field");
+}
+
+[[noreturn]] void JSONProtocolReaderCommon::throwUnexpectedChar(
+    char const ch,
+    char const expected) {
+  constexpr auto fmt =
+      "expected '{}' (hex 0x{:02x}), read '{:c}' (hex 0x{:02x})";
+  auto const msg = folly::sformat(fmt, expected, expected, ch, ch);
+  throw TProtocolException(TProtocolException::INVALID_DATA, msg);
+}
+
+[[noreturn]] void JSONProtocolReaderCommon::throwInvalidEscapeChar(
+    char const ch) {
+  throw TProtocolException(
+      TProtocolException::INVALID_DATA,
+      folly::to<std::string>("Expected control char, got '", sp(ch), "'."));
+}
+
+[[noreturn]] void JSONProtocolReaderCommon::throwInvalidHexChar(char const ch) {
+  throw TProtocolException(
+      TProtocolException::INVALID_DATA,
+      folly::to<std::string>(
+          "Expected hex val ([0-9a-f]); got \'", sp(ch), "\'."));
+}
 }}

@@ -6,22 +6,29 @@ namespace java.swift test_swift.cpp_reflection
 namespace php test_php.cpp_reflection
 namespace python test_py.cpp_reflection
 
+cpp_include "thrift/test/fatal_custom_types.h"
+
 enum enum1 {
-  field0,
-  field1,
-  field2
+  field0 = 0,
+  field1 = 1,
+  field2 = 2,
 }
 
 enum enum2 {
-  field0_2,
-  field1_2,
-  field2_2
+  field0_2 = 0,
+  field1_2 = 1,
+  field2_2 = 2,
 }
 
 enum enum3 {
-  field0_3,
-  field1_3,
-  field2_3
+  field0_3 = 0,
+  field1_3 = 1 (
+    field_annotation = "field annotated",
+  ),
+  field2_3 = 2 (
+    field_structured_annotation = '{"a": "foo", "b": 567, "c": true}',
+    field_annotation = "some other text",
+  ),
 } (
   one.here = "with some value associated",
   another.there = ".",
@@ -57,6 +64,10 @@ struct structA {
   2: string b
 }
 
+typedef structA (
+  cpp.type = "test_cpp_reflection::custom_structA"
+) my_structA
+
 union unionA {
   1: i32 i
   2: double d
@@ -77,6 +88,8 @@ struct structB {
 } (
   some.annotation = "this is its value",
   some.other.annotation = "this is its other value",
+  multi_line_annotation = "line one
+line two"
 )
 
 struct structC {
@@ -152,6 +165,51 @@ struct struct3 {
   18: map<string, structB> fieldR
 }
 
+struct struct4 {
+  1: required i32 field0
+  2: optional string field1
+  3: enum1 field2
+  6: structA field3
+}
+
+struct struct5 {
+  1: required i32 field0
+  2: optional string field1
+  3: enum1 field2
+  4: structA field3 (annotate_here = "with text")
+  5: structB field4
+}
+
+struct struct_binary {
+  1: binary bi
+}
+
+struct annotated {
+  1: i32 a (
+    m_b_false = 'false',
+    m_b_true = 'true',
+    m_int = '10',
+    m_string = '"hello"',
+    m_int_list = '[-1, 2, 3]',
+    m_str_list = '["a", "b", "c"]',
+    m_mixed_list = '["a", 1, "b", 2]',
+    m_int_map = '{"a": 1, "b": -2, "c": -3}',
+    m_str_map = '{"a": "A", "b": "B", "c": "C"}',
+    m_mixed_map = '{"a": -2, "b": "B", "c": 3}'
+  )
+} (
+  s_b_false = 'false',
+  s_b_true = 'true',
+  s_int = '10',
+  s_string = '"hello"',
+  s_int_list = '[-1, 2, 3]',
+  s_str_list = '["a", "b", "c"]',
+  s_mixed_list = '["a", 1, "b", 2]',
+  s_int_map = '{"a": 1, "b": -2, "c": -3}',
+  s_str_map = '{"a": "A", "b": "B", "c": "C"}',
+  s_mixed_map = '{"a": -2, "b": "B", "c": 3}'
+)
+
 service service1 {
   void method1();
   void method2(1: i32 x, 2: struct1 y, 3: double z);
@@ -182,3 +240,133 @@ service service3 {
 const i32 constant1 = 1357;
 const string constant2 = "hello";
 const enum1 constant3 = enum1.field0;
+
+enum enum_with_special_names {
+  get = 0,
+  getter = 1,
+  lists = 2,
+  maps = 3,
+  name = 4,
+  name_to_value = 5,
+  names = 6,
+  prefix_tree = 7,
+  sets = 8,
+  setter = 9,
+  str = 10,
+  strings = 11,
+  type = 12,
+  value = 13,
+  value_to_name = 14,
+  values = 15,
+  id = 16,
+  ids = 17,
+  descriptor = 18,
+  descriptors = 19,
+  key = 20,
+  keys = 21,
+  annotation = 22,
+  annotations = 23,
+  member = 24,
+  members = 25,
+}
+
+union union_with_special_names {
+  1:  i32 get
+  2:  i32 getter
+  3:  i32 lists
+  4:  i32 maps
+  5:  i32 name
+  6:  i32 name_to_value
+  7:  i32 names
+  8:  i32 prefix_tree
+  9:  i32 sets
+  10: i32 setter
+  11: i32 str
+  12: i32 strings
+  13: i32 type
+  14: i32 value
+  15: i32 value_to_name
+  16: i32 values
+  17: i32 id
+  18: i32 ids
+  19: i32 descriptor
+  20: i32 descriptors
+  21: i32 key
+  22: i32 keys
+  23: i32 annotation
+  24: i32 annotations
+  25: i32 member
+  26: i32 members
+}
+
+struct struct_with_special_names {
+  1:  i32 get
+  2:  i32 getter
+  3:  i32 lists
+  4:  i32 maps
+  5:  i32 name
+  6:  i32 name_to_value
+  7:  i32 names
+  8:  i32 prefix_tree
+  9:  i32 sets
+  10: i32 setter
+  11: i32 str
+  12: i32 strings
+  13: i32 type
+  14: i32 value
+  15: i32 value_to_name
+  16: i32 values
+  17: i32 id
+  18: i32 ids
+  19: i32 descriptor
+  20: i32 descriptors
+  21: i32 key
+  22: i32 keys
+  23: i32 annotation
+  24: i32 annotations
+  25: i32 member
+  26: i32 members
+}
+
+service service_with_special_names {
+  i32 get()
+  i32 getter()
+  i32 lists()
+  i32 maps()
+  i32 name()
+  i32 name_to_value()
+  i32 names()
+  i32 prefix_tree()
+  i32 sets()
+  i32 setter()
+  i32 str()
+  i32 strings()
+  i32 type()
+  i32 value()
+  i32 value_to_name()
+  i32 values()
+  i32 id()
+  i32 ids()
+  i32 descriptor()
+  i32 descriptors()
+  i32 key()
+  i32 keys()
+  i32 annotation()
+  i32 annotations()
+  i32 member()
+  i32 members()
+}
+
+const i32 constant_with_special_name = 42;
+
+typedef i32 (cpp.type = 'CppFakeI32') FakeI32
+typedef i32 (cpp.type = 'CppHasANumber', cpp.indirection = '.number') HasANumber
+typedef i32 (cpp.type = 'CppHasAResult', cpp.indirection = '.foo().result()')
+    HasAResult
+
+struct struct_with_indirections {
+  1: i32 real,
+  2: FakeI32 fake,
+  3: HasANumber number,
+  4: HasAResult result,
+}

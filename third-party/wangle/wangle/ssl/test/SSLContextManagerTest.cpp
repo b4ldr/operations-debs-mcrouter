@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #include <folly/io/async/EventBase.h>
 #include <folly/io/async/SSLContext.h>
@@ -20,11 +26,19 @@ using namespace folly;
 
 namespace wangle {
 
+class SSLContextManagerForTest : public SSLContextManager {
+ public:
+  using SSLContextManager::SSLContextManager;
+  using SSLContextManager::insertSSLCtxByDomainName;
+};
+
 TEST(SSLContextManagerTest, Test1)
 {
   EventBase eventBase;
-  SSLContextManager sslCtxMgr(&eventBase, "vip_ssl_context_manager_test_",
-                              true, nullptr);
+  SSLContextManagerForTest sslCtxMgr(&eventBase,
+                                     "vip_ssl_context_manager_test_",
+                                     true,
+                                     nullptr);
   auto www_facebook_com_ctx = std::make_shared<SSLContext>();
   auto start_facebook_com_ctx = std::make_shared<SSLContext>();
   auto start_abc_facebook_com_ctx = std::make_shared<SSLContext>();
@@ -110,12 +124,15 @@ TEST(SSLContextManagerTest, Test1)
 }
 
 
+#if !(FOLLY_OPENSSL_IS_110) && !defined(OPENSSL_IS_BORINGSSL)
 // TODO Opensource builds cannot the cert/key paths
 TEST(SSLContextManagerTest, DISABLED_TestSessionContextIfSupplied)
 {
   EventBase eventBase;
-  SSLContextManager sslCtxMgr(&eventBase, "vip_ssl_context_manager_test_",
-                              true, nullptr);
+  SSLContextManagerForTest sslCtxMgr(&eventBase,
+                                     "vip_ssl_context_manager_test_",
+                                     true,
+                                     nullptr);
   SSLContextConfig ctxConfig;
   ctxConfig.sessionContext = "test";
   ctxConfig.addCertificate(
@@ -143,8 +160,10 @@ TEST(SSLContextManagerTest, DISABLED_TestSessionContextIfSupplied)
 TEST(SSLContextManagerTest, DISABLED_TestSessionContextIfSessionCacheAbsent)
 {
   EventBase eventBase;
-  SSLContextManager sslCtxMgr(&eventBase, "vip_ssl_context_manager_test_",
-                              true, nullptr);
+  SSLContextManagerForTest sslCtxMgr(&eventBase,
+                                     "vip_ssl_context_manager_test_",
+                                     true,
+                                     nullptr);
   SSLContextConfig ctxConfig;
   ctxConfig.sessionContext = "test";
   ctxConfig.sessionCacheEnabled = false;
@@ -168,5 +187,6 @@ TEST(SSLContextManagerTest, DISABLED_TestSessionContextIfSessionCacheAbsent)
   EXPECT_EQ(*ctxConfig.sessionContext, sessCtxFromCtx);
   eventBase.loop();
 }
+#endif
 
 } // namespace wangle

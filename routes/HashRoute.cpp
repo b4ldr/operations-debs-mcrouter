@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2015, Facebook, Inc.
+ *  Copyright (c) 2017, Facebook, Inc.
  *  All rights reserved.
  *
  *  This source code is licensed under the BSD-style license found in the
@@ -10,26 +10,26 @@
 #include <folly/dynamic.h>
 
 #include "mcrouter/lib/Ch3HashFunc.h"
-#include "mcrouter/lib/config/RouteHandleFactory.h"
 #include "mcrouter/lib/Crc32HashFunc.h"
-#include "mcrouter/lib/routes/HashRoute.h"
 #include "mcrouter/lib/WeightedCh3HashFunc.h"
+#include "mcrouter/lib/config/RouteHandleFactory.h"
+#include "mcrouter/lib/routes/HashRoute.h"
+#include "mcrouter/routes/LatestRoute.h"
 #include "mcrouter/routes/McRouteHandleBuilder.h"
 #include "mcrouter/routes/McrouterRouteHandle.h"
 #include "mcrouter/routes/ShardHashFunc.h"
 
-namespace facebook { namespace memcache { namespace mcrouter {
+namespace facebook {
+namespace memcache {
+namespace mcrouter {
 
 McrouterRouteHandlePtr makeNullRoute();
 
-McrouterRouteHandlePtr makeLatestRoute(
-  const folly::dynamic& json,
-  std::vector<McrouterRouteHandlePtr> targets);
+namespace {
 
 McrouterRouteHandlePtr makeHashRouteCrc32(
-  std::vector<McrouterRouteHandlePtr> rh,
-  std::string salt) {
-
+    std::vector<McrouterRouteHandlePtr> rh,
+    std::string salt) {
   auto n = rh.size();
   if (n == 0) {
     return makeNullRoute();
@@ -39,15 +39,12 @@ McrouterRouteHandlePtr makeHashRouteCrc32(
   }
 
   return makeMcrouterRouteHandle<HashRoute, Crc32HashFunc>(
-    std::move(rh),
-    std::move(salt),
-    Crc32HashFunc(n));
+      std::move(rh), std::move(salt), Crc32HashFunc(n));
 }
 
 McrouterRouteHandlePtr makeHashRouteCh3(
-  std::vector<McrouterRouteHandlePtr> rh,
-  std::string salt) {
-
+    std::vector<McrouterRouteHandlePtr> rh,
+    std::string salt) {
   auto n = rh.size();
   if (n == 0) {
     return makeNullRoute();
@@ -56,15 +53,12 @@ McrouterRouteHandlePtr makeHashRouteCh3(
     return std::move(rh[0]);
   }
   return makeMcrouterRouteHandle<HashRoute, Ch3HashFunc>(
-    std::move(rh),
-    std::move(salt),
-    Ch3HashFunc(n));
+      std::move(rh), std::move(salt), Ch3HashFunc(n));
 }
 
 McrouterRouteHandlePtr makeHashRouteConstShard(
-  std::vector<McrouterRouteHandlePtr> rh,
-  std::string salt) {
-
+    std::vector<McrouterRouteHandlePtr> rh,
+    std::string salt) {
   auto n = rh.size();
   if (n == 0) {
     return makeNullRoute();
@@ -74,16 +68,13 @@ McrouterRouteHandlePtr makeHashRouteConstShard(
   }
 
   return makeMcrouterRouteHandle<HashRoute, ConstShardHashFunc>(
-    std::move(rh),
-    std::move(salt),
-    ConstShardHashFunc(n));
+      std::move(rh), std::move(salt), ConstShardHashFunc(n));
 }
 
 McrouterRouteHandlePtr makeHashRouteWeightedCh3(
-  std::vector<McrouterRouteHandlePtr> rh,
-  std::string salt,
-  WeightedCh3HashFunc func) {
-
+    std::vector<McrouterRouteHandlePtr> rh,
+    std::string salt,
+    WeightedCh3HashFunc func) {
   auto n = rh.size();
   if (n == 0) {
     return makeNullRoute();
@@ -93,25 +84,24 @@ McrouterRouteHandlePtr makeHashRouteWeightedCh3(
   }
 
   return makeMcrouterRouteHandle<HashRoute, WeightedCh3HashFunc>(
-    std::move(rh),
-    std::move(salt),
-    std::move(func));
+      std::move(rh), std::move(salt), std::move(func));
 }
 
-McrouterRouteHandlePtr makeHashRoute(
-  const folly::dynamic& json,
-  std::vector<McrouterRouteHandlePtr> rh) {
+} // anonymous
 
+McrouterRouteHandlePtr makeHashRoute(
+    const folly::dynamic& json,
+    std::vector<McrouterRouteHandlePtr> rh,
+    size_t threadId) {
   std::string salt;
   folly::StringPiece funcType = Ch3HashFunc::type();
   if (json.isObject()) {
     if (auto jsalt = json.get_ptr("salt")) {
       checkLogic(jsalt->isString(), "HashRoute: salt is not a string");
-      salt = jsalt->stringPiece().str();
+      salt = jsalt->getString();
     }
     if (auto jhashFunc = json.get_ptr("hash_func")) {
-      checkLogic(jhashFunc->isString(),
-                 "HashRoute: hash_func is not a string");
+      checkLogic(jhashFunc->isString(), "HashRoute: hash_func is not a string");
       funcType = jhashFunc->stringPiece();
     }
   }
@@ -122,21 +112,19 @@ McrouterRouteHandlePtr makeHashRoute(
     return makeHashRouteCrc32(std::move(rh), std::move(salt));
   } else if (funcType == WeightedCh3HashFunc::type()) {
     WeightedCh3HashFunc func{json, rh.size()};
-    return makeHashRouteWeightedCh3(std::move(rh), std::move(salt),
-                                    std::move(func));
+    return makeHashRouteWeightedCh3(
+        std::move(rh), std::move(salt), std::move(func));
   } else if (funcType == ConstShardHashFunc::type()) {
     return makeHashRouteConstShard(std::move(rh), std::move(salt));
   } else if (funcType == "Latest") {
-    return makeLatestRoute(json, std::move(rh));
+    return createLatestRoute<McrouterRouterInfo>(json, std::move(rh), threadId);
   }
-  checkLogic(false, "Unknown hash function: {}", funcType);
-  return nullptr;
+  throwLogic("Unknown hash function: {}", funcType);
 }
 
 McrouterRouteHandlePtr makeHashRoute(
     RouteHandleFactory<McrouterRouteHandleIf>& factory,
     const folly::dynamic& json) {
-
   std::vector<McrouterRouteHandlePtr> children;
   if (json.isObject()) {
     if (auto jchildren = json.get_ptr("children")) {
@@ -145,7 +133,8 @@ McrouterRouteHandlePtr makeHashRoute(
   } else {
     children = factory.createList(json);
   }
-  return makeHashRoute(json, std::move(children));
+  return makeHashRoute(json, std::move(children), factory.getThreadId());
 }
-
-}}}  // facebook::memcache::mcrouter
+}
+}
+} // facebook::memcache::mcrouter

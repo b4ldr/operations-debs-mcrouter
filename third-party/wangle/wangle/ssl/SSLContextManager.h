@@ -1,16 +1,23 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #pragma once
 
 #include <folly/io/async/EventBase.h>
 #include <folly/io/async/SSLContext.h>
+#include <folly/SharedMutex.h>
 
 #include <glog/logging.h>
 #include <list>
@@ -35,9 +42,42 @@ struct SSLCacheOptions;
 class SSLStats;
 class TLSTicketKeyManager;
 struct TLSTicketKeySeeds;
+class ServerSSLContext;
 
 class SSLContextManager {
+ private:
+  struct SslContexts {
+    void clear();
+    void swap(SslContexts& other) noexcept;
+
+    std::vector<std::shared_ptr<ServerSSLContext>> ctxs;
+    std::shared_ptr<ServerSSLContext> defaultCtx;
+    std::string defaultCtxDomainName;
+
+    /**
+     * Container to store the (DomainName -> SSL_CTX) mapping
+     */
+    std::unordered_map<
+      SSLContextKey,
+      std::shared_ptr<folly::SSLContext>,
+      SSLContextKeyHash> dnMap;
+  };
+
  public:
+
+   /**
+   * Provide ability to perform explicit client certificate
+   * verification
+   */
+   struct ClientCertVerifyCallback {
+
+     // no-op. Should be overridden if actual
+     // verification is required
+     virtual void attachSSLContext(
+       const std::shared_ptr<folly::SSLContext>& sslCtx) = 0;
+     virtual ~ClientCertVerifyCallback() {}
+   };
+
 
   explicit SSLContextManager(folly::EventBase* eventBase,
                              const std::string& vipName, bool strict,
@@ -61,7 +101,31 @@ class SSLContextManager {
     const SSLCacheOptions& cacheOptions,
     const TLSTicketKeySeeds* ticketSeeds,
     const folly::SocketAddress& vipAddress,
+    const std::shared_ptr<SSLCacheProvider> &externalCache,
+    SslContexts* contexts = nullptr);
+
+  /**
+   * Resets SSLContextManager with new X509s
+   *
+   * @param ctxConfigs    Details of a X509s, private key, password, etc.
+   * @param cacheOptions  Options for how to do session caching.
+   * @param ticketSeeds   If non-null, the initial ticket key seeds to use.
+   * @param vipAddress    Which VIP are the X509(s) used for? It is only for
+   *                      for user friendly log message
+   * @param externalCache Optional external provider for the session cache;
+   *                      may be null
+   */
+  void resetSSLContextConfigs(
+    const std::vector<SSLContextConfig>& ctxConfig,
+    const SSLCacheOptions& cacheOptions,
+    const TLSTicketKeySeeds* ticketSeeds,
+    const folly::SocketAddress& vipAddress,
     const std::shared_ptr<SSLCacheProvider> &externalCache);
+
+  /**
+   * Clears all ssl contexts
+   */
+  void clear();
 
   /**
    * Get the default SSL_CTX for a VIP
@@ -87,15 +151,6 @@ class SSLContextManager {
   std::shared_ptr<folly::SSLContext>
     getSSLCtxByExactDomain(const SSLContextKey& key) const;
 
-  /**
-   * Insert a SSLContext by domain name.
-   */
-  void insertSSLCtxByDomainName(
-    const char* dn,
-    size_t len,
-    std::shared_ptr<folly::SSLContext> sslCtx,
-    CertCrypto certCrypto = CertCrypto::BEST_AVAILABLE);
-
   void reloadTLSTicketKeys(const std::vector<std::string>& oldSeeds,
                            const std::vector<std::string>& currentSeeds,
                            const std::vector<std::string>& newSeeds);
@@ -111,28 +166,61 @@ class SSLContextManager {
     clientHelloTLSExtStats_ = stats;
   }
 
+  void setClientVerifyCallback(std::unique_ptr<ClientCertVerifyCallback> cb) {
+        clientCertVerifyCallback_ = std::move(cb);
+  }
+
  protected:
   virtual void enableAsyncCrypto(
-    const std::shared_ptr<folly::SSLContext>& sslCtx,
-    const SSLContextConfig& ctxConfig) {
+    const std::shared_ptr<folly::SSLContext>&,
+    const SSLContextConfig&,
+    const std::string& /* certificateFile */) {
     LOG(FATAL) << "Unsupported in base SSLContextManager";
   }
+
+  virtual void loadCertificate(
+      wangle::ServerSSLContext* sslCtx,
+      const SSLContextConfig& ctxConfig,
+      const std::string& certPath);
+
+  virtual void overrideConfiguration(
+    const std::shared_ptr<folly::SSLContext>&,
+    const SSLContextConfig&) {}
+
+  std::string vipName_;
   SSLStats* stats_{nullptr};
+
+  /**
+   * Insert a SSLContext by domain name.
+   */
+  void insertSSLCtxByDomainName(
+    const char* dn,
+    size_t len,
+    std::shared_ptr<folly::SSLContext> sslCtx,
+    SslContexts& contexts,
+    CertCrypto certCrypto = CertCrypto::BEST_AVAILABLE);
+
+  void insertSSLCtxByDomainName(
+    const char* dn,
+    size_t len,
+    std::shared_ptr<folly::SSLContext> sslCtx,
+    CertCrypto certCrypto = CertCrypto::BEST_AVAILABLE) {
+    insertSSLCtxByDomainName(dn, len, sslCtx, contexts_, certCrypto);
+  }
 
  private:
   SSLContextManager(const SSLContextManager&) = delete;
 
   void ctxSetupByOpensslFeature(
-    std::shared_ptr<folly::SSLContext> sslCtx,
-    const SSLContextConfig& ctxConfig);
+    std::shared_ptr<ServerSSLContext> sslCtx,
+    const SSLContextConfig& ctxConfig,
+    SslContexts& contexts);
 
   /**
    * Callback function from openssl to find the right X509 to
    * use during SSL handshake
    */
-#if OPENSSL_VERSION_NUMBER >= 0x1000105fL && \
-    !defined(OPENSSL_NO_TLSEXT) && \
-    defined(SSL_CTRL_SET_TLSEXT_SERVERNAME_CB)
+#if FOLLY_OPENSSL_HAS_SNI
 # define PROXYGEN_HAVE_SERVERNAMECALLBACK
   folly::SSLContext::ServerNameCallbackResult
     serverNameCallback(SSL* ssl);
@@ -160,46 +248,28 @@ class SSLContextManager {
    */
 
   void insert(
-    std::shared_ptr<folly::SSLContext> sslCtx,
-    std::unique_ptr<SSLSessionCacheManager> cmanager,
-    std::unique_ptr<TLSTicketKeyManager> tManager,
-    bool defaultFallback);
+    std::shared_ptr<ServerSSLContext> sslCtx,
+    bool defaultFallback,
+    SslContexts& contexts);
 
   void insertSSLCtxByDomainNameImpl(
     const char* dn,
     size_t len,
     std::shared_ptr<folly::SSLContext> sslCtx,
+    SslContexts& contexts,
     CertCrypto certCrypto);
 
   void insertIntoDnMap(SSLContextKey key,
     std::shared_ptr<folly::SSLContext> sslCtx,
-    bool overwrite);
+    bool overwrite,
+    SslContexts& contexts);
 
-
-  /**
-   * Container to own the SSLContext, SSLSessionCacheManager and
-   * TLSTicketKeyManager.
-   */
-  std::vector<std::shared_ptr<folly::SSLContext>> ctxs_;
-  std::vector<std::unique_ptr<SSLSessionCacheManager>>
-    sessionCacheManagers_;
-  std::vector<std::unique_ptr<TLSTicketKeyManager>> ticketManagers_;
-
-  std::shared_ptr<folly::SSLContext> defaultCtx_;
-  std::string defaultCtxDomainName_;
-
-  /**
-   * Container to store the (DomainName -> SSL_CTX) mapping
-   */
-  std::unordered_map<
-    SSLContextKey,
-    std::shared_ptr<folly::SSLContext>,
-    SSLContextKeyHash> dnMap_;
-
+  SslContexts contexts_;
   folly::EventBase* eventBase_;
   ClientHelloExtStats* clientHelloTLSExtStats_{nullptr};
   SSLContextConfig::SNINoMatchFn noMatchFn_;
   bool strict_{true};
+  std::unique_ptr<ClientCertVerifyCallback> clientCertVerifyCallback_{nullptr};
 };
 
 } // namespace wangle

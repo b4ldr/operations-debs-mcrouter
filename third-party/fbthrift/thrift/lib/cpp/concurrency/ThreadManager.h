@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2014-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,24 +13,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #ifndef _THRIFT_CONCURRENCY_THREADMANAGER_H_
 #define _THRIFT_CONCURRENCY_THREADMANAGER_H_ 1
 
 #include <sys/types.h>
-#include <unistd.h>
 
 #include <array>
 #include <functional>
 #include <memory>
 
 #include <folly/Executor.h>
+#include <folly/SharedMutex.h>
+#include <folly/executors/Codel.h>
 #include <folly/io/async/Request.h>
-#include <folly/LifoSem.h>
-#include <folly/RWSpinLock.h>
 #include <folly/portability/GFlags.h>
-
-#include <wangle/concurrent/Codel.h>
+#include <folly/portability/Unistd.h>
+#include <folly/synchronization/LifoSem.h>
 
 #include <thrift/lib/cpp/concurrency/FunctionRunner.h>
 #include <thrift/lib/cpp/concurrency/Thread.h>
@@ -201,6 +199,11 @@ class ThreadManager : public folly::Executor {
   virtual std::shared_ptr<Runnable> removeNextPending() = 0;
 
   /**
+   * Removes all pending tasks.
+   */
+  virtual void clearPending() = 0;
+
+  /**
    * Set a callback to be called when a task is expired and not run.
    *
    * @param expireCallback a function called with the shared_ptr<Runnable> for
@@ -231,16 +234,31 @@ class ThreadManager : public folly::Executor {
                            size_t maxQueueLen = 0);
 
   /**
+   * Creates a thread manager with support for priorities. Unlike
+   * PriorityThreadManager, requests are still served from a single
+   * thread pool. Arguments are the same as the standard threadManager,
+   * except that MaxQueueLen is the max for any single priority
+   */
+  template <typename SemType = folly::LifoSem>
+  static std::shared_ptr<ThreadManager>
+  newPriorityQueueThreadManager(
+    size_t numThreads,
+    bool enableTaskStats = false,
+    size_t maxQueueLen = 0
+  );
+
+  /**
    * Get an internal statistics.
    *
-   * @param waitTimeUs - average time (us) task spent in a queue
-   * @param runTimeUs - average time (us) task spent running
+   * @param waitTime - average time (us) task spent in a queue
+   * @param runTime - average time (us) task spent running
    * @param maxItems - max items collected for stats
    */
-  virtual void getStats(int64_t& waitTimeUs, int64_t& runTimeUs,
+  virtual void getStats(std::chrono::microseconds& waitTime,
+                        std::chrono::microseconds& runTime,
                         int64_t /*maxItems*/) {
-    waitTimeUs = 0;
-    runTimeUs = 0;
+    waitTime = std::chrono::microseconds::zero();
+    runTime = std::chrono::microseconds::zero();
   }
 
   struct RunStats {
@@ -262,7 +280,7 @@ class ThreadManager : public folly::Executor {
 
   virtual void enableCodel(bool) = 0;
 
-  virtual wangle::Codel* getCodel() = 0;
+  virtual folly::Codel* getCodel() = 0;
 
   template <typename SemType>
   class ImplT;
@@ -270,7 +288,7 @@ class ThreadManager : public folly::Executor {
   typedef ImplT<folly::LifoSem> Impl;
 
  protected:
-  static folly::RWSpinLock observerLock_;
+  static folly::SharedMutex observerLock_;
   static std::shared_ptr<Observer> observer_;
 };
 
@@ -297,6 +315,9 @@ class PriorityThreadManager : public ThreadManager {
   using ThreadManager::removeWorker;
   virtual void removeWorker(PRIORITY priority, size_t value) = 0;
 
+  using ThreadManager::workerCount;
+  virtual size_t workerCount(PRIORITY priority) = 0;
+
   using ThreadManager::add;
   virtual void add(PRIORITY priority,
                    std::shared_ptr<Runnable> task,
@@ -308,12 +329,12 @@ class PriorityThreadManager : public ThreadManager {
   using ThreadManager::tryAdd;
   virtual bool tryAdd(PRIORITY priority, std::shared_ptr<Runnable> task) = 0;
 
-  virtual uint8_t getNumPriorities() const override {
+  uint8_t getNumPriorities() const override {
     return N_PRIORITIES;
   }
 
   using ThreadManager::getCodel;
-  virtual wangle::Codel* getCodel(PRIORITY priority) = 0;
+  virtual folly::Codel* getCodel(PRIORITY priority) = 0;
 
   /**
    * Creates a priority-aware thread manager given thread factory and size for
@@ -404,12 +425,15 @@ class ThreadManagerExecutorAdapter : public ThreadManager {
 
   void remove(std::shared_ptr<Runnable> /*task*/) override {}
   std::shared_ptr<Runnable> removeNextPending() override { return nullptr; }
+  void clearPending() override {}
 
   void setExpireCallback(ExpireCallback /*expireCallback*/) override {}
   void setCodelCallback(ExpireCallback /*expireCallback*/) override {}
   void setThreadInitCallback(InitCallback /*initCallback*/) override {}
   void enableCodel(bool) override {}
-  wangle::Codel* getCodel() override { return nullptr; }
+  folly::Codel* getCodel() override {
+    return nullptr;
+  }
 
  private:
   std::shared_ptr<folly::Executor> exe_;

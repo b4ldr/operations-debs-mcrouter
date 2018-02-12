@@ -1,19 +1,26 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #pragma once
 
-#include <string>
 #include <folly/Optional.h>
 #include <folly/io/async/SSLContext.h>
-#include <vector>
+#include <folly/io/async/SSLOptions.h>
 #include <set>
+#include <string>
+#include <vector>
 
 /**
  * SSLContextConfig helps to describe the configs/options for
@@ -42,6 +49,12 @@ struct SSLContextConfig {
     std::string passwordPath;
   };
 
+  static const std::string& getDefaultCiphers() {
+    static const std::string& defaultCiphers =
+        folly::join(':', folly::ssl::SSLServerOptions::kCipherList);
+    return defaultCiphers;
+  }
+
   struct KeyOffloadParams {
     // What keys do we want to offload
     // Currently supported values: "rsa", "ec" (can also be empty)
@@ -49,6 +62,10 @@ struct SSLContextConfig {
     std::set<std::string> offloadType;
     // Whether this set of keys need local fallback
     bool localFallback{false};
+    // An identifier for the service to which we are offloading.
+    std::string serviceId{"default"};
+    // Whether we want to offload certificates
+    bool enableCertOffload{false};
   };
 
   /**
@@ -84,16 +101,9 @@ struct SSLContextConfig {
   bool sessionCacheEnabled{true};
   bool sessionTicketEnabled{true};
   bool clientHelloParsingEnabled{true};
-  std::string sslCiphers{
-    "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:"
-    "ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES128-GCM-SHA256:"
-    "ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:"
-    "AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA:AES256-SHA:"};
+  std::string sslCiphers{getDefaultCiphers()};
   std::string eccCurveName{"prime256v1"};
-  // Ciphers to negotiate if TLS version >= 1.1
-  std::string tls11Ciphers{""};
-  // Knobs to tune ciphersuite picking probability for TLS >= 1.1
-  std::vector<std::pair<std::string, int>> tls11AltCipherlist;
+
   // Weighted lists of NPN strings to advertise
   std::list<folly::SSLContext::NextProtocolsItem>
       nextProtocols;

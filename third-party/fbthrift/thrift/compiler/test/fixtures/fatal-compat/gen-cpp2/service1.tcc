@@ -13,43 +13,48 @@
 #include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/server/Cpp2ConnContext.h>
 #include <thrift/lib/cpp2/GeneratedCodeHelper.h>
+#include <thrift/lib/cpp2/GeneratedSerializationCodeHelper.h>
 
 namespace test_cpp2 { namespace cpp_reflection {
 
 template <class Protocol_>
 uint32_t service1_method1_pargs_read(Protocol_* iprot, service1_method1_pargs* obj) {
-  uint32_t xfer = 0;
-  std::string fname;
-  apache::thrift::protocol::TType ftype;
+  (void)obj;
+  auto _xferStart = iprot->getCurrentPosition().getCurrentPosition();
+  std::string _fname;
+  apache::thrift::protocol::TType _ftype;
   int16_t fid;
 
-  xfer += iprot->readStructBegin(fname);
+  iprot->readStructBegin(_fname);
 
   using apache::thrift::TProtocolException;
 
 
   while (true) {
-    xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == apache::thrift::protocol::T_STOP) {
+    iprot->readFieldBegin(_fname, _ftype, fid);
+    if (_ftype == apache::thrift::protocol::T_STOP) {
       break;
     }
-    if (fid == std::numeric_limits<int16_t>::min()) {}
+    if (iprot->kUsesFieldNames()) {
+      obj->translateFieldName(_fname, fid, _ftype);
+    }
     switch (fid) {
       default:
       {
-        xfer += iprot->skip(ftype);
+        iprot->skip(_ftype);
         break;
       }
     }
-    xfer += iprot->readFieldEnd();
+    iprot->readFieldEnd();
   }
-  xfer += iprot->readStructEnd();
+  iprot->readStructEnd();
 
-  return xfer;
+  return iprot->getCurrentPosition().getCurrentPosition() - _xferStart;
 }
 
 template <class Protocol_>
-uint32_t service1_method1_pargs_serializedSize(Protocol_* prot_, const service1_method1_pargs* obj) {
+uint32_t service1_method1_pargs_serializedSize(Protocol_ const* prot_, const service1_method1_pargs* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method1_pargs");
   xfer += prot_->serializedSizeStop();
@@ -57,7 +62,8 @@ uint32_t service1_method1_pargs_serializedSize(Protocol_* prot_, const service1_
 }
 
 template <class Protocol_>
-uint32_t service1_method1_pargs_serializedSizeZC(Protocol_* prot_, const service1_method1_pargs* obj) {
+uint32_t service1_method1_pargs_serializedSizeZC(Protocol_ const* prot_, const service1_method1_pargs* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method1_pargs");
   xfer += prot_->serializedSizeStop();
@@ -66,6 +72,7 @@ uint32_t service1_method1_pargs_serializedSizeZC(Protocol_* prot_, const service
 
 template <class Protocol_>
 uint32_t service1_method1_pargs_write(Protocol_* prot_, const service1_method1_pargs* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->writeStructBegin("service1_method1_pargs");
   xfer += prot_->writeFieldStop();
@@ -75,38 +82,42 @@ uint32_t service1_method1_pargs_write(Protocol_* prot_, const service1_method1_p
 
 template <class Protocol_>
 uint32_t service1_method1_presult_read(Protocol_* iprot, service1_method1_presult* obj) {
-  uint32_t xfer = 0;
-  std::string fname;
-  apache::thrift::protocol::TType ftype;
+  (void)obj;
+  auto _xferStart = iprot->getCurrentPosition().getCurrentPosition();
+  std::string _fname;
+  apache::thrift::protocol::TType _ftype;
   int16_t fid;
 
-  xfer += iprot->readStructBegin(fname);
+  iprot->readStructBegin(_fname);
 
   using apache::thrift::TProtocolException;
 
 
   while (true) {
-    xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == apache::thrift::protocol::T_STOP) {
+    iprot->readFieldBegin(_fname, _ftype, fid);
+    if (_ftype == apache::thrift::protocol::T_STOP) {
       break;
     }
-    if (fid == std::numeric_limits<int16_t>::min()) {}
+    if (iprot->kUsesFieldNames()) {
+      obj->translateFieldName(_fname, fid, _ftype);
+    }
     switch (fid) {
       default:
       {
-        xfer += iprot->skip(ftype);
+        iprot->skip(_ftype);
         break;
       }
     }
-    xfer += iprot->readFieldEnd();
+    iprot->readFieldEnd();
   }
-  xfer += iprot->readStructEnd();
+  iprot->readStructEnd();
 
-  return xfer;
+  return iprot->getCurrentPosition().getCurrentPosition() - _xferStart;
 }
 
 template <class Protocol_>
-uint32_t service1_method1_presult_serializedSize(Protocol_* prot_, const service1_method1_presult* obj) {
+uint32_t service1_method1_presult_serializedSize(Protocol_ const* prot_, const service1_method1_presult* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method1_presult");
   xfer += prot_->serializedSizeStop();
@@ -114,7 +125,8 @@ uint32_t service1_method1_presult_serializedSize(Protocol_* prot_, const service
 }
 
 template <class Protocol_>
-uint32_t service1_method1_presult_serializedSizeZC(Protocol_* prot_, const service1_method1_presult* obj) {
+uint32_t service1_method1_presult_serializedSizeZC(Protocol_ const* prot_, const service1_method1_presult* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method1_presult");
   xfer += prot_->serializedSizeStop();
@@ -123,6 +135,7 @@ uint32_t service1_method1_presult_serializedSizeZC(Protocol_* prot_, const servi
 
 template <class Protocol_>
 uint32_t service1_method1_presult_write(Protocol_* prot_, const service1_method1_presult* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->writeStructBegin("service1_method1_presult");
   xfer += prot_->writeFieldStop();
@@ -132,78 +145,69 @@ uint32_t service1_method1_presult_write(Protocol_* prot_, const service1_method1
 
 template <class Protocol_>
 uint32_t service1_method2_pargs_read(Protocol_* iprot, service1_method2_pargs* obj) {
-  uint32_t xfer = 0;
-  std::string fname;
-  apache::thrift::protocol::TType ftype;
+  (void)obj;
+  auto _xferStart = iprot->getCurrentPosition().getCurrentPosition();
+  std::string _fname;
+  apache::thrift::protocol::TType _ftype;
   int16_t fid;
 
-  xfer += iprot->readStructBegin(fname);
+  iprot->readStructBegin(_fname);
 
   using apache::thrift::TProtocolException;
 
 
   while (true) {
-    xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == apache::thrift::protocol::T_STOP) {
+    iprot->readFieldBegin(_fname, _ftype, fid);
+    if (_ftype == apache::thrift::protocol::T_STOP) {
       break;
     }
-    if (fid == std::numeric_limits<int16_t>::min()) {
-      if (fname == "x") {
-        fid = 1;
-        ftype = apache::thrift::protocol::T_I32;
-      }
-      else if (fname == "y") {
-        fid = 2;
-        ftype = apache::thrift::protocol::T_STRUCT;
-      }
-      else if (fname == "z") {
-        fid = 3;
-        ftype = apache::thrift::protocol::T_DOUBLE;
-      }
+    if (iprot->kUsesFieldNames()) {
+      obj->translateFieldName(_fname, fid, _ftype);
     }
     switch (fid) {
       case 1:
       {
-        if (ftype == apache::thrift::protocol::T_I32) {
-          xfer += iprot->readI32((*const_cast<int32_t*>(obj->x)));
+        if (_ftype == apache::thrift::protocol::T_I32) {
+          iprot->readI32((*const_cast<int32_t*>(obj->x)));
         } else {
-          xfer += iprot->skip(ftype);
+          iprot->skip(_ftype);
         }
         break;
       }
       case 2:
       {
-        if (ftype == apache::thrift::protocol::T_STRUCT) {
-          xfer += ::apache::thrift::Cpp2Ops<  ::test_cpp2::cpp_reflection::struct1>::read(iprot, &(*const_cast< ::test_cpp2::cpp_reflection::struct1*>(obj->y)));
+        if (_ftype == apache::thrift::protocol::T_STRUCT) {
+          ::apache::thrift::Cpp2Ops<  ::test_cpp2::cpp_reflection::struct1>::read(iprot, &(*const_cast< ::test_cpp2::cpp_reflection::struct1*>(obj->y)));
         } else {
-          xfer += iprot->skip(ftype);
+          iprot->skip(_ftype);
         }
         break;
       }
       case 3:
       {
-        if (ftype == apache::thrift::protocol::T_DOUBLE) {
-          xfer += iprot->readDouble((*const_cast<double*>(obj->z)));
+        if (_ftype == apache::thrift::protocol::T_DOUBLE) {
+          iprot->readDouble((*const_cast<double*>(obj->z)));
         } else {
-          xfer += iprot->skip(ftype);
+          iprot->skip(_ftype);
         }
         break;
       }
       default:
       {
-        xfer += iprot->skip(ftype);
+        iprot->skip(_ftype);
         break;
       }
     }
-    xfer += iprot->readFieldEnd();
+    iprot->readFieldEnd();
   }
-  xfer += iprot->readStructEnd();
+  iprot->readStructEnd();
 
-  return xfer;
+  return iprot->getCurrentPosition().getCurrentPosition() - _xferStart;
 }
 
 template <class Protocol_>
-uint32_t service1_method2_pargs_serializedSize(Protocol_* prot_, const service1_method2_pargs* obj) {
+uint32_t service1_method2_pargs_serializedSize(Protocol_ const* prot_, const service1_method2_pargs* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method2_pargs");
   xfer += prot_->serializedFieldSize("x", apache::thrift::protocol::T_I32, 1);
@@ -217,7 +221,8 @@ uint32_t service1_method2_pargs_serializedSize(Protocol_* prot_, const service1_
 }
 
 template <class Protocol_>
-uint32_t service1_method2_pargs_serializedSizeZC(Protocol_* prot_, const service1_method2_pargs* obj) {
+uint32_t service1_method2_pargs_serializedSizeZC(Protocol_ const* prot_, const service1_method2_pargs* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method2_pargs");
   xfer += prot_->serializedFieldSize("x", apache::thrift::protocol::T_I32, 1);
@@ -232,6 +237,7 @@ uint32_t service1_method2_pargs_serializedSizeZC(Protocol_* prot_, const service
 
 template <class Protocol_>
 uint32_t service1_method2_pargs_write(Protocol_* prot_, const service1_method2_pargs* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->writeStructBegin("service1_method2_pargs");
   xfer += prot_->writeFieldBegin("x", apache::thrift::protocol::T_I32, 1);
@@ -250,38 +256,42 @@ uint32_t service1_method2_pargs_write(Protocol_* prot_, const service1_method2_p
 
 template <class Protocol_>
 uint32_t service1_method2_presult_read(Protocol_* iprot, service1_method2_presult* obj) {
-  uint32_t xfer = 0;
-  std::string fname;
-  apache::thrift::protocol::TType ftype;
+  (void)obj;
+  auto _xferStart = iprot->getCurrentPosition().getCurrentPosition();
+  std::string _fname;
+  apache::thrift::protocol::TType _ftype;
   int16_t fid;
 
-  xfer += iprot->readStructBegin(fname);
+  iprot->readStructBegin(_fname);
 
   using apache::thrift::TProtocolException;
 
 
   while (true) {
-    xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == apache::thrift::protocol::T_STOP) {
+    iprot->readFieldBegin(_fname, _ftype, fid);
+    if (_ftype == apache::thrift::protocol::T_STOP) {
       break;
     }
-    if (fid == std::numeric_limits<int16_t>::min()) {}
+    if (iprot->kUsesFieldNames()) {
+      obj->translateFieldName(_fname, fid, _ftype);
+    }
     switch (fid) {
       default:
       {
-        xfer += iprot->skip(ftype);
+        iprot->skip(_ftype);
         break;
       }
     }
-    xfer += iprot->readFieldEnd();
+    iprot->readFieldEnd();
   }
-  xfer += iprot->readStructEnd();
+  iprot->readStructEnd();
 
-  return xfer;
+  return iprot->getCurrentPosition().getCurrentPosition() - _xferStart;
 }
 
 template <class Protocol_>
-uint32_t service1_method2_presult_serializedSize(Protocol_* prot_, const service1_method2_presult* obj) {
+uint32_t service1_method2_presult_serializedSize(Protocol_ const* prot_, const service1_method2_presult* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method2_presult");
   xfer += prot_->serializedSizeStop();
@@ -289,7 +299,8 @@ uint32_t service1_method2_presult_serializedSize(Protocol_* prot_, const service
 }
 
 template <class Protocol_>
-uint32_t service1_method2_presult_serializedSizeZC(Protocol_* prot_, const service1_method2_presult* obj) {
+uint32_t service1_method2_presult_serializedSizeZC(Protocol_ const* prot_, const service1_method2_presult* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method2_presult");
   xfer += prot_->serializedSizeStop();
@@ -298,6 +309,7 @@ uint32_t service1_method2_presult_serializedSizeZC(Protocol_* prot_, const servi
 
 template <class Protocol_>
 uint32_t service1_method2_presult_write(Protocol_* prot_, const service1_method2_presult* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->writeStructBegin("service1_method2_presult");
   xfer += prot_->writeFieldStop();
@@ -307,38 +319,42 @@ uint32_t service1_method2_presult_write(Protocol_* prot_, const service1_method2
 
 template <class Protocol_>
 uint32_t service1_method3_pargs_read(Protocol_* iprot, service1_method3_pargs* obj) {
-  uint32_t xfer = 0;
-  std::string fname;
-  apache::thrift::protocol::TType ftype;
+  (void)obj;
+  auto _xferStart = iprot->getCurrentPosition().getCurrentPosition();
+  std::string _fname;
+  apache::thrift::protocol::TType _ftype;
   int16_t fid;
 
-  xfer += iprot->readStructBegin(fname);
+  iprot->readStructBegin(_fname);
 
   using apache::thrift::TProtocolException;
 
 
   while (true) {
-    xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == apache::thrift::protocol::T_STOP) {
+    iprot->readFieldBegin(_fname, _ftype, fid);
+    if (_ftype == apache::thrift::protocol::T_STOP) {
       break;
     }
-    if (fid == std::numeric_limits<int16_t>::min()) {}
+    if (iprot->kUsesFieldNames()) {
+      obj->translateFieldName(_fname, fid, _ftype);
+    }
     switch (fid) {
       default:
       {
-        xfer += iprot->skip(ftype);
+        iprot->skip(_ftype);
         break;
       }
     }
-    xfer += iprot->readFieldEnd();
+    iprot->readFieldEnd();
   }
-  xfer += iprot->readStructEnd();
+  iprot->readStructEnd();
 
-  return xfer;
+  return iprot->getCurrentPosition().getCurrentPosition() - _xferStart;
 }
 
 template <class Protocol_>
-uint32_t service1_method3_pargs_serializedSize(Protocol_* prot_, const service1_method3_pargs* obj) {
+uint32_t service1_method3_pargs_serializedSize(Protocol_ const* prot_, const service1_method3_pargs* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method3_pargs");
   xfer += prot_->serializedSizeStop();
@@ -346,7 +362,8 @@ uint32_t service1_method3_pargs_serializedSize(Protocol_* prot_, const service1_
 }
 
 template <class Protocol_>
-uint32_t service1_method3_pargs_serializedSizeZC(Protocol_* prot_, const service1_method3_pargs* obj) {
+uint32_t service1_method3_pargs_serializedSizeZC(Protocol_ const* prot_, const service1_method3_pargs* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method3_pargs");
   xfer += prot_->serializedSizeStop();
@@ -355,6 +372,7 @@ uint32_t service1_method3_pargs_serializedSizeZC(Protocol_* prot_, const service
 
 template <class Protocol_>
 uint32_t service1_method3_pargs_write(Protocol_* prot_, const service1_method3_pargs* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->writeStructBegin("service1_method3_pargs");
   xfer += prot_->writeFieldStop();
@@ -364,53 +382,52 @@ uint32_t service1_method3_pargs_write(Protocol_* prot_, const service1_method3_p
 
 template <class Protocol_>
 uint32_t service1_method3_presult_read(Protocol_* iprot, service1_method3_presult* obj) {
-  uint32_t xfer = 0;
-  std::string fname;
-  apache::thrift::protocol::TType ftype;
+  (void)obj;
+  auto _xferStart = iprot->getCurrentPosition().getCurrentPosition();
+  std::string _fname;
+  apache::thrift::protocol::TType _ftype;
   int16_t fid;
 
-  xfer += iprot->readStructBegin(fname);
+  iprot->readStructBegin(_fname);
 
   using apache::thrift::TProtocolException;
 
 
   while (true) {
-    xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == apache::thrift::protocol::T_STOP) {
+    iprot->readFieldBegin(_fname, _ftype, fid);
+    if (_ftype == apache::thrift::protocol::T_STOP) {
       break;
     }
-    if (fid == std::numeric_limits<int16_t>::min()) {
-      if (fname == "success") {
-        fid = 0;
-        ftype = apache::thrift::protocol::T_I32;
-      }
+    if (iprot->kUsesFieldNames()) {
+      obj->translateFieldName(_fname, fid, _ftype);
     }
     switch (fid) {
       case 0:
       {
-        if (ftype == apache::thrift::protocol::T_I32) {
-          xfer += iprot->readI32((*const_cast<int32_t*>(obj->success)));
+        if (_ftype == apache::thrift::protocol::T_I32) {
+          iprot->readI32((*const_cast<int32_t*>(obj->success)));
           obj->__isset.success = true;
         } else {
-          xfer += iprot->skip(ftype);
+          iprot->skip(_ftype);
         }
         break;
       }
       default:
       {
-        xfer += iprot->skip(ftype);
+        iprot->skip(_ftype);
         break;
       }
     }
-    xfer += iprot->readFieldEnd();
+    iprot->readFieldEnd();
   }
-  xfer += iprot->readStructEnd();
+  iprot->readStructEnd();
 
-  return xfer;
+  return iprot->getCurrentPosition().getCurrentPosition() - _xferStart;
 }
 
 template <class Protocol_>
-uint32_t service1_method3_presult_serializedSize(Protocol_* prot_, const service1_method3_presult* obj) {
+uint32_t service1_method3_presult_serializedSize(Protocol_ const* prot_, const service1_method3_presult* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method3_presult");
   if (obj->__isset.success) {
@@ -422,7 +439,8 @@ uint32_t service1_method3_presult_serializedSize(Protocol_* prot_, const service
 }
 
 template <class Protocol_>
-uint32_t service1_method3_presult_serializedSizeZC(Protocol_* prot_, const service1_method3_presult* obj) {
+uint32_t service1_method3_presult_serializedSizeZC(Protocol_ const* prot_, const service1_method3_presult* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method3_presult");
   if (obj->__isset.success) {
@@ -435,6 +453,7 @@ uint32_t service1_method3_presult_serializedSizeZC(Protocol_* prot_, const servi
 
 template <class Protocol_>
 uint32_t service1_method3_presult_write(Protocol_* prot_, const service1_method3_presult* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->writeStructBegin("service1_method3_presult");
   if (obj->__isset.success) {
@@ -449,78 +468,69 @@ uint32_t service1_method3_presult_write(Protocol_* prot_, const service1_method3
 
 template <class Protocol_>
 uint32_t service1_method4_pargs_read(Protocol_* iprot, service1_method4_pargs* obj) {
-  uint32_t xfer = 0;
-  std::string fname;
-  apache::thrift::protocol::TType ftype;
+  (void)obj;
+  auto _xferStart = iprot->getCurrentPosition().getCurrentPosition();
+  std::string _fname;
+  apache::thrift::protocol::TType _ftype;
   int16_t fid;
 
-  xfer += iprot->readStructBegin(fname);
+  iprot->readStructBegin(_fname);
 
   using apache::thrift::TProtocolException;
 
 
   while (true) {
-    xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == apache::thrift::protocol::T_STOP) {
+    iprot->readFieldBegin(_fname, _ftype, fid);
+    if (_ftype == apache::thrift::protocol::T_STOP) {
       break;
     }
-    if (fid == std::numeric_limits<int16_t>::min()) {
-      if (fname == "i") {
-        fid = 1;
-        ftype = apache::thrift::protocol::T_I32;
-      }
-      else if (fname == "j") {
-        fid = 2;
-        ftype = apache::thrift::protocol::T_STRUCT;
-      }
-      else if (fname == "k") {
-        fid = 3;
-        ftype = apache::thrift::protocol::T_DOUBLE;
-      }
+    if (iprot->kUsesFieldNames()) {
+      obj->translateFieldName(_fname, fid, _ftype);
     }
     switch (fid) {
       case 1:
       {
-        if (ftype == apache::thrift::protocol::T_I32) {
-          xfer += iprot->readI32((*const_cast<int32_t*>(obj->i)));
+        if (_ftype == apache::thrift::protocol::T_I32) {
+          iprot->readI32((*const_cast<int32_t*>(obj->i)));
         } else {
-          xfer += iprot->skip(ftype);
+          iprot->skip(_ftype);
         }
         break;
       }
       case 2:
       {
-        if (ftype == apache::thrift::protocol::T_STRUCT) {
-          xfer += ::apache::thrift::Cpp2Ops<  ::test_cpp2::cpp_reflection::struct1>::read(iprot, &(*const_cast< ::test_cpp2::cpp_reflection::struct1*>(obj->j)));
+        if (_ftype == apache::thrift::protocol::T_STRUCT) {
+          ::apache::thrift::Cpp2Ops<  ::test_cpp2::cpp_reflection::struct1>::read(iprot, &(*const_cast< ::test_cpp2::cpp_reflection::struct1*>(obj->j)));
         } else {
-          xfer += iprot->skip(ftype);
+          iprot->skip(_ftype);
         }
         break;
       }
       case 3:
       {
-        if (ftype == apache::thrift::protocol::T_DOUBLE) {
-          xfer += iprot->readDouble((*const_cast<double*>(obj->k)));
+        if (_ftype == apache::thrift::protocol::T_DOUBLE) {
+          iprot->readDouble((*const_cast<double*>(obj->k)));
         } else {
-          xfer += iprot->skip(ftype);
+          iprot->skip(_ftype);
         }
         break;
       }
       default:
       {
-        xfer += iprot->skip(ftype);
+        iprot->skip(_ftype);
         break;
       }
     }
-    xfer += iprot->readFieldEnd();
+    iprot->readFieldEnd();
   }
-  xfer += iprot->readStructEnd();
+  iprot->readStructEnd();
 
-  return xfer;
+  return iprot->getCurrentPosition().getCurrentPosition() - _xferStart;
 }
 
 template <class Protocol_>
-uint32_t service1_method4_pargs_serializedSize(Protocol_* prot_, const service1_method4_pargs* obj) {
+uint32_t service1_method4_pargs_serializedSize(Protocol_ const* prot_, const service1_method4_pargs* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method4_pargs");
   xfer += prot_->serializedFieldSize("i", apache::thrift::protocol::T_I32, 1);
@@ -534,7 +544,8 @@ uint32_t service1_method4_pargs_serializedSize(Protocol_* prot_, const service1_
 }
 
 template <class Protocol_>
-uint32_t service1_method4_pargs_serializedSizeZC(Protocol_* prot_, const service1_method4_pargs* obj) {
+uint32_t service1_method4_pargs_serializedSizeZC(Protocol_ const* prot_, const service1_method4_pargs* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method4_pargs");
   xfer += prot_->serializedFieldSize("i", apache::thrift::protocol::T_I32, 1);
@@ -549,6 +560,7 @@ uint32_t service1_method4_pargs_serializedSizeZC(Protocol_* prot_, const service
 
 template <class Protocol_>
 uint32_t service1_method4_pargs_write(Protocol_* prot_, const service1_method4_pargs* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->writeStructBegin("service1_method4_pargs");
   xfer += prot_->writeFieldBegin("i", apache::thrift::protocol::T_I32, 1);
@@ -567,53 +579,52 @@ uint32_t service1_method4_pargs_write(Protocol_* prot_, const service1_method4_p
 
 template <class Protocol_>
 uint32_t service1_method4_presult_read(Protocol_* iprot, service1_method4_presult* obj) {
-  uint32_t xfer = 0;
-  std::string fname;
-  apache::thrift::protocol::TType ftype;
+  (void)obj;
+  auto _xferStart = iprot->getCurrentPosition().getCurrentPosition();
+  std::string _fname;
+  apache::thrift::protocol::TType _ftype;
   int16_t fid;
 
-  xfer += iprot->readStructBegin(fname);
+  iprot->readStructBegin(_fname);
 
   using apache::thrift::TProtocolException;
 
 
   while (true) {
-    xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == apache::thrift::protocol::T_STOP) {
+    iprot->readFieldBegin(_fname, _ftype, fid);
+    if (_ftype == apache::thrift::protocol::T_STOP) {
       break;
     }
-    if (fid == std::numeric_limits<int16_t>::min()) {
-      if (fname == "success") {
-        fid = 0;
-        ftype = apache::thrift::protocol::T_I32;
-      }
+    if (iprot->kUsesFieldNames()) {
+      obj->translateFieldName(_fname, fid, _ftype);
     }
     switch (fid) {
       case 0:
       {
-        if (ftype == apache::thrift::protocol::T_I32) {
-          xfer += iprot->readI32((*const_cast<int32_t*>(obj->success)));
+        if (_ftype == apache::thrift::protocol::T_I32) {
+          iprot->readI32((*const_cast<int32_t*>(obj->success)));
           obj->__isset.success = true;
         } else {
-          xfer += iprot->skip(ftype);
+          iprot->skip(_ftype);
         }
         break;
       }
       default:
       {
-        xfer += iprot->skip(ftype);
+        iprot->skip(_ftype);
         break;
       }
     }
-    xfer += iprot->readFieldEnd();
+    iprot->readFieldEnd();
   }
-  xfer += iprot->readStructEnd();
+  iprot->readStructEnd();
 
-  return xfer;
+  return iprot->getCurrentPosition().getCurrentPosition() - _xferStart;
 }
 
 template <class Protocol_>
-uint32_t service1_method4_presult_serializedSize(Protocol_* prot_, const service1_method4_presult* obj) {
+uint32_t service1_method4_presult_serializedSize(Protocol_ const* prot_, const service1_method4_presult* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method4_presult");
   if (obj->__isset.success) {
@@ -625,7 +636,8 @@ uint32_t service1_method4_presult_serializedSize(Protocol_* prot_, const service
 }
 
 template <class Protocol_>
-uint32_t service1_method4_presult_serializedSizeZC(Protocol_* prot_, const service1_method4_presult* obj) {
+uint32_t service1_method4_presult_serializedSizeZC(Protocol_ const* prot_, const service1_method4_presult* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method4_presult");
   if (obj->__isset.success) {
@@ -638,6 +650,7 @@ uint32_t service1_method4_presult_serializedSizeZC(Protocol_* prot_, const servi
 
 template <class Protocol_>
 uint32_t service1_method4_presult_write(Protocol_* prot_, const service1_method4_presult* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->writeStructBegin("service1_method4_presult");
   if (obj->__isset.success) {
@@ -652,38 +665,42 @@ uint32_t service1_method4_presult_write(Protocol_* prot_, const service1_method4
 
 template <class Protocol_>
 uint32_t service1_method5_pargs_read(Protocol_* iprot, service1_method5_pargs* obj) {
-  uint32_t xfer = 0;
-  std::string fname;
-  apache::thrift::protocol::TType ftype;
+  (void)obj;
+  auto _xferStart = iprot->getCurrentPosition().getCurrentPosition();
+  std::string _fname;
+  apache::thrift::protocol::TType _ftype;
   int16_t fid;
 
-  xfer += iprot->readStructBegin(fname);
+  iprot->readStructBegin(_fname);
 
   using apache::thrift::TProtocolException;
 
 
   while (true) {
-    xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == apache::thrift::protocol::T_STOP) {
+    iprot->readFieldBegin(_fname, _ftype, fid);
+    if (_ftype == apache::thrift::protocol::T_STOP) {
       break;
     }
-    if (fid == std::numeric_limits<int16_t>::min()) {}
+    if (iprot->kUsesFieldNames()) {
+      obj->translateFieldName(_fname, fid, _ftype);
+    }
     switch (fid) {
       default:
       {
-        xfer += iprot->skip(ftype);
+        iprot->skip(_ftype);
         break;
       }
     }
-    xfer += iprot->readFieldEnd();
+    iprot->readFieldEnd();
   }
-  xfer += iprot->readStructEnd();
+  iprot->readStructEnd();
 
-  return xfer;
+  return iprot->getCurrentPosition().getCurrentPosition() - _xferStart;
 }
 
 template <class Protocol_>
-uint32_t service1_method5_pargs_serializedSize(Protocol_* prot_, const service1_method5_pargs* obj) {
+uint32_t service1_method5_pargs_serializedSize(Protocol_ const* prot_, const service1_method5_pargs* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method5_pargs");
   xfer += prot_->serializedSizeStop();
@@ -691,7 +708,8 @@ uint32_t service1_method5_pargs_serializedSize(Protocol_* prot_, const service1_
 }
 
 template <class Protocol_>
-uint32_t service1_method5_pargs_serializedSizeZC(Protocol_* prot_, const service1_method5_pargs* obj) {
+uint32_t service1_method5_pargs_serializedSizeZC(Protocol_ const* prot_, const service1_method5_pargs* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method5_pargs");
   xfer += prot_->serializedSizeStop();
@@ -700,6 +718,7 @@ uint32_t service1_method5_pargs_serializedSizeZC(Protocol_* prot_, const service
 
 template <class Protocol_>
 uint32_t service1_method5_pargs_write(Protocol_* prot_, const service1_method5_pargs* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->writeStructBegin("service1_method5_pargs");
   xfer += prot_->writeFieldStop();
@@ -709,53 +728,52 @@ uint32_t service1_method5_pargs_write(Protocol_* prot_, const service1_method5_p
 
 template <class Protocol_>
 uint32_t service1_method5_presult_read(Protocol_* iprot, service1_method5_presult* obj) {
-  uint32_t xfer = 0;
-  std::string fname;
-  apache::thrift::protocol::TType ftype;
+  (void)obj;
+  auto _xferStart = iprot->getCurrentPosition().getCurrentPosition();
+  std::string _fname;
+  apache::thrift::protocol::TType _ftype;
   int16_t fid;
 
-  xfer += iprot->readStructBegin(fname);
+  iprot->readStructBegin(_fname);
 
   using apache::thrift::TProtocolException;
 
 
   while (true) {
-    xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == apache::thrift::protocol::T_STOP) {
+    iprot->readFieldBegin(_fname, _ftype, fid);
+    if (_ftype == apache::thrift::protocol::T_STOP) {
       break;
     }
-    if (fid == std::numeric_limits<int16_t>::min()) {
-      if (fname == "success") {
-        fid = 0;
-        ftype = apache::thrift::protocol::T_STRUCT;
-      }
+    if (iprot->kUsesFieldNames()) {
+      obj->translateFieldName(_fname, fid, _ftype);
     }
     switch (fid) {
       case 0:
       {
-        if (ftype == apache::thrift::protocol::T_STRUCT) {
-          xfer += ::apache::thrift::Cpp2Ops<  ::test_cpp2::cpp_reflection::struct2>::read(iprot, &(*const_cast< ::test_cpp2::cpp_reflection::struct2*>(obj->success)));
+        if (_ftype == apache::thrift::protocol::T_STRUCT) {
+          ::apache::thrift::Cpp2Ops<  ::test_cpp2::cpp_reflection::struct2>::read(iprot, &(*const_cast< ::test_cpp2::cpp_reflection::struct2*>(obj->success)));
           obj->__isset.success = true;
         } else {
-          xfer += iprot->skip(ftype);
+          iprot->skip(_ftype);
         }
         break;
       }
       default:
       {
-        xfer += iprot->skip(ftype);
+        iprot->skip(_ftype);
         break;
       }
     }
-    xfer += iprot->readFieldEnd();
+    iprot->readFieldEnd();
   }
-  xfer += iprot->readStructEnd();
+  iprot->readStructEnd();
 
-  return xfer;
+  return iprot->getCurrentPosition().getCurrentPosition() - _xferStart;
 }
 
 template <class Protocol_>
-uint32_t service1_method5_presult_serializedSize(Protocol_* prot_, const service1_method5_presult* obj) {
+uint32_t service1_method5_presult_serializedSize(Protocol_ const* prot_, const service1_method5_presult* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method5_presult");
   if (obj->__isset.success) {
@@ -767,7 +785,8 @@ uint32_t service1_method5_presult_serializedSize(Protocol_* prot_, const service
 }
 
 template <class Protocol_>
-uint32_t service1_method5_presult_serializedSizeZC(Protocol_* prot_, const service1_method5_presult* obj) {
+uint32_t service1_method5_presult_serializedSizeZC(Protocol_ const* prot_, const service1_method5_presult* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method5_presult");
   if (obj->__isset.success) {
@@ -780,6 +799,7 @@ uint32_t service1_method5_presult_serializedSizeZC(Protocol_* prot_, const servi
 
 template <class Protocol_>
 uint32_t service1_method5_presult_write(Protocol_* prot_, const service1_method5_presult* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->writeStructBegin("service1_method5_presult");
   if (obj->__isset.success) {
@@ -794,78 +814,69 @@ uint32_t service1_method5_presult_write(Protocol_* prot_, const service1_method5
 
 template <class Protocol_>
 uint32_t service1_method6_pargs_read(Protocol_* iprot, service1_method6_pargs* obj) {
-  uint32_t xfer = 0;
-  std::string fname;
-  apache::thrift::protocol::TType ftype;
+  (void)obj;
+  auto _xferStart = iprot->getCurrentPosition().getCurrentPosition();
+  std::string _fname;
+  apache::thrift::protocol::TType _ftype;
   int16_t fid;
 
-  xfer += iprot->readStructBegin(fname);
+  iprot->readStructBegin(_fname);
 
   using apache::thrift::TProtocolException;
 
 
   while (true) {
-    xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == apache::thrift::protocol::T_STOP) {
+    iprot->readFieldBegin(_fname, _ftype, fid);
+    if (_ftype == apache::thrift::protocol::T_STOP) {
       break;
     }
-    if (fid == std::numeric_limits<int16_t>::min()) {
-      if (fname == "l") {
-        fid = 1;
-        ftype = apache::thrift::protocol::T_I32;
-      }
-      else if (fname == "m") {
-        fid = 2;
-        ftype = apache::thrift::protocol::T_STRUCT;
-      }
-      else if (fname == "n") {
-        fid = 3;
-        ftype = apache::thrift::protocol::T_DOUBLE;
-      }
+    if (iprot->kUsesFieldNames()) {
+      obj->translateFieldName(_fname, fid, _ftype);
     }
     switch (fid) {
       case 1:
       {
-        if (ftype == apache::thrift::protocol::T_I32) {
-          xfer += iprot->readI32((*const_cast<int32_t*>(obj->l)));
+        if (_ftype == apache::thrift::protocol::T_I32) {
+          iprot->readI32((*const_cast<int32_t*>(obj->l)));
         } else {
-          xfer += iprot->skip(ftype);
+          iprot->skip(_ftype);
         }
         break;
       }
       case 2:
       {
-        if (ftype == apache::thrift::protocol::T_STRUCT) {
-          xfer += ::apache::thrift::Cpp2Ops<  ::test_cpp2::cpp_reflection::struct1>::read(iprot, &(*const_cast< ::test_cpp2::cpp_reflection::struct1*>(obj->m)));
+        if (_ftype == apache::thrift::protocol::T_STRUCT) {
+          ::apache::thrift::Cpp2Ops<  ::test_cpp2::cpp_reflection::struct1>::read(iprot, &(*const_cast< ::test_cpp2::cpp_reflection::struct1*>(obj->m)));
         } else {
-          xfer += iprot->skip(ftype);
+          iprot->skip(_ftype);
         }
         break;
       }
       case 3:
       {
-        if (ftype == apache::thrift::protocol::T_DOUBLE) {
-          xfer += iprot->readDouble((*const_cast<double*>(obj->n)));
+        if (_ftype == apache::thrift::protocol::T_DOUBLE) {
+          iprot->readDouble((*const_cast<double*>(obj->n)));
         } else {
-          xfer += iprot->skip(ftype);
+          iprot->skip(_ftype);
         }
         break;
       }
       default:
       {
-        xfer += iprot->skip(ftype);
+        iprot->skip(_ftype);
         break;
       }
     }
-    xfer += iprot->readFieldEnd();
+    iprot->readFieldEnd();
   }
-  xfer += iprot->readStructEnd();
+  iprot->readStructEnd();
 
-  return xfer;
+  return iprot->getCurrentPosition().getCurrentPosition() - _xferStart;
 }
 
 template <class Protocol_>
-uint32_t service1_method6_pargs_serializedSize(Protocol_* prot_, const service1_method6_pargs* obj) {
+uint32_t service1_method6_pargs_serializedSize(Protocol_ const* prot_, const service1_method6_pargs* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method6_pargs");
   xfer += prot_->serializedFieldSize("l", apache::thrift::protocol::T_I32, 1);
@@ -879,7 +890,8 @@ uint32_t service1_method6_pargs_serializedSize(Protocol_* prot_, const service1_
 }
 
 template <class Protocol_>
-uint32_t service1_method6_pargs_serializedSizeZC(Protocol_* prot_, const service1_method6_pargs* obj) {
+uint32_t service1_method6_pargs_serializedSizeZC(Protocol_ const* prot_, const service1_method6_pargs* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method6_pargs");
   xfer += prot_->serializedFieldSize("l", apache::thrift::protocol::T_I32, 1);
@@ -894,6 +906,7 @@ uint32_t service1_method6_pargs_serializedSizeZC(Protocol_* prot_, const service
 
 template <class Protocol_>
 uint32_t service1_method6_pargs_write(Protocol_* prot_, const service1_method6_pargs* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->writeStructBegin("service1_method6_pargs");
   xfer += prot_->writeFieldBegin("l", apache::thrift::protocol::T_I32, 1);
@@ -912,53 +925,52 @@ uint32_t service1_method6_pargs_write(Protocol_* prot_, const service1_method6_p
 
 template <class Protocol_>
 uint32_t service1_method6_presult_read(Protocol_* iprot, service1_method6_presult* obj) {
-  uint32_t xfer = 0;
-  std::string fname;
-  apache::thrift::protocol::TType ftype;
+  (void)obj;
+  auto _xferStart = iprot->getCurrentPosition().getCurrentPosition();
+  std::string _fname;
+  apache::thrift::protocol::TType _ftype;
   int16_t fid;
 
-  xfer += iprot->readStructBegin(fname);
+  iprot->readStructBegin(_fname);
 
   using apache::thrift::TProtocolException;
 
 
   while (true) {
-    xfer += iprot->readFieldBegin(fname, ftype, fid);
-    if (ftype == apache::thrift::protocol::T_STOP) {
+    iprot->readFieldBegin(_fname, _ftype, fid);
+    if (_ftype == apache::thrift::protocol::T_STOP) {
       break;
     }
-    if (fid == std::numeric_limits<int16_t>::min()) {
-      if (fname == "success") {
-        fid = 0;
-        ftype = apache::thrift::protocol::T_STRUCT;
-      }
+    if (iprot->kUsesFieldNames()) {
+      obj->translateFieldName(_fname, fid, _ftype);
     }
     switch (fid) {
       case 0:
       {
-        if (ftype == apache::thrift::protocol::T_STRUCT) {
-          xfer += ::apache::thrift::Cpp2Ops<  ::test_cpp2::cpp_reflection::struct2>::read(iprot, &(*const_cast< ::test_cpp2::cpp_reflection::struct2*>(obj->success)));
+        if (_ftype == apache::thrift::protocol::T_STRUCT) {
+          ::apache::thrift::Cpp2Ops<  ::test_cpp2::cpp_reflection::struct2>::read(iprot, &(*const_cast< ::test_cpp2::cpp_reflection::struct2*>(obj->success)));
           obj->__isset.success = true;
         } else {
-          xfer += iprot->skip(ftype);
+          iprot->skip(_ftype);
         }
         break;
       }
       default:
       {
-        xfer += iprot->skip(ftype);
+        iprot->skip(_ftype);
         break;
       }
     }
-    xfer += iprot->readFieldEnd();
+    iprot->readFieldEnd();
   }
-  xfer += iprot->readStructEnd();
+  iprot->readStructEnd();
 
-  return xfer;
+  return iprot->getCurrentPosition().getCurrentPosition() - _xferStart;
 }
 
 template <class Protocol_>
-uint32_t service1_method6_presult_serializedSize(Protocol_* prot_, const service1_method6_presult* obj) {
+uint32_t service1_method6_presult_serializedSize(Protocol_ const* prot_, const service1_method6_presult* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method6_presult");
   if (obj->__isset.success) {
@@ -970,7 +982,8 @@ uint32_t service1_method6_presult_serializedSize(Protocol_* prot_, const service
 }
 
 template <class Protocol_>
-uint32_t service1_method6_presult_serializedSizeZC(Protocol_* prot_, const service1_method6_presult* obj) {
+uint32_t service1_method6_presult_serializedSizeZC(Protocol_ const* prot_, const service1_method6_presult* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->serializedStructSize("service1_method6_presult");
   if (obj->__isset.success) {
@@ -983,6 +996,7 @@ uint32_t service1_method6_presult_serializedSizeZC(Protocol_* prot_, const servi
 
 template <class Protocol_>
 uint32_t service1_method6_presult_write(Protocol_* prot_, const service1_method6_presult* obj) {
+  (void)obj;
   uint32_t xfer = 0;
   xfer += prot_->writeStructBegin("service1_method6_presult");
   if (obj->__isset.success) {
@@ -1028,7 +1042,7 @@ void service1AsyncProcessor::process_method1(std::unique_ptr<apache::thrift::Res
       LOG(ERROR) << ex.what() << " in oneway function method1";
     }
   }
-  auto callback = folly::make_unique<apache::thrift::HandlerCallback<void>>(std::move(req), std::move(c), return_method1<ProtocolIn_,ProtocolOut_>, throw_method1<ProtocolIn_, ProtocolOut_>, throw_wrapped_method1<ProtocolIn_, ProtocolOut_>, ctx->getProtoSeqId(), eb, tm, ctx);
+  auto callback = std::make_unique<apache::thrift::HandlerCallback<void>>(std::move(req), std::move(c), return_method1<ProtocolIn_,ProtocolOut_>, throw_wrapped_method1<ProtocolIn_, ProtocolOut_>, ctx->getProtoSeqId(), eb, tm, ctx);
   if (!callback->isRequestActive()) {
     callback.release()->deleteInThread();
     return;
@@ -1042,43 +1056,6 @@ folly::IOBufQueue service1AsyncProcessor::return_method1(int32_t protoSeqId, apa
   ProtocolOut_ prot;
   service1_method1_presult result;
   return serializeResponse("method1", &prot, protoSeqId, ctx, result);
-}
-
-template <class ProtocolIn_, class ProtocolOut_>
-void service1AsyncProcessor::throw_method1(std::unique_ptr<apache::thrift::ResponseChannel::Request> req,int32_t protoSeqId,apache::thrift::ContextStack* ctx,std::exception_ptr ep,apache::thrift::Cpp2RequestContext* reqCtx) {
-  ProtocolOut_ prot;
-  try {
-    std::rethrow_exception(ep);
-  }
-  catch (const std::exception& e) {
-    auto ew = folly::exception_wrapper(ep, e);
-    if (req) {
-      LOG(ERROR) << folly::exceptionStr(e).toStdString() << " in function method1";
-      apache::thrift::TApplicationException x(folly::exceptionStr(e).toStdString());
-      ctx->userExceptionWrapped(false, ew);
-      ctx->handlerErrorWrapped(ew);
-      folly::IOBufQueue queue = serializeException("method1", &prot, protoSeqId, ctx, x);
-      queue.append(apache::thrift::transport::THeader::transform(queue.move(), reqCtx->getHeader()->getWriteTransforms(), reqCtx->getHeader()->getMinCompressBytes()));
-      req->sendReply(queue.move());
-      return;
-    }
-    else {
-      LOG(ERROR) << folly::exceptionStr(e).toStdString() << " in oneway function method1";
-    }
-  }
-  catch (...) {
-    if (req) {
-      LOG(ERROR) << "<unknown exception>" << " in function method1";
-      apache::thrift::TApplicationException x("<unknown exception>");
-      folly::IOBufQueue queue = serializeException("method1", &prot, protoSeqId, nullptr, x);
-      queue.append(apache::thrift::transport::THeader::transform(queue.move(), reqCtx->getHeader()->getWriteTransforms(), reqCtx->getHeader()->getMinCompressBytes()));
-      req->sendReply(queue.move());
-      return;
-    }
-    else {
-      LOG(ERROR) << "<unknown exception>" << " in oneway function method1";
-    }
-  }
 }
 
 template <class ProtocolIn_, class ProtocolOut_>
@@ -1143,7 +1120,7 @@ void service1AsyncProcessor::process_method2(std::unique_ptr<apache::thrift::Res
       LOG(ERROR) << ex.what() << " in oneway function method2";
     }
   }
-  auto callback = folly::make_unique<apache::thrift::HandlerCallback<void>>(std::move(req), std::move(c), return_method2<ProtocolIn_,ProtocolOut_>, throw_method2<ProtocolIn_, ProtocolOut_>, throw_wrapped_method2<ProtocolIn_, ProtocolOut_>, ctx->getProtoSeqId(), eb, tm, ctx);
+  auto callback = std::make_unique<apache::thrift::HandlerCallback<void>>(std::move(req), std::move(c), return_method2<ProtocolIn_,ProtocolOut_>, throw_wrapped_method2<ProtocolIn_, ProtocolOut_>, ctx->getProtoSeqId(), eb, tm, ctx);
   if (!callback->isRequestActive()) {
     callback.release()->deleteInThread();
     return;
@@ -1157,43 +1134,6 @@ folly::IOBufQueue service1AsyncProcessor::return_method2(int32_t protoSeqId, apa
   ProtocolOut_ prot;
   service1_method2_presult result;
   return serializeResponse("method2", &prot, protoSeqId, ctx, result);
-}
-
-template <class ProtocolIn_, class ProtocolOut_>
-void service1AsyncProcessor::throw_method2(std::unique_ptr<apache::thrift::ResponseChannel::Request> req,int32_t protoSeqId,apache::thrift::ContextStack* ctx,std::exception_ptr ep,apache::thrift::Cpp2RequestContext* reqCtx) {
-  ProtocolOut_ prot;
-  try {
-    std::rethrow_exception(ep);
-  }
-  catch (const std::exception& e) {
-    auto ew = folly::exception_wrapper(ep, e);
-    if (req) {
-      LOG(ERROR) << folly::exceptionStr(e).toStdString() << " in function method2";
-      apache::thrift::TApplicationException x(folly::exceptionStr(e).toStdString());
-      ctx->userExceptionWrapped(false, ew);
-      ctx->handlerErrorWrapped(ew);
-      folly::IOBufQueue queue = serializeException("method2", &prot, protoSeqId, ctx, x);
-      queue.append(apache::thrift::transport::THeader::transform(queue.move(), reqCtx->getHeader()->getWriteTransforms(), reqCtx->getHeader()->getMinCompressBytes()));
-      req->sendReply(queue.move());
-      return;
-    }
-    else {
-      LOG(ERROR) << folly::exceptionStr(e).toStdString() << " in oneway function method2";
-    }
-  }
-  catch (...) {
-    if (req) {
-      LOG(ERROR) << "<unknown exception>" << " in function method2";
-      apache::thrift::TApplicationException x("<unknown exception>");
-      folly::IOBufQueue queue = serializeException("method2", &prot, protoSeqId, nullptr, x);
-      queue.append(apache::thrift::transport::THeader::transform(queue.move(), reqCtx->getHeader()->getWriteTransforms(), reqCtx->getHeader()->getMinCompressBytes()));
-      req->sendReply(queue.move());
-      return;
-    }
-    else {
-      LOG(ERROR) << "<unknown exception>" << " in oneway function method2";
-    }
-  }
 }
 
 template <class ProtocolIn_, class ProtocolOut_>
@@ -1252,7 +1192,7 @@ void service1AsyncProcessor::process_method3(std::unique_ptr<apache::thrift::Res
       LOG(ERROR) << ex.what() << " in oneway function method3";
     }
   }
-  auto callback = folly::make_unique<apache::thrift::HandlerCallback<int32_t>>(std::move(req), std::move(c), return_method3<ProtocolIn_,ProtocolOut_>, throw_method3<ProtocolIn_, ProtocolOut_>, throw_wrapped_method3<ProtocolIn_, ProtocolOut_>, ctx->getProtoSeqId(), eb, tm, ctx);
+  auto callback = std::make_unique<apache::thrift::HandlerCallback<int32_t>>(std::move(req), std::move(c), return_method3<ProtocolIn_,ProtocolOut_>, throw_wrapped_method3<ProtocolIn_, ProtocolOut_>, ctx->getProtoSeqId(), eb, tm, ctx);
   if (!callback->isRequestActive()) {
     callback.release()->deleteInThread();
     return;
@@ -1268,43 +1208,6 @@ folly::IOBufQueue service1AsyncProcessor::return_method3(int32_t protoSeqId, apa
   result.success = const_cast<int32_t*>(&_return);
   result.__isset.success = true;
   return serializeResponse("method3", &prot, protoSeqId, ctx, result);
-}
-
-template <class ProtocolIn_, class ProtocolOut_>
-void service1AsyncProcessor::throw_method3(std::unique_ptr<apache::thrift::ResponseChannel::Request> req,int32_t protoSeqId,apache::thrift::ContextStack* ctx,std::exception_ptr ep,apache::thrift::Cpp2RequestContext* reqCtx) {
-  ProtocolOut_ prot;
-  try {
-    std::rethrow_exception(ep);
-  }
-  catch (const std::exception& e) {
-    auto ew = folly::exception_wrapper(ep, e);
-    if (req) {
-      LOG(ERROR) << folly::exceptionStr(e).toStdString() << " in function method3";
-      apache::thrift::TApplicationException x(folly::exceptionStr(e).toStdString());
-      ctx->userExceptionWrapped(false, ew);
-      ctx->handlerErrorWrapped(ew);
-      folly::IOBufQueue queue = serializeException("method3", &prot, protoSeqId, ctx, x);
-      queue.append(apache::thrift::transport::THeader::transform(queue.move(), reqCtx->getHeader()->getWriteTransforms(), reqCtx->getHeader()->getMinCompressBytes()));
-      req->sendReply(queue.move());
-      return;
-    }
-    else {
-      LOG(ERROR) << folly::exceptionStr(e).toStdString() << " in oneway function method3";
-    }
-  }
-  catch (...) {
-    if (req) {
-      LOG(ERROR) << "<unknown exception>" << " in function method3";
-      apache::thrift::TApplicationException x("<unknown exception>");
-      folly::IOBufQueue queue = serializeException("method3", &prot, protoSeqId, nullptr, x);
-      queue.append(apache::thrift::transport::THeader::transform(queue.move(), reqCtx->getHeader()->getWriteTransforms(), reqCtx->getHeader()->getMinCompressBytes()));
-      req->sendReply(queue.move());
-      return;
-    }
-    else {
-      LOG(ERROR) << "<unknown exception>" << " in oneway function method3";
-    }
-  }
 }
 
 template <class ProtocolIn_, class ProtocolOut_>
@@ -1369,7 +1272,7 @@ void service1AsyncProcessor::process_method4(std::unique_ptr<apache::thrift::Res
       LOG(ERROR) << ex.what() << " in oneway function method4";
     }
   }
-  auto callback = folly::make_unique<apache::thrift::HandlerCallback<int32_t>>(std::move(req), std::move(c), return_method4<ProtocolIn_,ProtocolOut_>, throw_method4<ProtocolIn_, ProtocolOut_>, throw_wrapped_method4<ProtocolIn_, ProtocolOut_>, ctx->getProtoSeqId(), eb, tm, ctx);
+  auto callback = std::make_unique<apache::thrift::HandlerCallback<int32_t>>(std::move(req), std::move(c), return_method4<ProtocolIn_,ProtocolOut_>, throw_wrapped_method4<ProtocolIn_, ProtocolOut_>, ctx->getProtoSeqId(), eb, tm, ctx);
   if (!callback->isRequestActive()) {
     callback.release()->deleteInThread();
     return;
@@ -1385,43 +1288,6 @@ folly::IOBufQueue service1AsyncProcessor::return_method4(int32_t protoSeqId, apa
   result.success = const_cast<int32_t*>(&_return);
   result.__isset.success = true;
   return serializeResponse("method4", &prot, protoSeqId, ctx, result);
-}
-
-template <class ProtocolIn_, class ProtocolOut_>
-void service1AsyncProcessor::throw_method4(std::unique_ptr<apache::thrift::ResponseChannel::Request> req,int32_t protoSeqId,apache::thrift::ContextStack* ctx,std::exception_ptr ep,apache::thrift::Cpp2RequestContext* reqCtx) {
-  ProtocolOut_ prot;
-  try {
-    std::rethrow_exception(ep);
-  }
-  catch (const std::exception& e) {
-    auto ew = folly::exception_wrapper(ep, e);
-    if (req) {
-      LOG(ERROR) << folly::exceptionStr(e).toStdString() << " in function method4";
-      apache::thrift::TApplicationException x(folly::exceptionStr(e).toStdString());
-      ctx->userExceptionWrapped(false, ew);
-      ctx->handlerErrorWrapped(ew);
-      folly::IOBufQueue queue = serializeException("method4", &prot, protoSeqId, ctx, x);
-      queue.append(apache::thrift::transport::THeader::transform(queue.move(), reqCtx->getHeader()->getWriteTransforms(), reqCtx->getHeader()->getMinCompressBytes()));
-      req->sendReply(queue.move());
-      return;
-    }
-    else {
-      LOG(ERROR) << folly::exceptionStr(e).toStdString() << " in oneway function method4";
-    }
-  }
-  catch (...) {
-    if (req) {
-      LOG(ERROR) << "<unknown exception>" << " in function method4";
-      apache::thrift::TApplicationException x("<unknown exception>");
-      folly::IOBufQueue queue = serializeException("method4", &prot, protoSeqId, nullptr, x);
-      queue.append(apache::thrift::transport::THeader::transform(queue.move(), reqCtx->getHeader()->getWriteTransforms(), reqCtx->getHeader()->getMinCompressBytes()));
-      req->sendReply(queue.move());
-      return;
-    }
-    else {
-      LOG(ERROR) << "<unknown exception>" << " in oneway function method4";
-    }
-  }
 }
 
 template <class ProtocolIn_, class ProtocolOut_>
@@ -1480,7 +1346,7 @@ void service1AsyncProcessor::process_method5(std::unique_ptr<apache::thrift::Res
       LOG(ERROR) << ex.what() << " in oneway function method5";
     }
   }
-  auto callback = folly::make_unique<apache::thrift::HandlerCallback<std::unique_ptr< ::test_cpp2::cpp_reflection::struct2>>>(std::move(req), std::move(c), return_method5<ProtocolIn_,ProtocolOut_>, throw_method5<ProtocolIn_, ProtocolOut_>, throw_wrapped_method5<ProtocolIn_, ProtocolOut_>, ctx->getProtoSeqId(), eb, tm, ctx);
+  auto callback = std::make_unique<apache::thrift::HandlerCallback<std::unique_ptr< ::test_cpp2::cpp_reflection::struct2>>>(std::move(req), std::move(c), return_method5<ProtocolIn_,ProtocolOut_>, throw_wrapped_method5<ProtocolIn_, ProtocolOut_>, ctx->getProtoSeqId(), eb, tm, ctx);
   if (!callback->isRequestActive()) {
     callback.release()->deleteInThread();
     return;
@@ -1496,43 +1362,6 @@ folly::IOBufQueue service1AsyncProcessor::return_method5(int32_t protoSeqId, apa
   result.success = const_cast< ::test_cpp2::cpp_reflection::struct2*>(&_return);
   result.__isset.success = true;
   return serializeResponse("method5", &prot, protoSeqId, ctx, result);
-}
-
-template <class ProtocolIn_, class ProtocolOut_>
-void service1AsyncProcessor::throw_method5(std::unique_ptr<apache::thrift::ResponseChannel::Request> req,int32_t protoSeqId,apache::thrift::ContextStack* ctx,std::exception_ptr ep,apache::thrift::Cpp2RequestContext* reqCtx) {
-  ProtocolOut_ prot;
-  try {
-    std::rethrow_exception(ep);
-  }
-  catch (const std::exception& e) {
-    auto ew = folly::exception_wrapper(ep, e);
-    if (req) {
-      LOG(ERROR) << folly::exceptionStr(e).toStdString() << " in function method5";
-      apache::thrift::TApplicationException x(folly::exceptionStr(e).toStdString());
-      ctx->userExceptionWrapped(false, ew);
-      ctx->handlerErrorWrapped(ew);
-      folly::IOBufQueue queue = serializeException("method5", &prot, protoSeqId, ctx, x);
-      queue.append(apache::thrift::transport::THeader::transform(queue.move(), reqCtx->getHeader()->getWriteTransforms(), reqCtx->getHeader()->getMinCompressBytes()));
-      req->sendReply(queue.move());
-      return;
-    }
-    else {
-      LOG(ERROR) << folly::exceptionStr(e).toStdString() << " in oneway function method5";
-    }
-  }
-  catch (...) {
-    if (req) {
-      LOG(ERROR) << "<unknown exception>" << " in function method5";
-      apache::thrift::TApplicationException x("<unknown exception>");
-      folly::IOBufQueue queue = serializeException("method5", &prot, protoSeqId, nullptr, x);
-      queue.append(apache::thrift::transport::THeader::transform(queue.move(), reqCtx->getHeader()->getWriteTransforms(), reqCtx->getHeader()->getMinCompressBytes()));
-      req->sendReply(queue.move());
-      return;
-    }
-    else {
-      LOG(ERROR) << "<unknown exception>" << " in oneway function method5";
-    }
-  }
 }
 
 template <class ProtocolIn_, class ProtocolOut_>
@@ -1597,7 +1426,7 @@ void service1AsyncProcessor::process_method6(std::unique_ptr<apache::thrift::Res
       LOG(ERROR) << ex.what() << " in oneway function method6";
     }
   }
-  auto callback = folly::make_unique<apache::thrift::HandlerCallback<std::unique_ptr< ::test_cpp2::cpp_reflection::struct2>>>(std::move(req), std::move(c), return_method6<ProtocolIn_,ProtocolOut_>, throw_method6<ProtocolIn_, ProtocolOut_>, throw_wrapped_method6<ProtocolIn_, ProtocolOut_>, ctx->getProtoSeqId(), eb, tm, ctx);
+  auto callback = std::make_unique<apache::thrift::HandlerCallback<std::unique_ptr< ::test_cpp2::cpp_reflection::struct2>>>(std::move(req), std::move(c), return_method6<ProtocolIn_,ProtocolOut_>, throw_wrapped_method6<ProtocolIn_, ProtocolOut_>, ctx->getProtoSeqId(), eb, tm, ctx);
   if (!callback->isRequestActive()) {
     callback.release()->deleteInThread();
     return;
@@ -1613,43 +1442,6 @@ folly::IOBufQueue service1AsyncProcessor::return_method6(int32_t protoSeqId, apa
   result.success = const_cast< ::test_cpp2::cpp_reflection::struct2*>(&_return);
   result.__isset.success = true;
   return serializeResponse("method6", &prot, protoSeqId, ctx, result);
-}
-
-template <class ProtocolIn_, class ProtocolOut_>
-void service1AsyncProcessor::throw_method6(std::unique_ptr<apache::thrift::ResponseChannel::Request> req,int32_t protoSeqId,apache::thrift::ContextStack* ctx,std::exception_ptr ep,apache::thrift::Cpp2RequestContext* reqCtx) {
-  ProtocolOut_ prot;
-  try {
-    std::rethrow_exception(ep);
-  }
-  catch (const std::exception& e) {
-    auto ew = folly::exception_wrapper(ep, e);
-    if (req) {
-      LOG(ERROR) << folly::exceptionStr(e).toStdString() << " in function method6";
-      apache::thrift::TApplicationException x(folly::exceptionStr(e).toStdString());
-      ctx->userExceptionWrapped(false, ew);
-      ctx->handlerErrorWrapped(ew);
-      folly::IOBufQueue queue = serializeException("method6", &prot, protoSeqId, ctx, x);
-      queue.append(apache::thrift::transport::THeader::transform(queue.move(), reqCtx->getHeader()->getWriteTransforms(), reqCtx->getHeader()->getMinCompressBytes()));
-      req->sendReply(queue.move());
-      return;
-    }
-    else {
-      LOG(ERROR) << folly::exceptionStr(e).toStdString() << " in oneway function method6";
-    }
-  }
-  catch (...) {
-    if (req) {
-      LOG(ERROR) << "<unknown exception>" << " in function method6";
-      apache::thrift::TApplicationException x("<unknown exception>");
-      folly::IOBufQueue queue = serializeException("method6", &prot, protoSeqId, nullptr, x);
-      queue.append(apache::thrift::transport::THeader::transform(queue.move(), reqCtx->getHeader()->getWriteTransforms(), reqCtx->getHeader()->getMinCompressBytes()));
-      req->sendReply(queue.move());
-      return;
-    }
-    else {
-      LOG(ERROR) << "<unknown exception>" << " in oneway function method6";
-    }
-  }
 }
 
 template <class ProtocolIn_, class ProtocolOut_>
@@ -1676,32 +1468,34 @@ void service1AsyncProcessor::throw_wrapped_method6(std::unique_ptr<apache::thrif
 }
 
 template <typename Protocol_>
-void service1AsyncClient::method1T(Protocol_* prot, apache::thrift::RpcOptions& rpcOptions, std::unique_ptr<apache::thrift::RequestCallback> callback) {
+void service1AsyncClient::method1T(Protocol_* prot, bool useSync, apache::thrift::RpcOptions& rpcOptions, std::unique_ptr<apache::thrift::RequestCallback> callback) {
   auto header = std::make_shared<apache::thrift::transport::THeader>(apache::thrift::transport::THeader::ALLOW_BIG_FRAMES);
   header->setProtocolId(getChannel()->getProtocolId());
   header->setHeaders(rpcOptions.releaseWriteHeaders());
   connectionContext_->setRequestHeader(header.get());
   std::unique_ptr<apache::thrift::ContextStack> ctx = this->getContextStack(this->getServiceName(), "service1.method1", connectionContext_.get());
   service1_method1_pargs args;
-  apache::thrift::clientSendT<false>(prot, rpcOptions, std::move(callback), std::move(ctx), header, channel_.get(), args, "method1", [](Protocol_* prot, service1_method1_pargs& args) { service1_method1_pargs_write(prot, &args); }, [](Protocol_* prot, service1_method1_pargs& args) { return service1_method1_pargs_serializedSizeZC(prot, &args); });
+  auto sizer = [&](Protocol_* p) { return service1_method1_pargs_serializedSizeZC(p, &args); };
+  auto writer = [&](Protocol_* p) { service1_method1_pargs_write(p, &args); };
+  apache::thrift::clientSendT<Protocol_>(prot, rpcOptions, std::move(callback), std::move(ctx), header, channel_.get(), "method1", writer, sizer, false, useSync);
   connectionContext_->setRequestHeader(nullptr);
 }
 
 template <typename Protocol_>
 folly::exception_wrapper service1AsyncClient::recv_wrapped_method1T(Protocol_* prot, ::apache::thrift::ClientReceiveState& state) {
   if (state.isException()) {
-    return state.exceptionWrapper();
+    return std::move(state.exception());
   }
   prot->setInput(state.buf());
   auto guard = folly::makeGuard([&] {prot->setInput(nullptr);});
   apache::thrift::ContextStack* ctx = state.ctx();
-  std::string fname;
+  std::string _fname;
   int32_t protoSeqId = 0;
   apache::thrift::MessageType mtype;
   ctx->preRead();
   folly::exception_wrapper interior_ew;
-  auto caught_ew = folly::try_and_catch<apache::thrift::TException, apache::thrift::protocol::TProtocolException>([&]() {
-    prot->readMessageBegin(fname, mtype, protoSeqId);
+  auto caught_ew = folly::try_and_catch<std::exception, apache::thrift::TException, apache::thrift::protocol::TProtocolException>([&]() {
+    prot->readMessageBegin(_fname, mtype, protoSeqId);
     if (mtype == apache::thrift::T_EXCEPTION) {
       apache::thrift::TApplicationException x;
       x.read(prot);
@@ -1715,7 +1509,7 @@ folly::exception_wrapper service1AsyncClient::recv_wrapped_method1T(Protocol_* p
       interior_ew = folly::make_exception_wrapper<apache::thrift::TApplicationException>(apache::thrift::TApplicationException::TApplicationExceptionType::INVALID_MESSAGE_TYPE);
       return; // from try_and_catch
     }
-    if (fname.compare("method1") != 0) {
+    if (_fname.compare("method1") != 0) {
       prot->skip(apache::thrift::protocol::T_STRUCT);
       prot->readMessageEnd();
       interior_ew = folly::make_exception_wrapper<apache::thrift::TApplicationException>(apache::thrift::TApplicationException::TApplicationExceptionType::WRONG_METHOD_NAME);
@@ -1742,12 +1536,12 @@ template <typename Protocol_>
 void service1AsyncClient::recv_method1T(Protocol_* prot, ::apache::thrift::ClientReceiveState& state) {
   auto ew = recv_wrapped_method1T(prot, state);
   if (ew) {
-    ew.throwException();
+    ew.throw_exception();
   }
 }
 
 template <typename Protocol_>
-void service1AsyncClient::method2T(Protocol_* prot, apache::thrift::RpcOptions& rpcOptions, std::unique_ptr<apache::thrift::RequestCallback> callback, int32_t x, const  ::test_cpp2::cpp_reflection::struct1& y, double z) {
+void service1AsyncClient::method2T(Protocol_* prot, bool useSync, apache::thrift::RpcOptions& rpcOptions, std::unique_ptr<apache::thrift::RequestCallback> callback, int32_t x, const  ::test_cpp2::cpp_reflection::struct1& y, double z) {
   auto header = std::make_shared<apache::thrift::transport::THeader>(apache::thrift::transport::THeader::ALLOW_BIG_FRAMES);
   header->setProtocolId(getChannel()->getProtocolId());
   header->setHeaders(rpcOptions.releaseWriteHeaders());
@@ -1757,25 +1551,27 @@ void service1AsyncClient::method2T(Protocol_* prot, apache::thrift::RpcOptions& 
   args.x = &x;
   args.y = const_cast< ::test_cpp2::cpp_reflection::struct1*>(&y);
   args.z = &z;
-  apache::thrift::clientSendT<false>(prot, rpcOptions, std::move(callback), std::move(ctx), header, channel_.get(), args, "method2", [](Protocol_* prot, service1_method2_pargs& args) { service1_method2_pargs_write(prot, &args); }, [](Protocol_* prot, service1_method2_pargs& args) { return service1_method2_pargs_serializedSizeZC(prot, &args); });
+  auto sizer = [&](Protocol_* p) { return service1_method2_pargs_serializedSizeZC(p, &args); };
+  auto writer = [&](Protocol_* p) { service1_method2_pargs_write(p, &args); };
+  apache::thrift::clientSendT<Protocol_>(prot, rpcOptions, std::move(callback), std::move(ctx), header, channel_.get(), "method2", writer, sizer, false, useSync);
   connectionContext_->setRequestHeader(nullptr);
 }
 
 template <typename Protocol_>
 folly::exception_wrapper service1AsyncClient::recv_wrapped_method2T(Protocol_* prot, ::apache::thrift::ClientReceiveState& state) {
   if (state.isException()) {
-    return state.exceptionWrapper();
+    return std::move(state.exception());
   }
   prot->setInput(state.buf());
   auto guard = folly::makeGuard([&] {prot->setInput(nullptr);});
   apache::thrift::ContextStack* ctx = state.ctx();
-  std::string fname;
+  std::string _fname;
   int32_t protoSeqId = 0;
   apache::thrift::MessageType mtype;
   ctx->preRead();
   folly::exception_wrapper interior_ew;
-  auto caught_ew = folly::try_and_catch<apache::thrift::TException, apache::thrift::protocol::TProtocolException>([&]() {
-    prot->readMessageBegin(fname, mtype, protoSeqId);
+  auto caught_ew = folly::try_and_catch<std::exception, apache::thrift::TException, apache::thrift::protocol::TProtocolException>([&]() {
+    prot->readMessageBegin(_fname, mtype, protoSeqId);
     if (mtype == apache::thrift::T_EXCEPTION) {
       apache::thrift::TApplicationException x;
       x.read(prot);
@@ -1789,7 +1585,7 @@ folly::exception_wrapper service1AsyncClient::recv_wrapped_method2T(Protocol_* p
       interior_ew = folly::make_exception_wrapper<apache::thrift::TApplicationException>(apache::thrift::TApplicationException::TApplicationExceptionType::INVALID_MESSAGE_TYPE);
       return; // from try_and_catch
     }
-    if (fname.compare("method2") != 0) {
+    if (_fname.compare("method2") != 0) {
       prot->skip(apache::thrift::protocol::T_STRUCT);
       prot->readMessageEnd();
       interior_ew = folly::make_exception_wrapper<apache::thrift::TApplicationException>(apache::thrift::TApplicationException::TApplicationExceptionType::WRONG_METHOD_NAME);
@@ -1816,37 +1612,39 @@ template <typename Protocol_>
 void service1AsyncClient::recv_method2T(Protocol_* prot, ::apache::thrift::ClientReceiveState& state) {
   auto ew = recv_wrapped_method2T(prot, state);
   if (ew) {
-    ew.throwException();
+    ew.throw_exception();
   }
 }
 
 template <typename Protocol_>
-void service1AsyncClient::method3T(Protocol_* prot, apache::thrift::RpcOptions& rpcOptions, std::unique_ptr<apache::thrift::RequestCallback> callback) {
+void service1AsyncClient::method3T(Protocol_* prot, bool useSync, apache::thrift::RpcOptions& rpcOptions, std::unique_ptr<apache::thrift::RequestCallback> callback) {
   auto header = std::make_shared<apache::thrift::transport::THeader>(apache::thrift::transport::THeader::ALLOW_BIG_FRAMES);
   header->setProtocolId(getChannel()->getProtocolId());
   header->setHeaders(rpcOptions.releaseWriteHeaders());
   connectionContext_->setRequestHeader(header.get());
   std::unique_ptr<apache::thrift::ContextStack> ctx = this->getContextStack(this->getServiceName(), "service1.method3", connectionContext_.get());
   service1_method3_pargs args;
-  apache::thrift::clientSendT<false>(prot, rpcOptions, std::move(callback), std::move(ctx), header, channel_.get(), args, "method3", [](Protocol_* prot, service1_method3_pargs& args) { service1_method3_pargs_write(prot, &args); }, [](Protocol_* prot, service1_method3_pargs& args) { return service1_method3_pargs_serializedSizeZC(prot, &args); });
+  auto sizer = [&](Protocol_* p) { return service1_method3_pargs_serializedSizeZC(p, &args); };
+  auto writer = [&](Protocol_* p) { service1_method3_pargs_write(p, &args); };
+  apache::thrift::clientSendT<Protocol_>(prot, rpcOptions, std::move(callback), std::move(ctx), header, channel_.get(), "method3", writer, sizer, false, useSync);
   connectionContext_->setRequestHeader(nullptr);
 }
 
 template <typename Protocol_>
 folly::exception_wrapper service1AsyncClient::recv_wrapped_method3T(Protocol_* prot, int32_t& _return, ::apache::thrift::ClientReceiveState& state) {
   if (state.isException()) {
-    return state.exceptionWrapper();
+    return std::move(state.exception());
   }
   prot->setInput(state.buf());
   auto guard = folly::makeGuard([&] {prot->setInput(nullptr);});
   apache::thrift::ContextStack* ctx = state.ctx();
-  std::string fname;
+  std::string _fname;
   int32_t protoSeqId = 0;
   apache::thrift::MessageType mtype;
   ctx->preRead();
   folly::exception_wrapper interior_ew;
-  auto caught_ew = folly::try_and_catch<apache::thrift::TException, apache::thrift::protocol::TProtocolException>([&]() {
-    prot->readMessageBegin(fname, mtype, protoSeqId);
+  auto caught_ew = folly::try_and_catch<std::exception, apache::thrift::TException, apache::thrift::protocol::TProtocolException>([&]() {
+    prot->readMessageBegin(_fname, mtype, protoSeqId);
     if (mtype == apache::thrift::T_EXCEPTION) {
       apache::thrift::TApplicationException x;
       x.read(prot);
@@ -1860,7 +1658,7 @@ folly::exception_wrapper service1AsyncClient::recv_wrapped_method3T(Protocol_* p
       interior_ew = folly::make_exception_wrapper<apache::thrift::TApplicationException>(apache::thrift::TApplicationException::TApplicationExceptionType::INVALID_MESSAGE_TYPE);
       return; // from try_and_catch
     }
-    if (fname.compare("method3") != 0) {
+    if (_fname.compare("method3") != 0) {
       prot->skip(apache::thrift::protocol::T_STRUCT);
       prot->readMessageEnd();
       interior_ew = folly::make_exception_wrapper<apache::thrift::TApplicationException>(apache::thrift::TApplicationException::TApplicationExceptionType::WRONG_METHOD_NAME);
@@ -1897,13 +1695,13 @@ int32_t service1AsyncClient::recv_method3T(Protocol_* prot, ::apache::thrift::Cl
   int32_t _return;
   auto ew = recv_wrapped_method3T(prot, _return, state);
   if (ew) {
-    ew.throwException();
+    ew.throw_exception();
   }
   return _return;
 }
 
 template <typename Protocol_>
-void service1AsyncClient::method4T(Protocol_* prot, apache::thrift::RpcOptions& rpcOptions, std::unique_ptr<apache::thrift::RequestCallback> callback, int32_t i, const  ::test_cpp2::cpp_reflection::struct1& j, double k) {
+void service1AsyncClient::method4T(Protocol_* prot, bool useSync, apache::thrift::RpcOptions& rpcOptions, std::unique_ptr<apache::thrift::RequestCallback> callback, int32_t i, const  ::test_cpp2::cpp_reflection::struct1& j, double k) {
   auto header = std::make_shared<apache::thrift::transport::THeader>(apache::thrift::transport::THeader::ALLOW_BIG_FRAMES);
   header->setProtocolId(getChannel()->getProtocolId());
   header->setHeaders(rpcOptions.releaseWriteHeaders());
@@ -1913,25 +1711,27 @@ void service1AsyncClient::method4T(Protocol_* prot, apache::thrift::RpcOptions& 
   args.i = &i;
   args.j = const_cast< ::test_cpp2::cpp_reflection::struct1*>(&j);
   args.k = &k;
-  apache::thrift::clientSendT<false>(prot, rpcOptions, std::move(callback), std::move(ctx), header, channel_.get(), args, "method4", [](Protocol_* prot, service1_method4_pargs& args) { service1_method4_pargs_write(prot, &args); }, [](Protocol_* prot, service1_method4_pargs& args) { return service1_method4_pargs_serializedSizeZC(prot, &args); });
+  auto sizer = [&](Protocol_* p) { return service1_method4_pargs_serializedSizeZC(p, &args); };
+  auto writer = [&](Protocol_* p) { service1_method4_pargs_write(p, &args); };
+  apache::thrift::clientSendT<Protocol_>(prot, rpcOptions, std::move(callback), std::move(ctx), header, channel_.get(), "method4", writer, sizer, false, useSync);
   connectionContext_->setRequestHeader(nullptr);
 }
 
 template <typename Protocol_>
 folly::exception_wrapper service1AsyncClient::recv_wrapped_method4T(Protocol_* prot, int32_t& _return, ::apache::thrift::ClientReceiveState& state) {
   if (state.isException()) {
-    return state.exceptionWrapper();
+    return std::move(state.exception());
   }
   prot->setInput(state.buf());
   auto guard = folly::makeGuard([&] {prot->setInput(nullptr);});
   apache::thrift::ContextStack* ctx = state.ctx();
-  std::string fname;
+  std::string _fname;
   int32_t protoSeqId = 0;
   apache::thrift::MessageType mtype;
   ctx->preRead();
   folly::exception_wrapper interior_ew;
-  auto caught_ew = folly::try_and_catch<apache::thrift::TException, apache::thrift::protocol::TProtocolException>([&]() {
-    prot->readMessageBegin(fname, mtype, protoSeqId);
+  auto caught_ew = folly::try_and_catch<std::exception, apache::thrift::TException, apache::thrift::protocol::TProtocolException>([&]() {
+    prot->readMessageBegin(_fname, mtype, protoSeqId);
     if (mtype == apache::thrift::T_EXCEPTION) {
       apache::thrift::TApplicationException x;
       x.read(prot);
@@ -1945,7 +1745,7 @@ folly::exception_wrapper service1AsyncClient::recv_wrapped_method4T(Protocol_* p
       interior_ew = folly::make_exception_wrapper<apache::thrift::TApplicationException>(apache::thrift::TApplicationException::TApplicationExceptionType::INVALID_MESSAGE_TYPE);
       return; // from try_and_catch
     }
-    if (fname.compare("method4") != 0) {
+    if (_fname.compare("method4") != 0) {
       prot->skip(apache::thrift::protocol::T_STRUCT);
       prot->readMessageEnd();
       interior_ew = folly::make_exception_wrapper<apache::thrift::TApplicationException>(apache::thrift::TApplicationException::TApplicationExceptionType::WRONG_METHOD_NAME);
@@ -1982,38 +1782,40 @@ int32_t service1AsyncClient::recv_method4T(Protocol_* prot, ::apache::thrift::Cl
   int32_t _return;
   auto ew = recv_wrapped_method4T(prot, _return, state);
   if (ew) {
-    ew.throwException();
+    ew.throw_exception();
   }
   return _return;
 }
 
 template <typename Protocol_>
-void service1AsyncClient::method5T(Protocol_* prot, apache::thrift::RpcOptions& rpcOptions, std::unique_ptr<apache::thrift::RequestCallback> callback) {
+void service1AsyncClient::method5T(Protocol_* prot, bool useSync, apache::thrift::RpcOptions& rpcOptions, std::unique_ptr<apache::thrift::RequestCallback> callback) {
   auto header = std::make_shared<apache::thrift::transport::THeader>(apache::thrift::transport::THeader::ALLOW_BIG_FRAMES);
   header->setProtocolId(getChannel()->getProtocolId());
   header->setHeaders(rpcOptions.releaseWriteHeaders());
   connectionContext_->setRequestHeader(header.get());
   std::unique_ptr<apache::thrift::ContextStack> ctx = this->getContextStack(this->getServiceName(), "service1.method5", connectionContext_.get());
   service1_method5_pargs args;
-  apache::thrift::clientSendT<false>(prot, rpcOptions, std::move(callback), std::move(ctx), header, channel_.get(), args, "method5", [](Protocol_* prot, service1_method5_pargs& args) { service1_method5_pargs_write(prot, &args); }, [](Protocol_* prot, service1_method5_pargs& args) { return service1_method5_pargs_serializedSizeZC(prot, &args); });
+  auto sizer = [&](Protocol_* p) { return service1_method5_pargs_serializedSizeZC(p, &args); };
+  auto writer = [&](Protocol_* p) { service1_method5_pargs_write(p, &args); };
+  apache::thrift::clientSendT<Protocol_>(prot, rpcOptions, std::move(callback), std::move(ctx), header, channel_.get(), "method5", writer, sizer, false, useSync);
   connectionContext_->setRequestHeader(nullptr);
 }
 
 template <typename Protocol_>
 folly::exception_wrapper service1AsyncClient::recv_wrapped_method5T(Protocol_* prot,  ::test_cpp2::cpp_reflection::struct2& _return, ::apache::thrift::ClientReceiveState& state) {
   if (state.isException()) {
-    return state.exceptionWrapper();
+    return std::move(state.exception());
   }
   prot->setInput(state.buf());
   auto guard = folly::makeGuard([&] {prot->setInput(nullptr);});
   apache::thrift::ContextStack* ctx = state.ctx();
-  std::string fname;
+  std::string _fname;
   int32_t protoSeqId = 0;
   apache::thrift::MessageType mtype;
   ctx->preRead();
   folly::exception_wrapper interior_ew;
-  auto caught_ew = folly::try_and_catch<apache::thrift::TException, apache::thrift::protocol::TProtocolException>([&]() {
-    prot->readMessageBegin(fname, mtype, protoSeqId);
+  auto caught_ew = folly::try_and_catch<std::exception, apache::thrift::TException, apache::thrift::protocol::TProtocolException>([&]() {
+    prot->readMessageBegin(_fname, mtype, protoSeqId);
     if (mtype == apache::thrift::T_EXCEPTION) {
       apache::thrift::TApplicationException x;
       x.read(prot);
@@ -2027,7 +1829,7 @@ folly::exception_wrapper service1AsyncClient::recv_wrapped_method5T(Protocol_* p
       interior_ew = folly::make_exception_wrapper<apache::thrift::TApplicationException>(apache::thrift::TApplicationException::TApplicationExceptionType::INVALID_MESSAGE_TYPE);
       return; // from try_and_catch
     }
-    if (fname.compare("method5") != 0) {
+    if (_fname.compare("method5") != 0) {
       prot->skip(apache::thrift::protocol::T_STRUCT);
       prot->readMessageEnd();
       interior_ew = folly::make_exception_wrapper<apache::thrift::TApplicationException>(apache::thrift::TApplicationException::TApplicationExceptionType::WRONG_METHOD_NAME);
@@ -2063,12 +1865,12 @@ template <typename Protocol_>
 void service1AsyncClient::recv_method5T(Protocol_* prot,  ::test_cpp2::cpp_reflection::struct2& _return, ::apache::thrift::ClientReceiveState& state) {
   auto ew = recv_wrapped_method5T(prot, _return, state);
   if (ew) {
-    ew.throwException();
+    ew.throw_exception();
   }
 }
 
 template <typename Protocol_>
-void service1AsyncClient::method6T(Protocol_* prot, apache::thrift::RpcOptions& rpcOptions, std::unique_ptr<apache::thrift::RequestCallback> callback, int32_t l, const  ::test_cpp2::cpp_reflection::struct1& m, double n) {
+void service1AsyncClient::method6T(Protocol_* prot, bool useSync, apache::thrift::RpcOptions& rpcOptions, std::unique_ptr<apache::thrift::RequestCallback> callback, int32_t l, const  ::test_cpp2::cpp_reflection::struct1& m, double n) {
   auto header = std::make_shared<apache::thrift::transport::THeader>(apache::thrift::transport::THeader::ALLOW_BIG_FRAMES);
   header->setProtocolId(getChannel()->getProtocolId());
   header->setHeaders(rpcOptions.releaseWriteHeaders());
@@ -2078,25 +1880,27 @@ void service1AsyncClient::method6T(Protocol_* prot, apache::thrift::RpcOptions& 
   args.l = &l;
   args.m = const_cast< ::test_cpp2::cpp_reflection::struct1*>(&m);
   args.n = &n;
-  apache::thrift::clientSendT<false>(prot, rpcOptions, std::move(callback), std::move(ctx), header, channel_.get(), args, "method6", [](Protocol_* prot, service1_method6_pargs& args) { service1_method6_pargs_write(prot, &args); }, [](Protocol_* prot, service1_method6_pargs& args) { return service1_method6_pargs_serializedSizeZC(prot, &args); });
+  auto sizer = [&](Protocol_* p) { return service1_method6_pargs_serializedSizeZC(p, &args); };
+  auto writer = [&](Protocol_* p) { service1_method6_pargs_write(p, &args); };
+  apache::thrift::clientSendT<Protocol_>(prot, rpcOptions, std::move(callback), std::move(ctx), header, channel_.get(), "method6", writer, sizer, false, useSync);
   connectionContext_->setRequestHeader(nullptr);
 }
 
 template <typename Protocol_>
 folly::exception_wrapper service1AsyncClient::recv_wrapped_method6T(Protocol_* prot,  ::test_cpp2::cpp_reflection::struct2& _return, ::apache::thrift::ClientReceiveState& state) {
   if (state.isException()) {
-    return state.exceptionWrapper();
+    return std::move(state.exception());
   }
   prot->setInput(state.buf());
   auto guard = folly::makeGuard([&] {prot->setInput(nullptr);});
   apache::thrift::ContextStack* ctx = state.ctx();
-  std::string fname;
+  std::string _fname;
   int32_t protoSeqId = 0;
   apache::thrift::MessageType mtype;
   ctx->preRead();
   folly::exception_wrapper interior_ew;
-  auto caught_ew = folly::try_and_catch<apache::thrift::TException, apache::thrift::protocol::TProtocolException>([&]() {
-    prot->readMessageBegin(fname, mtype, protoSeqId);
+  auto caught_ew = folly::try_and_catch<std::exception, apache::thrift::TException, apache::thrift::protocol::TProtocolException>([&]() {
+    prot->readMessageBegin(_fname, mtype, protoSeqId);
     if (mtype == apache::thrift::T_EXCEPTION) {
       apache::thrift::TApplicationException x;
       x.read(prot);
@@ -2110,7 +1914,7 @@ folly::exception_wrapper service1AsyncClient::recv_wrapped_method6T(Protocol_* p
       interior_ew = folly::make_exception_wrapper<apache::thrift::TApplicationException>(apache::thrift::TApplicationException::TApplicationExceptionType::INVALID_MESSAGE_TYPE);
       return; // from try_and_catch
     }
-    if (fname.compare("method6") != 0) {
+    if (_fname.compare("method6") != 0) {
       prot->skip(apache::thrift::protocol::T_STRUCT);
       prot->readMessageEnd();
       interior_ew = folly::make_exception_wrapper<apache::thrift::TApplicationException>(apache::thrift::TApplicationException::TApplicationExceptionType::WRONG_METHOD_NAME);
@@ -2146,7 +1950,7 @@ template <typename Protocol_>
 void service1AsyncClient::recv_method6T(Protocol_* prot,  ::test_cpp2::cpp_reflection::struct2& _return, ::apache::thrift::ClientReceiveState& state) {
   auto ew = recv_wrapped_method6T(prot, _return, state);
   if (ew) {
-    ew.throwException();
+    ew.throw_exception();
   }
 }
 

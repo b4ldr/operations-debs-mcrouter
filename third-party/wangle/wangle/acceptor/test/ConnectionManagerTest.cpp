@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #include <wangle/acceptor/ConnectionManager.h>
 
@@ -84,8 +90,7 @@ class ConnectionManagerTest: public testing::Test {
   }
 
   void addConns(uint64_t n) {
-    for (auto i = 0; i < n; i++) {
-
+    for (size_t i = 0; i < n; i++) {
       conns_.insert(conns_.begin(), MockConnection::makeUnique(this));
       cm_->addConnection(conns_.front().get());
     }
@@ -139,7 +144,7 @@ TEST_F(ConnectionManagerTest, testRemoveDrainIterator) {
 
   // activate one connection, it should not be exempt from notifyPendingShutdown
   cm_->onActivated(*conns_.front());
-  for (auto i = 0; i < conns_.size() - 1; i++) {
+  for (size_t i = 0; i < conns_.size() - 1; i++) {
     EXPECT_CALL(*conns_[i], notifyPendingShutdown());
   }
   auto conn65 = conns_[conns_.size() - 2].get();
@@ -156,7 +161,7 @@ TEST_F(ConnectionManagerTest, testRemoveDrainIterator) {
   // Schedule a loop callback to remove the connection pointed to by the drain
   // iterator
   eventBase_.loopOnce();
-  for (auto i = 0; i < conns_.size() - 1; i++) {
+  for (size_t i = 0; i < conns_.size() - 1; i++) {
     EXPECT_CALL(*conns_[i], closeWhenIdle());
   }
 
@@ -193,18 +198,59 @@ TEST_F(ConnectionManagerTest, testDropAll) {
   cm_->dropAllConnections();
 }
 
+TEST_F(ConnectionManagerTest, testDropPercent) {
+  InSequence enforceOrder;
+
+  // Make sure we have exactly 100 connections.
+  const int numToAdd = 100 - conns_.size();
+  addConns(numToAdd);
+  const int numToRemove = conns_.size() - 100;
+  for (int i = 0; i < numToRemove; i++) {
+    removeConn(conns_.begin()->get());
+  }
+  EXPECT_EQ(100, cm_->getNumConnections());
+
+  // Drop 20% of connections.
+  double pct = 0.2;
+  int numToDrop = 100 * pct;
+  auto connIter = conns_.begin();
+  while (connIter != conns_.end() && numToDrop > 0) {
+    EXPECT_CALL(*(*connIter), dropConnection());
+    --numToDrop;
+    ++connIter;
+  }
+  cm_->dropConnections(pct);
+
+  // Make sure they are gone.
+  EXPECT_EQ(0, numToDrop);
+  EXPECT_EQ(80, cm_->getNumConnections());
+
+  // Then drop 50% of the remaining 80 connections.
+  pct  = 0.5;
+  numToDrop = 80 * pct;
+  while (connIter != conns_.end() && numToDrop > 0) {
+    EXPECT_CALL(*(*connIter), dropConnection());
+    --numToDrop;
+    ++connIter;
+  }
+  cm_->dropConnections(pct);
+
+  // Make sure those are gone as well.
+  EXPECT_EQ(0, numToDrop);
+  EXPECT_EQ(40, cm_->getNumConnections());
+}
 
 TEST_F(ConnectionManagerTest, testDrainPercent) {
   InSequence enforceOrder;
   double drain_percentage = .123;
 
-  for (auto i = 58 /* tail .123 of all conns */; i < conns_.size(); ++i) {
+  for (size_t i = 58 /* tail .123 of all conns */; i < conns_.size(); ++i) {
     EXPECT_CALL(*conns_[i], notifyPendingShutdown());
   }
 
   cm_->drainConnections(drain_percentage, std::chrono::milliseconds(50));
 
-  for (auto i = 58; i < conns_.size(); ++i) {
+  for (size_t i = 58; i < conns_.size(); ++i) {
     EXPECT_CALL(*conns_[i], closeWhenIdle());
   }
 
@@ -241,8 +287,8 @@ TEST_F(ConnectionManagerTest, testDrainAllAfterPct) {
 
   cm_->drainConnections(drain_pct, std::chrono::milliseconds(50));
 
-  for (auto i = 0;
-      i < conns_.size() - static_cast<int>(conns_.size() * drain_pct); ++i) {
+  for (size_t i = 0;
+      i < conns_.size() - static_cast<size_t>(conns_.size() * drain_pct); ++i) {
     EXPECT_CALL(*conns_[i], notifyPendingShutdown());
   }
 
@@ -264,7 +310,7 @@ TEST_F(ConnectionManagerTest, testDropIdle) {
   }
 
   // Mark the first half of the connections idle
-  for (auto i = 0; i < conns_.size() / 2; i++) {
+  for (size_t i = 0; i < conns_.size() / 2; i++) {
     cm_->onDeactivated(*conns_[i]);
   }
   // reactivate conn 0
@@ -275,9 +321,9 @@ TEST_F(ConnectionManagerTest, testDropIdle) {
   InSequence enforceOrder;
 
   // Expect the remaining idle conns to drop
-  for (auto i = 2; i < conns_.size() / 2; i++) {
-    EXPECT_CALL(*conns_[i], timeoutExpired())
-      .WillOnce(Invoke([&] { cm_->removeConnection(conns_[i].get()); }));
+  for (size_t i = 2; i < conns_.size() / 2; i++) {
+    EXPECT_CALL(*conns_[i], dropConnection())
+      .WillOnce(Invoke([this, i] { cm_->removeConnection(conns_[i].get()); }));
   }
 
   cm_->dropIdleConnections(conns_.size());
@@ -365,12 +411,4 @@ TEST_F(ConnectionManagerTest, testAddDuringCloseWhenIdleActive) {
 TEST_F(ConnectionManagerTest, testAddDuringCloseWhenIdleInactive) {
   testAddDuringCloseWhenIdle(true);
 }
-}
-
-int main(int argc, char* argv[]) {
-  testing::InitGoogleTest(&argc, argv);
-  gflags::ParseCommandLineFlags(&argc, &argv, true);
-  google::InitGoogleLogging(argv[0]);
-  google::InstallFailureSignalHandler();
-  return RUN_ALL_TESTS();
 }

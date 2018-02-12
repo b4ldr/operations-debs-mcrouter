@@ -1,17 +1,29 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #pragma once
 
-#include <folly/String.h>
+#include <list>
 #include <mutex>
-#include <folly/io/async/AsyncSSLSocket.h>
+
+#include <folly/String.h>
+#include <folly/ssl/OpenSSLPtrTypes.h>
+
+namespace folly {
+class AsyncSSLSocket;
+}
 
 namespace wangle {
 
@@ -24,34 +36,25 @@ enum class SSLResumeEnum : uint8_t {
   HANDSHAKE = 0,
   RESUME_SESSION_ID = 1,
   RESUME_TICKET = 3,
-  NA = 2
+  NA = 2,
 };
 
 enum class SSLErrorEnum {
   NO_ERROR,
   TIMEOUT,
-  DROPPED
+  DROPPED,
 };
 
-class SSLException : public std::exception {
+class SSLException : public std::runtime_error {
  public:
-  SSLException(SSLErrorEnum error,
-               const std::chrono::milliseconds& latency,
-               uint64_t bytesRead)
-      : error_(error), latency_(latency), bytesRead_(bytesRead) {}
+  SSLException(
+      SSLErrorEnum error,
+      const std::chrono::milliseconds& latency,
+      uint64_t bytesRead);
 
   SSLErrorEnum getError() const { return error_; }
   std::chrono::milliseconds getLatency() const { return latency_; }
   uint64_t getBytesRead() const { return bytesRead_; }
-
-  const char* what() const noexcept {
-    const auto& err = folly::sformat(
-        "SSL error: {}; Elapsed time: {} ms; Bytes read: {}",
-        folly::to<int>(error_),
-        latency_.count(),
-        bytesRead_);
-    return err.c_str();
-  }
 
  private:
   SSLErrorEnum error_{SSLErrorEnum::NO_ERROR};
@@ -82,17 +85,34 @@ class SSLUtil {
     }
   }
 
+ private:
+   // The following typedefs are needed for compatibility across various OpenSSL
+   // versions since each change the dup function param types ever so slightly
+#if FOLLY_OPENSSL_IS_110 || defined(OPENSSL_IS_BORINGSSL)
+  using ex_data_dup_from_arg_t = const CRYPTO_EX_DATA*;
+#else
+  using ex_data_dup_from_arg_t = CRYPTO_EX_DATA*;
+#endif
+
+#ifdef OPENSSL_IS_BORINGSSL
+  using ex_data_dup_ptr_arg_t = void**;
+#else
+  using ex_data_dup_ptr_arg_t = void*;
+#endif
+
+ public:
   // ex data string dup func
   static int exDataStdStringDup(
       CRYPTO_EX_DATA* /* to */,
-      CRYPTO_EX_DATA* /* from */,
-      void* ptr,
+      ex_data_dup_from_arg_t /* from */,
+      ex_data_dup_ptr_arg_t ptr,
       int /* idx */,
       long /* argl */,
       void* /* argp */) {
-    // TODO: This is awful - ptr is actually a void** and needs to be set to the
-    // duped data.  Fix this when openssl fixes their API - see
-    // int_dup_ex_data in ex_data.c
+    // TODO: With OpenSSL, ptr is passed in as a void* but is actually a void**
+    // So we need to convert it and then set to the duped data.
+    // see int_dup_ex_data in ex_data.c
+    // BoringSSL is saner and uses a void**
     void** dataPtr = reinterpret_cast<void**>(ptr);
     std::string* strData = reinterpret_cast<std::string*>(*dataPtr);
     if (strData) {
@@ -119,7 +139,11 @@ class SSLUtil {
     std::lock_guard<std::mutex> g(sIndexLock_);
     if (*pindex < 0) {
       *pindex = SSL_SESSION_get_ex_new_index(
-        0, nullptr, nullptr, exDataStdStringDup, exDataStdStringFree);
+          0,
+          nullptr,
+          nullptr,
+          exDataStdStringDup,
+          exDataStdStringFree);
     }
   }
 
@@ -140,14 +164,8 @@ class SSLUtil {
   /**
    * Return the SSL resume type for the given socket.
    */
-  static inline SSLResumeEnum getResumeState(
-    folly::AsyncSSLSocket* sslSocket) {
-    return sslSocket->getSSLSessionReused() ?
-      (sslSocket->sessionIDResumed() ?
-        SSLResumeEnum::RESUME_SESSION_ID :
-        SSLResumeEnum::RESUME_TICKET) :
-      SSLResumeEnum::HANDSHAKE;
-  }
+  static SSLResumeEnum getResumeState(
+    folly::AsyncSSLSocket* sslSocket);
 
   /**
    * Get the Common Name from an X.509 certificate
@@ -164,6 +182,15 @@ class SSLUtil {
    */
   static std::unique_ptr<std::list<std::string>> getSubjectAltName(
       const X509* cert);
+
+
+  /**
+   * Parse an X509 out of a certificate buffer (usually read from the cert file)
+   * @param certificateData  Buffer containing certificate data from file
+   * @return  unique_ptr to X509 (may be null)
+   */
+  static folly::ssl::X509UniquePtr getX509FromCertificate(
+      const std::string& certificateData);
 };
 
 } // namespace wangle

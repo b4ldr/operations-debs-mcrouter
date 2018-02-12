@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2015-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,28 @@
 #ifndef THRIFT_FATAL_REFLECTION_H_
 #define THRIFT_FATAL_REFLECTION_H_ 1
 
-#include <thrift/lib/cpp2/fatal/reflection-inl-pre.h>
+#include <folly/Traits.h>
 
+#include <thrift/lib/cpp2/TypeClass.h>
+
+#include <thrift/lib/cpp2/fatal/internal/reflection-inl-pre.h>
+
+#include <fatal/type/conditional.h>
+#include <fatal/type/convert.h>
+#include <fatal/type/data_member_getter.h>
 #include <fatal/type/enum.h>
-#include <fatal/type/map.h>
+#include <fatal/type/foreach.h>
+#include <fatal/type/get.h>
+#include <fatal/type/get_type.h>
+#include <fatal/type/list.h>
+#include <fatal/type/pair.h>
 #include <fatal/type/registry.h>
+#include <fatal/type/search.h>
+#include <fatal/type/traits.h>
 #include <fatal/type/transform.h>
 #include <fatal/type/variant_traits.h>
 
+#include <utility>
 #include <type_traits>
 
 #include <cstdint>
@@ -68,7 +82,7 @@ namespace apache { namespace thrift {
 
 /**
  * NOTE ON COMPILE-TIME STRINGS: many strings found in the Thrift file are
- * converted to compile-time strings in the form of a `fatal::constant_sequence`
+ * converted to compile-time strings in the form of a `fatal::sequence`
  * of `char`.
  *
  * They are often represented as general C++ identifiers. Not all strings are
@@ -109,103 +123,6 @@ using field_id_t = std::int16_t;
 using legacy_type_id_t = std::uint64_t;
 
 /**
- * The high-level category of a type as it concerns Thrift.
- *
- * See `reflect_category` for more information.
- *
- * @author: Marcelo Juchem <marcelo@fb.com>
- */
-enum class thrift_category {
-  /**
-   * Represents types unknown to the reflection framework.
-   *
-   * NOTE: if this is the returned category, there's a good chance that's
-   * because it's a custom type with no specialization of the approriate
-   * container trait class. See documentation for `string`, `list`, `set`
-   * and `map` enum values below.
-   *
-   * @author: Marcelo Juchem <marcelo@fb.com>
-   */
-  unknown,
-  /**
-   * Represents types with no actual data representation. Most commonly `void`.
-   *
-   * @author: Marcelo Juchem <marcelo@fb.com>
-   */
-  nothing,
-  /**
-   * Represents all signed and unsigned integral types, including `bool`.
-   *
-   * @author: Marcelo Juchem <marcelo@fb.com>
-   */
-  integral,
-  /**
-   * Represents all floating point types.
-   *
-   * @author: Marcelo Juchem <marcelo@fb.com>
-   */
-  floating_point,
-  /**
-   * Represents all known strings implementation.
-   *
-   * NOTE: if this is not the category returned for a string, there's a good
-   * chance that's because it's a custom type with no specialization of the
-   * string trait class. See documentation for `thrift_string_traits`.
-   *
-   * @author: Marcelo Juchem <marcelo@fb.com>
-   */
-  string,
-  /**
-   * Represents an enum.
-   *
-   * @author: Marcelo Juchem <marcelo@fb.com>
-   */
-  enumeration,
-  /**
-   * Represents an class or structure.
-   *
-   * @author: Marcelo Juchem <marcelo@fb.com>
-   */
-  structure,
-  /**
-   * Represents a variant (or union, as the Thrift IDL grammar goes).
-   *
-   * @author: Marcelo Juchem <marcelo@fb.com>
-   */
-  variant,
-  /**
-   * Represents all known list implementations.
-   *
-   * NOTE: if this is not the category returned for a list, there's a good
-   * chance that's because it's a custom type with no specialization of the
-   * list trait class. See documentation for `thrift_list_traits`.
-   *
-   * @author: Marcelo Juchem <marcelo@fb.com>
-   */
-  list,
-  /**
-   * Represents all known set implementations.
-   *
-   * NOTE: if this is not the category returned for a set, there's a good
-   * chance that's because it's a custom type with no specialization of the
-   * set trait class. See documentation for `thrift_set_traits`.
-   *
-   * @author: Marcelo Juchem <marcelo@fb.com>
-   */
-  set,
-  /**
-   * Represents all known map implementations.
-   *
-   * NOTE: if this is not the category returned for a map, there's a good
-   * chance that's because it's a custom type with no specialization of the
-   * map trait class. See documentation for `thrift_map_traits`.
-   *
-   * @author: Marcelo Juchem <marcelo@fb.com>
-   */
-  map
-};
-
-/**
  * Represents whether a field is required to be set in a given structure or not.
  *
  * @author: Marcelo Juchem <marcelo@fb.com>
@@ -231,6 +148,61 @@ enum class optionality {
   required_of_writer
 };
 
+/////////////////////////////
+// SECTION: TYPE CLASS API //
+/////////////////////////////
+
+/**
+ * Returns the type class of a type.
+ *
+ * The type classes are defined in `namespace apache::thrift::type_class` in the
+ * header `thrift/lib/cpp2/Thrift.h`.
+ *
+ * To keep compilation times at bay, strings and containers are not detected by
+ * default, therefore they will yield `unknown` as their type class. To enable
+ * their detection you must include `container_traits.h`. There's also support
+ * for containers defined in Folly at `container_traits_folly.h`.
+ *
+ * See `type_class` for the possible categories.
+ *
+ * Example:
+ *
+ *  /////////////////////
+ *  // MyModule.thrift //
+ *  /////////////////////
+ *  namespace cpp2 My.Namespace
+ *
+ *  struct MyStruct {
+ *    1: i32 a
+ *    2: string b
+ *    3: double c
+ *  }
+ *
+ *  enum MyEnum { a, b, c }
+ *
+ *  typedef list<string> MyList;
+ *
+ *  /////////////
+ *  // foo.cpp //
+ *  /////////////
+ *
+ *  // yields `type_class::structure`
+ *  using result1 = reflect_type_class<MyStruct>;
+ *
+ *  // yields `type_class::enumeration`
+ *  using result2 = reflect_type_class<MyEnum>;
+ *
+ *  // yields `type_class::list<type_class::string>`
+ *  using result3 = reflect_type_class<MyList>;
+ *
+ *  // yields `type_class::unknown`
+ *  using result4 = reflect_type_class<void>;
+ *
+ * @author: Marcelo Juchem <marcelo@fb.com>
+ */
+template <typename T>
+using reflect_type_class = typename detail::reflect_type_class_impl<T>::type;
+
 /////////////////////////
 // SECTION: MODULE API //
 /////////////////////////
@@ -245,6 +217,7 @@ enum class optionality {
  * @author: Marcelo Juchem <marcelo@fb.com>
  */
 template <
+  typename Name,
   typename Namespaces,
   typename Enums,
   typename Unions,
@@ -254,9 +227,32 @@ template <
 >
 struct reflected_module {
   /**
+   * The name.
+   *
+   * A `fatal::constant_sequence` (compile-time string) representing the module
+   * name.
+   *
+   * Example:
+   *
+   *  // MyModule.thrift
+   *
+   *  namespace cpp2 My.Namespace
+   *  struct MyStruct {}
+   *
+   *  // C++
+   *
+   *  using info = reflect_module<My::Namespace::MyModule_tags::module>;
+   *  using name = typename info::name;
+   *  // yields `fatal::constant_sequence<
+   *  //   char, 'M', 'y', 'M', 'o', 'd', 'u', 'l', 'e',
+   *  // >`
+   */
+  using name = Name;
+
+  /**
    * The map from language to namespace.
    *
-   * A `fatal::type_map` where the key is a `fatal::constant_sequence`
+   * A `fatal::list` of `fatal::pair` where the key is a `fatal::sequence`
    * (compile-time string) representing the language, associated with a
    * compile-time string representing the namespace.
    *
@@ -278,26 +274,26 @@ struct reflected_module {
    *
    *  using info = reflect_module<My::Namespace::MyModule_tags::module>;
    *
-   *  FATAL_STR(cpp, "cpp");
-   *  FATAL_STR(cpp2, "cpp2");
-   *  FATAL_STR(java, "java");
+   *  FATAL_S(cpp, "cpp");
+   *  FATAL_S(cpp2, "cpp2");
+   *  FATAL_S(java, "java");
    *
-   *  // yields `fatal::constant_sequence<
+   *  // yields `fatal::sequence<
    *  //   char,
    *  //   'M', 'y', ':', ':', 'N', 'a', 'm', 'e',
    *  //   's', 'p', 'a', 'c', 'e', 'C', 'p', 'p'
    *  // >`
-   *  using result1 = info::namespaces::get<cpp>;
+   *  using result1 = fatal::get<info::namespaces, cpp>;
    *
-   *  // yields `fatal::constant_sequence<
+   *  // yields `fatal::sequence<
    *  //   char, 'M', 'y', ':', ':', 'N', 'a', 'm', 'e', 's', 'p', 'a', 'c', 'e'
    *  // >`
-   *  using result2 = info::namespaces::get<cpp2>;
+   *  using result2 = fatal::get<info::namespaces, cpp2>;
    *
-   *  // yields `fatal::constant_sequence<
+   *  // yields `fatal::sequence<
    *  //   char, 'M', 'y', '.', 'N', 'a', 'm', 'e', 's', 'p', 'a', 'c', 'e'
    *  // >`
-   *  using result3 = info::namespaces::get<java>;
+   *  using result3 = fatal::get<info::namespaces, java>;
    *
    * @author: Marcelo Juchem <marcelo@fb.com>
    */
@@ -306,9 +302,9 @@ struct reflected_module {
   /**
    * The list of enumerations with reflection metadata available.
    *
-   * A `fatal::type_map` where the key is the type generated by the Thrift
-   * compiler for each enumeration, associated with a compile-time string
-   * (`fatal::constant_sequence`) representing the enumeration name.
+   * A `fatal::list` of `fatal::pair` where the first type is the one generated
+   * by the Thrift compiler for each enumeration, and the second one is the
+   * compile-time string (`fatal::sequence`) representing the enumeration name.
    *
    * Use `fatal::enum_traits` to retrieve reflection information for each
    * enumeration (fatal/type/enum.h).
@@ -320,9 +316,9 @@ struct reflected_module {
   /**
    * The list of unions with reflection metadata available.
    *
-   * A `fatal::type_map` where the key is the type generated by the Thrift
-   * compiler for each union, associated with a compile-time string
-   * (`fatal::constant_sequence`) representing the union name.
+   * A `fatal::list` of `fatal::pair` where the first type is the one generated
+   * by the Thrift compiler for each union, and the second one is the
+   * compile-time string (`fatal::sequence`) representing the union name.
    *
    * Use `fatal::variant_traits` to retrieve reflection information for each
    * union (fatal/type/variant_traits.h).
@@ -334,9 +330,9 @@ struct reflected_module {
   /**
    * The list of structs with reflection metadata available.
    *
-   * A `fatal::type_map` where the key is the type generated by the Thrift
-   * compiler for each struct, associated with a compile-time string
-   * (`fatal::constant_sequence`) representing the struct name.
+   * A `fatal::list` of `fatal::pair` where the first type is the one generated
+   * by the Thrift compiler for each struct, and the second one is the
+   * compile-time string (`fatal::sequence`) representing the struct name.
    *
    * @author: Marcelo Juchem <marcelo@fb.com>
    */
@@ -345,8 +341,8 @@ struct reflected_module {
   /**
    * The list of services with reflection metadata available.
    *
-   * A `fatal::type_list` of compile-time strings
-   * (`fatal::constant_sequence`) representing each service name.
+   * A `fatal::list` of compile-time strings
+   * (`fatal::sequence`) representing each service name.
    *
    * @author: Marcelo Juchem <marcelo@fb.com>
    */
@@ -391,7 +387,7 @@ struct reflected_module {
  */
 template <typename Tag>
 using reflect_module = fatal::registry_lookup<
-  detail::reflection_impl::reflection_metadata_tag,
+  detail::reflection_metadata_tag,
   Tag
 >;
 
@@ -437,7 +433,7 @@ using reflect_module = fatal::registry_lookup<
  */
 template <typename Tag, typename Default = void>
 using try_reflect_module = fatal::try_registry_lookup<
-  detail::reflection_impl::reflection_metadata_tag,
+  detail::reflection_metadata_tag,
   Tag,
   Default
 >;
@@ -483,10 +479,6 @@ using is_reflectable_module = std::integral_constant<
   >::value
 >;
 
-namespace detail {
-template <typename> struct reflect_module_tag_impl;
-} // namespace detail {
-
 /**
  * Gets the reflection metadata tag for the Thrift file where the type `T` is
  * declared.
@@ -518,19 +510,17 @@ template <typename> struct reflect_module_tag_impl;
  * @author: Marcelo Juchem <marcelo@fb.com>
  */
 template <typename T>
-using reflect_module_tag = typename detail::reflect_module_tag_impl<
-  T
->::template get<>::type;
+using reflect_module_tag = typename detail::reflect_module_tag_selector<
+  reflect_type_class<T>,
+  T,
+  false
+>::type;
 
 /**
  * Tries to get the reflection metadata tag for the Thrift file where the type
  * `T` is declared.
  *
- * If the type `T` is a struct, enum or union and there is reflection
- * metadata available, the reflection metadata tag is returned. Otherwise,
- * returns `Default`. If `Default` is not specified, it defaults to void.
- *
- * Example:
+e:
  *
  *  // MyModule.thrift
  *
@@ -558,9 +548,98 @@ using reflect_module_tag = typename detail::reflect_module_tag_impl<
  * @author: Marcelo Juchem <marcelo@fb.com>
  */
 template <typename T, typename Default = void>
-using try_reflect_module_tag = typename detail::reflect_module_tag_impl<
-  T
->::template try_get<Default>::type;
+using try_reflect_module_tag = typename detail::reflect_module_tag_selector<
+  reflect_type_class<T>,
+  T,
+  true,
+  Default
+>::type;
+
+/**
+ * Represents an annotation from `reflected_annotations::map`.
+ *
+ * For the examples below, consider code generated for this Thrift file:
+ *
+ *  struct Foo {
+ *    1: i32 z
+ *  } (
+ *    a = '{not a valid format}',
+ *    b = '{"valid": "format", "foo": 10, "bar": true, "x": [-5, 0, 5]}',
+ *    c = '"hello"'
+ *  }
+ *
+ * @author: Marcelo Juchem <marcelo@fb.com>
+ */
+template <typename Key, typename Value, typename Structured = void>
+struct annotation {
+  /**
+   * Represents the annotation key as a compile-time string, in the form of a
+   * `fatal::sequence` of type `char`.
+   *
+   * @author: Marcelo Juchem <marcelo@fb.com>
+   */
+  using key = Key;
+
+  /**
+   * Represents the annotation value as a compile-time string, in the form of a
+   * `fatal::sequence` of type `char`.
+   *
+   * @author: Marcelo Juchem <marcelo@fb.com>
+   */
+  using value = Value;
+
+  /**
+   * The structured annotation value, if it represents a valid JSON subset,
+   * otherwise it's `void`, representing a non-structured annotation.
+   *
+   * A valid JSON subset includes only integrals, booleans, strings, lists and
+   * dictionaries. No floating point numbers are supported.
+   *
+   * Dictionary keys will be laid out in sorted order.
+   *
+   * Example:
+   *
+   *  using info = reflect_struct<Foo>::annotations;
+   *  using a = fatal::get<info::map, info::keys::a>;
+   *
+   *  // yields `void`
+   *  using result1 = a::structured;
+   *
+   *  using b = fatal::get<info::map, info::keys::b>;
+   *
+   *  // yields `fatal::list<
+   *  //  fatal::pair<
+   *  //    fatal::sequence<char, 'b', 'a', 'r'>,
+   *  //    std::true_type
+   *  //  >,
+   *  //  fatal::pair<
+   *  //    fatal::sequence<char, 'f', 'o', 'o'>,
+   *  //    std::integral_constant<std::uintmax_t, 10>
+   *  //  >,
+   *  //  fatal::pair<
+   *  //    fatal::sequence<char, 'v', 'a', 'l', 'i', 'd'>,
+   *  //    fatal::sequence<char, 'f', 'o', 'r', 'm', 'a', 't'>
+   *  //  >,
+   *  //  fatal::pair<
+   *  //    fatal::sequence<char, 'x'>,
+   *  //    fatal::list<
+   *  //      std::integral_constant<std::intmax_t, -5>,
+   *  //      std::integral_constant<std::uintmax_t, 0>,
+   *  //      std::integral_constant<std::uintmax_t, 5>
+   *  //    >
+   *  //  >
+   *  // >`
+   *  using result2 = b::structured;
+   *
+   *  using c = fatal::get<info::map, info::keys::c>;
+   *
+   *  // yields `fatal::sequence<char, 'h', 'e', 'l', 'l', 'o'>`
+   *  using result3 = c::structured;
+   *
+   * @author: Marcelo Juchem <marcelo@fb.com>
+   */
+  using structured  = Structured;
+};
 
 /**
  * Holds reflection metadata for annotations.
@@ -604,7 +683,7 @@ struct reflected_annotations {
    *
    *  using annotations = reflect_struct<MyStruct>::annotations;
    *
-   *  // yields `fatal::constant_sequence<char,
+   *  // yields `fatal::sequence<char,
    *  //   's', 'o', 'm', 'e', '.',
    *  //   'a', 'n', 'n', 'o', 't', 'a', 't', 'i', 'o', 'n'
    *  // >`
@@ -629,7 +708,7 @@ struct reflected_annotations {
    *
    *  using annotations = reflect_struct<MyStruct>::annotations;
    *
-   *  // yields `fatal::constant_sequence<char,
+   *  // yields `fatal::sequence<char,
    *  //   's', 'o', 'm', 'e', ' ', 'v', 'a', 'l', 'u', 'e'
    *  // >`
    *  using result1 = annotations::values::some_annotation;
@@ -639,28 +718,30 @@ struct reflected_annotations {
   using values = typename Metadata::values;
 
   /**
-   * A type map representing the annotations declared in the Thrift file,
-   * sorted by keys.
+   * A list of `annotation` representing the annotations declared in the Thrift
+   * file, sorted by keys.
    *
-   * Both the keys and the values of this map are compile-time strings
-   * represented by `fatal::constant_sequence` of type `char`.
+   * See the `annotation` type for more information.
    *
    * Example:
    *
    *  // yields an instantiation of the `reflected_annotations` template
    *  using annotations = reflect_struct<MyStruct>::annotations;
    *
-   *  FATAL_STR(key, "another.annotation");
+   *  FATAL_S(key, "another.annotation");
    *
-   *  // yields `fatal::constant_sequence<char,
+   *  // yields `fatal::sequence<char,
    *  //   'a', 'n', 'o', 't', 'h', 'e', 'r', ' ', 'v', 'a', 'l', 'u', 'e'
    *  // >`
-   *  using result1 = annotations::map::get<key>;
+   *  using result1 = fatal::get<annotations::map, key>::value;
    *
-   *  // yields `fatal::constant_sequence<char,
+   *  // yields `fatal::sequence<char,
    *  //   's', 'o', 'm', 'e', ' ', 'v', 'a', 'l', 'u', 'e'
    *  // >`
-   *  using result2 = annotations::map::get<annotations::keys::some_annotation>;
+   *  using result2 = fatal::get<
+   *    annotations::map,
+   *    annotations::keys::some_annotation
+   *  >::value;
    *
    * @author: Marcelo Juchem <marcelo@fb.com>
    */
@@ -702,7 +783,7 @@ struct reflected_annotations {
 template <
   typename Struct,
   typename Name,
-  template <template <typename> class> class MembersInfo,
+  typename MembersInfo,
   typename Info,
   typename MembersAnnotations,
   typename Metadata
@@ -729,11 +810,11 @@ struct reflected_struct {
    *
    *  using info = reflect_struct<MyStruct>;
    *
-   *  // yields `fatal::constant_sequence<
+   *  // yields `fatal::sequence<
    *  //   char,
    *  //   'M', 'y', 'S', 't', 'r', 'u', 'c', 't'
    *  // >`
-   *  using result = info::type;
+   *  using result = info::name;
    *
    * @author: Marcelo Juchem <marcelo@fb.com>
    */
@@ -769,140 +850,43 @@ struct reflected_struct {
    *
    *  using info = reflect_struct<MyStruct>;
    *
-   *  // yields `fatal::constant_sequence<char, 'a'>`
-   *  using result1 = info::member<>::a::name;
+   *  // yields `fatal::sequence<char, 'a'>`
+   *  using result1 = info::member::a::name;
    *
    *  // yields `std::int32_t`
-   *  using result2 = info::member<>::a::type;
+   *  using result2 = info::member::a::type;
    *
    *  // yields `1`
-   *  using result3 = info::member<>::a::id::value;
+   *  using result3 = info::member::a::id::value;
    *
    * @author: Marcelo Juchem <marcelo@fb.com>
    */
-  template <template <typename> class Transform = fatal::identity>
-  using member = MembersInfo<Transform>;
+  using member = MembersInfo;
 
   /**
-   * An implementation defined type that provides the names for each data member
-   * as a member type alias with the same name.
-   *
-   * These type aliases are used as the key for the various type maps offered by
-   * the `reflected_struct` class.
-   *
-   * The names are represented by a `fatal::constant_sequence` of type `char`
-   * (a compile-time string).
-   *
-   * Example:
-   *
-   *  using info = reflect_struct<MyStruct>;
-   *
-   *  // yields `fatal::constant_sequence<char, 'a'>`
-   *  using result1 = info::names::a;
-   *
-   *  // yields `fatal::constant_sequence<char, 'b'>`
-   *  using result2 = info::names::b;
-   *
-   *  // yields "c"
-   *  auto result3 = info::names::c::z_data();
-   *
-   * @author: Marcelo Juchem <marcelo@fb.com>
-   */
-  using names = member<fatal::get_member_type::name>;
-
-  /**
-   * A `fatal::type_map` from the data member name to the corresponding metadata
-   * for that data member as a `reflected_struct_data_member`.
+   * A `fatal::list` of `reflected_struct_data_member` representing each member.
    *
    * See the documentation for `reflected_struct_data_member` (below) for more
    * information on its members.
    *
    * Example:
    *
+   *  struct visitor {
+   *    template <typename MemberInfo>
+   *    void operator ()(fatal::tag<MemberInfo>) {
+   *      using name = typename MemberInfo::name;
+   *      std::cout << "- member: " << fatal::z_data<name>() << '\n';
+   *    }
+   *  };
+   *
    *  using info = reflect_struct<MyStruct>;
    *
-   *  using member = info::members<info::names::b>;
-   *
-   *  // yields "b"
-   *  auto result1 = member::name::z_data();
-   *
-   *  // yields `std::string`
-   *  using result2 = member::type;
-   *
-   *  // yields `2`
-   *  auto result3 = member::id::value;
+   *  // prints the names of all members of `MyStruct`
+   *  fatal::foreach<info::members>(visitor());
    *
    * @author: Marcelo Juchem <marcelo@fb.com>
    */
   using members = Info;
-
-  /**
-   * A `fatal::type_map` from the data member name to the data member type.
-   *
-   * Example:
-   *
-   *  using info = reflect_struct<MyStruct>;
-   *
-   *  // yields `double`
-   *  using result = info::types::get<info::names::c>;
-   *
-   * @author: Marcelo Juchem <marcelo@fb.com>
-   */
-  using types = typename members::template transform<
-    fatal::get_member_type::type
-  >;
-
-  /**
-   * A `fatal::type_map` from the data member name to the Thrift field id as a
-   * `std::integral_constant` of type `field_id_t`.
-   *
-   * Example:
-   *
-   *  using info = reflect_struct<MyStruct>;
-   *
-   *  // yields `std::integral_constant<field_id_t, 2>`
-   *  using result1 = info::ids::get<info::names::b>;
-   *
-   *  // yields `2`
-   *  auto result2 = result1::value;
-   *
-   * @author: Marcelo Juchem <marcelo@fb.com>
-   */
-  using ids = typename members::template transform<
-    fatal::get_member_type::id
-  >;
-
-  /**
-   * A `fatal::type_map` from the data member name to a getter for the data
-   * member.
-   *
-   * See the documentation for `reflected_struct_data_member::getter` (below)
-   * for more information.
-   *
-   * Example:
-   *
-   *  using info = reflect_struct<MyStruct>;
-   *
-   *  using getter = info::getters::get<info::names::a>;
-   *
-   *  MyStruct pod;
-   *
-   *  pod.a = 10;
-   *
-   *  // yields `10`
-   *  auto result1 = getter::ref(pod);
-   *
-   *  // sets  `56` on `pod.a`
-   *  getter::ref(pod) = 56;
-   *
-   *  // yields `56`
-   *  auto result2 = pod.a;
-   *
-   * @author: Marcelo Juchem <marcelo@fb.com>
-   */
-  using getters = typename members::template transform<
-    fatal::get_member_type::getter
-  >;
 
   /**
    * An instantiation of `reflected_annotations` representing the annotations
@@ -912,7 +896,7 @@ struct reflected_struct {
    *
    *  using info = reflect_struct<MyStruct>;
    *
-   *  // yields `fatal::constant_sequence<char,
+   *  // yields `fatal::sequence<char,
    *  //   'a', 'n', 'o', 't', 'h', 'e', 'r', ' ', 'v', 'a', 'l', 'u', 'e'
    *  // >`
    *  using result = info::annotations::values::another_annotation;
@@ -930,7 +914,7 @@ struct reflected_struct {
    *
    *  using info = reflect_struct<MyStruct>;
    *
-   *  // yields `fatal::constant_sequence<char,
+   *  // yields `fatal::sequence<char,
    *  //   'm', 'e', 'm', 'b', 'e', 'r', ' ', 't', 'e', 'x', 't'
    *  // >`
    *  using result1 = info::members_annotations::c::values::member_note
@@ -964,13 +948,15 @@ template <
   field_id_t Id,
   optionality Optionality,
   typename Getter,
-  thrift_category Category,
+  typename TypeClass,
   template <typename> class Pod,
-  typename Annotations
+  typename Annotations,
+  typename Owner,
+  bool HasIsSet
 >
 struct reflected_struct_data_member {
   /**
-   * A `fatal::constant_sequence` of `char` representing the data member name as
+   * A `fatal::sequence` of `char` representing the data member name as
    * a compile-time string.
    *
    * Example:
@@ -988,13 +974,13 @@ struct reflected_struct_data_member {
    *  // C++
    *
    *  using info = reflect_struct<MyStruct>;
-   *  using member = info::types::members<info::names::fieldC>;
+   *  using member = info::member::fieldC;
    *
-   *  // yields `fatal::constant_sequence<char, 'f', 'i', 'e', 'l', 'd', 'C'>`
+   *  // yields `fatal::sequence<char, 'f', 'i', 'e', 'l', 'd', 'C'>`
    *  using result1 = member::name;
    *
    *  // yields "fieldC"
-   *  auto result2 = result1::z_data();
+   *  auto result2 = fatal::z_data<result1>();
    *
    * @author: Marcelo Juchem <marcelo@fb.com>
    */
@@ -1018,7 +1004,7 @@ struct reflected_struct_data_member {
    *  // C++
    *
    *  using info = reflect_struct<MyStruct>;
-   *  using member = info::types::members<info::names::fieldC>;
+   *  using member = info::member::fieldC;
    *
    *  // yields `double`
    *  using result1 = member::type;
@@ -1046,10 +1032,10 @@ struct reflected_struct_data_member {
    *  // C++
    *
    *  using info = reflect_struct<MyStruct>;
-   *  using member = info::types::members<info::names::fieldC>;
+   *  using member = info::member::fieldC;
    *
    *  // yields `std::integral_constant<field_id_t, 3>`
-   *  using result1 = member::type;
+   *  using result1 = member::id;
    *
    *  // yields `3`
    *  auto result2 = result1::value;
@@ -1077,9 +1063,9 @@ struct reflected_struct_data_member {
    *  // C++
    *
    *  using info = reflect_struct<MyStruct>;
-   *  using a = info::types::members<info::names::fieldA>;
-   *  using b = info::types::members<info::names::fieldB>;
-   *  using c = info::types::members<info::names::fieldC>;
+   *  using a = info::member::fieldA;
+   *  using b = info::member::fieldB;
+   *  using c = info::member::fieldC;
    *
    *  // yields `std::integral_constant<optionality, optionality::required>`
    *  using result1 = a::required;
@@ -1119,33 +1105,52 @@ struct reflected_struct_data_member {
    *  // C++
    *
    *  using info = reflect_struct<MyStruct>;
-   *  using member = info::types::members<info::names::fieldC>;
-   *
-   *  using getter = info::getters::get<info::names::a>;
+   *  using member = info::member::fieldC;
+   *  using getter = member::getter;
    *
    *  MyStruct pod;
    *
-   *  pod.c = 7.2;
+   *  pod.fieldC = 7.2;
    *
    *  // yields `7.2`
    *  auto result1 = getter::ref(pod);
    *
-   *  // sets  `5.6` on `pod.c`
+   *  // sets  `5.6` on `pod.fieldC`
    *  getter::ref(pod) = 5.6;
    *
    *  // yields `5.6`
-   *  auto result2 = pod.c;
+   *  auto result2 = pod.fieldC;
    *
    * @author: Marcelo Juchem <marcelo@fb.com>
    */
   using getter = Getter;
 
   /**
-   * Tells what's the Thrift category for this member.
+   * The type class for this member.
+   *
+   * Example:
+   *
+   *  // MyModule.thrift
+   *
+   *  namespace cpp2 My.Namespace
+   *
+   *  struct MyStruct {
+   *    1: i32 fieldA
+   *    2: string fieldB
+   *    3: double fieldC
+   *  }
+   *
+   *  // C++
+   *
+   *  using info = reflect_struct<MyStruct>;
+   *  using member = info::member::fieldC;
+   *
+   *  // yields `type_class::floating_point`
+   *  using result1 = member::type_class;
    *
    * @author: Marcelo Juchem <marcelo@fb.com>
    */
-  using category = std::integral_constant<thrift_category, Category>;
+  using type_class = TypeClass;
 
   /**
    * A POD (plain old data) that holds a single data member with the same name
@@ -1170,7 +1175,7 @@ struct reflected_struct_data_member {
    *  // C++
    *
    *  using info = reflect_struct<MyStruct>;
-   *  using member = info::types::members<info::names::fieldC>;
+   *  using member = info::member::fieldC;
    *
    *  member::pod<> original;
    *
@@ -1206,12 +1211,12 @@ struct reflected_struct_data_member {
    *  // MyModule.cpp
    *
    *  using info = reflect_struct<MyStruct>;
-   *  using member = info::types::members<info::names::fieldC>;
+   *  using member = info::member::fieldC;
    *
-   *  // yields `fatal::constant_sequence<char,
+   *  // yields `fatal::sequence<char,
    *  //   's', 'o', 'm', 'e', ' ', 'n', 'o', 't', 'e', 's'
    *  // >`
-   *  using result = info::annotations::values::field_note;
+   *  using result = member::annotations::values::field_note;
    *
    * @author: Marcelo Juchem <marcelo@fb.com>
    */
@@ -1234,7 +1239,7 @@ struct reflected_struct_data_member {
    *  // MyModule.cpp
    *
    *  using info = reflect_struct<MyStruct>;
-   *  using member = info::types::members<info::names::field>;
+   *  using member = info::member::field;
    *
    *  MyStruct pod;
    *
@@ -1248,12 +1253,46 @@ struct reflected_struct_data_member {
    *
    * @author: Marcelo Juchem <marcelo@fb.com>
    */
-  template <typename Owner>
-  static bool is_set(Owner const &owner) {
-    return detail::reflection_impl::is_set<Owner, getter, optional>::check(
-      owner
-    );
+  template <typename T>
+  static constexpr inline bool is_set(T const &owner) {
+    namespace impl = detail::reflection_impl;
+    using getter = impl::getter_direct_getter_t<getter>;
+    return impl::is_set<Owner, getter, HasIsSet>::check(owner);
   }
+
+  /**
+   * Marks the member as being either set or not set on the parent object.
+   *
+   * Example:
+   *
+   *  // MyModule.thrift
+   *
+   *  namespace cpp2 My.Namespace
+   *
+   *  struct MyStruct {
+   *    1: optional i32 field
+   *  }
+   *
+   *  // MyModule.cpp
+   *
+   *  using info = reflect_struct<MyStruct>;
+   *  using member = info::types::members<info::member::field::name>;
+   *
+   * MyStruct pod;
+   *
+   * // mark `field` as being set
+   * member::mark_set(pod, true)
+   *
+   *
+   * @author: Dylan Knutson <dymk@fb.com>
+   */
+  template <typename T>
+  static constexpr inline bool mark_set(T& owner, bool set) {
+    namespace impl = detail::reflection_impl;
+    using getter = impl::getter_direct_getter_t<getter>;
+    return impl::mark_set<Owner, getter, HasIsSet>::mark(owner, set);
+  }
+
 };
 
 /**
@@ -1285,13 +1324,13 @@ struct reflected_struct_data_member {
  *  using info = reflect_struct<My::Namespace::MyStruct>;
  *
  *  // yields `3`
- *  auto result = info::members::size;
+ *  auto result = fatal::size<info::members>::value;
  *
  * @author: Marcelo Juchem <marcelo@fb.com>
  */
 template <typename Struct>
 using reflect_struct = fatal::registry_lookup<
-  detail::reflection_impl::struct_traits_metadata_tag,
+  detail::struct_traits_metadata_tag,
   Struct
 >;
 
@@ -1325,13 +1364,13 @@ using reflect_struct = fatal::registry_lookup<
  *  using info = reflect_struct<My::Namespace::MyStruct>;
  *
  *  // yields `3`
- *  auto result = info::members::size;
+ *  auto result = fatal::size<info::members>::value;
  *
  * @author: Marcelo Juchem <marcelo@fb.com>
  */
 template <typename Struct, typename Default = void>
 using try_reflect_struct = fatal::try_registry_lookup<
-  detail::reflection_impl::struct_traits_metadata_tag,
+  detail::struct_traits_metadata_tag,
   Struct,
   Default
 >;
@@ -1462,7 +1501,7 @@ struct reflected_enum {
    *
    *  using info = reflect_enum<MyEnum>;
    *
-   *  // yields `fatal::constant_sequence<char,
+   *  // yields `fatal::sequence<char,
    *  //   'a', 'n', 'o', 't', 'h', 'e', 'r', ' ', 'v', 'a', 'l', 'u', 'e'
    *  // >`
    *  using result = info::annotations::values::another_annotation;
@@ -1580,13 +1619,13 @@ using is_reflectable_enum = fatal::has_enum_traits<T>;
  * @author: Marcelo Juchem <marcelo@fb.com>
  */
 template <typename T>
-struct reflected_union {
+struct reflected_variant {
   /**
    * A type alias for the union itself.
    *
    * Example:
    *
-   *  using info = reflect_union<MyUnion>;
+   *  using info = reflect_variant<MyUnion>;
    *
    *  // yields `MyUnion`
    *  using result = info::type;
@@ -1602,11 +1641,11 @@ struct reflected_union {
    *
    * Example:
    *
-   *  using info = reflect_union<MyUnion>;
+   *  using info = reflect_variant<MyUnion>;
    *  using traits = info::traits;
    *
    *  // yields `MyUnion::Type::a`
-   *  auto result = traits::array::ids::get[0];
+   *  auto result = traits::array::ids::data[0];
    *
    * @author: Marcelo Juchem <marcelo@fb.com>
    */
@@ -1618,7 +1657,7 @@ struct reflected_union {
    *
    * Example:
    *
-   *  using info = reflect_union<MyUnion>;
+   *  using info = reflect_variant<MyUnion>;
    *
    *  // yields `My::Namespace::MyModule_tags::module`
    *  using result = info::module;
@@ -1633,9 +1672,9 @@ struct reflected_union {
    *
    * Example:
    *
-   *  using info = reflect_union<MyUnion>;
+   *  using info = reflect_variant<MyUnion>;
    *
-   *  // yields `fatal::constant_sequence<char,
+   *  // yields `fatal::sequence<char,
    *  //   'a', 'n', 'o', 't', 'h', 'e', 'r', ' ', 'v', 'a', 'l', 'u', 'e'
    *  // >`
    *  using result = info::annotations::values::another_annotation;
@@ -1652,16 +1691,97 @@ struct reflected_union {
    * @author: Marcelo Juchem <marcelo@fb.com>
    */
   using legacy_id = typename traits::metadata::legacy_id;
+
+  /**
+   * Gets the member descriptor for the field with given `Name`.
+   *
+   * See `fatal::variant_type_descriptor`, from the Fatal library, for more
+   * information.
+   *
+   * Example:
+   *
+   *  using id_traits = fatal::enum_traits<MyUnion::Type>;
+   *  using info = reflect_variant<MyUnion>;
+   *  using member_info = info::by_name<id_traits::str::a>;
+   *
+   *  MyUnion u;
+   *  u.set_a(10);
+   *
+   *  // yields `10`
+   *  auto result = member_info::get(u);
+   *
+   * @author: Marcelo Juchem <marcelo@fb.com>
+   */
+  template <typename Name>
+  using by_name = fatal::get<
+    typename traits::descriptors,
+    Name,
+    detail::reflection_impl::variant_member_name
+  >;
+
+  /**
+   * Gets the member descriptor for the field with given `TypeId`.
+   *
+   * See `fatal::variant_type_descriptor`, from the Fatal library, for more
+   * information.
+   *
+   * Example:
+   *
+   *  using id_traits = fatal::enum_traits<MyUnion::Type>;
+   *  using info = reflect_variant<MyUnion>;
+   *  using member_info = info::by_type_id<MyUnion::Type::a>;
+   *
+   *  MyUnion u;
+   *  u.set_a(10);
+   *
+   *  // yields `10`
+   *  auto result = member_info::get(u);
+   *
+   * @author: Marcelo Juchem <marcelo@fb.com>
+   */
+  template <typename type::Type TypeId>
+  using by_type_id = fatal::get<
+    typename traits::descriptors,
+    std::integral_constant<typename type::Type, TypeId>,
+    fatal::get_type::id
+  >;
+
+  /**
+   * Gets the member descriptor for the field with given `FieldId`.
+   *
+   * See `fatal::variant_type_descriptor`, from the Fatal library, for more
+   * information.
+   *
+   * Example:
+   *
+   *  using id_traits = fatal::enum_traits<MyUnion::Type>;
+   *  using info = reflect_variant<MyUnion>;
+   *  using member_info = info::by_field_id<1>;
+   *
+   *  MyUnion u;
+   *  u.set_a(10);
+   *
+   *  // yields `10`
+   *  auto result = member_info::get(u);
+   *
+   * @author: Marcelo Juchem <marcelo@fb.com>
+   */
+  template <field_id_t FieldId>
+  using by_field_id = fatal::get<
+    typename traits::descriptors,
+    std::integral_constant<field_id_t, FieldId>,
+    detail::reflection_impl::variant_member_field_id
+  >;
 };
 
 /**
- * Retrieves reflection metadata (as a `reflected_union`) associated with the
+ * Retrieves reflection metadata (as a `reflected_variant`) associated with the
  * given union.
  *
  * If the given type is not a Thrift union, or if there's no reflection
  * metadata available for it, compilation will fail.
  *
- * See the documentation on `reflected_union` (above) for more information on
+ * See the documentation on `reflected_variant` (above) for more information on
  * the returned type.
  *
  * Example:
@@ -1680,7 +1800,7 @@ struct reflected_union {
  *  //////////////////
  *  // whatever.cpp //
  *  //////////////////
- *  using info = reflect_union<My::Namespace::MyUnion>;
+ *  using info = reflect_variant<My::Namespace::MyUnion>;
  *
  *  // yields `MyUnion`
  *  auto result = info::type;
@@ -1688,7 +1808,84 @@ struct reflected_union {
  * @author: Marcelo Juchem <marcelo@fb.com>
  */
 template <typename T>
-using reflect_union = reflected_union<T>;
+using reflect_variant = reflected_variant<T>;
+
+/**
+ * Represents Thrift specific metadata for a given union's member.
+ *
+ * This is exposed as the metadata for Fatal's `variant_member_descriptor`.
+ *
+ * For the examples below, consider code generated for this Thrift file:
+ *
+ *  /////////////////////
+ *  // MyModule.thrift //
+ *  /////////////////////
+ *  namespace cpp2 My.Namespace
+ *
+ *  union MyUnion {
+ *    1: i32 a
+ *    2: string b
+ *    3: double c
+ *  }
+ *
+ * Example:
+ *
+ *  //////////////////
+ *  // whatever.cpp //
+ *  //////////////////
+ *  using info = reflect_variant<My::Namespace::MyUnion>;
+ *  using metadata = info::by_type<double>::metadata;
+ *
+ *  // yields "c"
+ *  auto result = fatal::z_data<metadata::name>();
+ *
+ * @author: Marcelo Juchem <marcelo@fb.com>
+ */
+template <typename Name, field_id_t Id, typename TypeClass>
+struct reflected_variant_member_metadata {
+  /**
+   * A compile-time string representing the name of this member.
+   *
+   * Example:
+   *
+   *  using info = reflect_variant<My::Namespace::MyUnion>;
+   *
+   *  // yields "c"
+   *  auto result = fatal::z_data<info::by_type<double>::metadata::name>();
+   *
+   * @author: Marcelo Juchem <marcelo@fb.com>
+   */
+  using name = Name;
+
+  /**
+   * A `std::integral_constant` of type `field_id_t` representing the Thrift
+   * field id for this member.
+   *
+   * Example:
+   *
+   *  using info = reflect_variant<My::Namespace::MyUnion>;
+   *
+   *  // yields `3`
+   *  auto result = info::by_type<double>::metadata::id::value;
+   *
+   * @author: Marcelo Juchem <marcelo@fb.com>
+   */
+  using id = std::integral_constant<field_id_t, Id>;
+
+  /**
+   * The type class for this member.
+   *
+   * Example:
+   *
+   *  using info = reflect_variant<My::Namespace::MyUnion>;
+   *
+   *  // yields `type_class::floating_point`
+   *  auto result = info::by_type<double>::metadata::id;
+   *
+   * @author: Marcelo Juchem <marcelo@fb.com>
+   */
+  using type_class = TypeClass;
+};
 
 /**
  * Tells whether the given type is a Thrift union with compile-time reflection
@@ -1727,73 +1924,9 @@ using reflect_union = reflected_union<T>;
 template <typename T>
 using is_reflectable_union = fatal::has_variant_traits<T>;
 
-///////////////////////////
-// SECTION: CATEGORY API //
-///////////////////////////
-
-namespace detail {
-template <typename> struct reflect_category_impl;
-} // namespace detail {
-
-/**
- * Returns the Thrift category of a type.
- *
- * To keep compilation times at bay, strings and containers are not detected by
- * default, therefore they will yield `unknown` as the category. To enable their
- * detection you must include `container_traits.h`. There's also support
- * for containers defined in Folly at `container_traits_folly.h`.
- *
- * See `thrift_category` for the possible categories.
- *
- * Example:
- *
- *  /////////////////////
- *  // MyModule.thrift //
- *  /////////////////////
- *  namespace cpp2 My.Namespace
- *
- *  struct MyStruct {
- *    1: i32 a
- *    2: string b
- *    3: double c
- *  }
- *
- *  enum MyEnum { a, b, c }
- *
- *  typedef list<string> MyList;
- *
- *  /////////////
- *  // foo.cpp //
- *  /////////////
- *
- *  // yields `std::integral_constant<
- *  //   thrift_category,
- *  //   thrift_category::structure
- *  // >`
- *  using result1 = reflect_category<MyStruct>;
- *
- *  // yields `std::integral_constant<
- *  //   thrift_category,
- *  //   thrift_category::enumeration
- *  // >`
- *  using result2 = reflect_category<MyEnum>;
- *
- *  // yields `std::integral_constant<
- *  //   thrift_category,
- *  //   thrift_category::list
- *  // >`
- *  using result3 = reflect_category<MyList>;
- *
- *  // yields `std::integral_constant<
- *  //   thrift_category,
- *  //   thrift_category::unknown
- *  // >`
- *  using result4 = reflect_category<void>;
- *
- * @author: Marcelo Juchem <marcelo@fb.com>
- */
-template <typename T>
-using reflect_category = typename detail::reflect_category_impl<T>::type;
+//////////////////////////
+// CONTAINER TRAITS API //
+//////////////////////////
 
 /**
  * This is the type trait class that provides uniform interface to the
@@ -1823,8 +1956,8 @@ using reflect_category = typename detail::reflect_category_impl<T>::type;
  *    static iterator begin(type &what) { return what.begin(); }
  *    static iterator end(type &what) { return what.end(); }
  *
- *    static const_iterator cbegin(type const &what) { return what.begin(); }
- *    static const_iterator begin(type const &what) { return what.begin(); }
+ *    static const_iterator cbegin(type const &what) { return what.cbegin(); }
+ *    static const_iterator begin(type const &what) { return what.cbegin(); }
  *    static const_iterator cend(type const &what) { return what.end(); }
  *    static const_iterator end(type const &what) { return what.end(); }
  *
@@ -1839,6 +1972,76 @@ using reflect_category = typename detail::reflect_category_impl<T>::type;
  * @author: Marcelo Juchem <marcelo@fb.com>
  */
 template <typename> struct thrift_string_traits;
+
+template <typename String>
+struct thrift_string_traits_std {
+  using type = String;
+
+  using value_type = typename type::value_type;
+  using size_type = typename type::size_type;
+  using iterator = typename type::iterator;
+  using const_iterator = typename type::const_iterator;
+
+  static inline iterator begin(type &what) { return what.begin(); }
+  static inline iterator end(type &what) { return what.end(); }
+
+  static inline const_iterator cbegin(type const &what) {
+    return what.cbegin();
+  }
+  static inline const_iterator begin(type const &what) { return what.begin(); }
+  static inline const_iterator cend(type const &what) { return what.cend(); }
+  static inline const_iterator end(type const &what) { return what.end(); }
+
+  static inline void clear(type &what) { what.clear(); }
+  static inline bool empty(type const &what) { return what.empty(); }
+  static inline size_type size(type const &what) { return what.size(); }
+
+  static inline value_type const *data(type const &what) { return what.data(); }
+  static inline value_type const *c_str(type const &what) {
+    return what.c_str();
+  }
+};
+
+template <typename String>
+class thrift_string_traits_adapter {
+ private:
+  using orig = String;
+  using type = std::decay_t<orig>;
+  using deco = fatal::add_const_from_t<type, orig>;
+
+  using traits = thrift_string_traits<type>;
+  static_assert(
+      fatal::is_complete<traits>::value,
+      "the required thrift_string_traits specialization is missing");
+
+  deco &_;
+
+ public:
+  using value_type = typename traits::value_type;
+  using size_type = typename traits::size_type;
+  using iterator = typename traits::iterator;
+  using const_iterator = typename traits::const_iterator;
+
+  explicit thrift_string_traits_adapter(deco &what) : _(what) {}
+
+  auto& operator*() { return _; }
+  auto& operator*() const { return _; }
+
+  auto begin() { return traits::begin(_); }
+  auto end() { return traits::end(_); }
+
+  auto cbegin() const { return traits::cbegin(_); }
+  auto begin() const { return traits::begin(_); }
+  auto cend() const { return traits::cend(_); }
+  auto end() const { return traits::end(_); }
+
+  auto clear() { traits::clear(_); }
+  auto empty() const { return traits::empty(_); }
+  auto size() const { return traits::size(_); }
+
+  auto const *data() const { return traits::data(_); }
+  auto const *c_str() const { return traits::c_str(_); }
+};
 
 /**
  * This is the type trait class that provides uniform interface to the
@@ -1868,19 +2071,102 @@ template <typename> struct thrift_string_traits;
  *    static iterator begin(type &what) { return what.begin(); }
  *    static iterator end(type &what) { return what.end(); }
  *
- *    static const_iterator cbegin(type const &what) { return what.begin(); }
+ *    static const_iterator cbegin(type const &what) { return what.cbegin(); }
  *    static const_iterator begin(type const &what) { return what.begin(); }
- *    static const_iterator cend(type const &what) { return what.end(); }
+ *    static const_iterator cend(type const &what) { return what.cend(); }
  *    static const_iterator end(type const &what) { return what.end(); }
  *
  *    static void clear(type &what) { what.clear(); }
  *    static bool empty(type const &what) { return what.empty(); }
+ *    static void push_back(type &what, value_type const &e) {
+ *      what.push_back(e); }
+ *    static void push_back(type &what, value_type &&e) {
+ *      what.push_back(std::move(e)); }
+ *    static void reserve(type &what, size_type size) { what.reserve(size); }
  *    static size_type size(type const &what) { return what.size(); }
  *  };
  *
  * @author: Marcelo Juchem <marcelo@fb.com>
  */
 template <typename> struct thrift_list_traits;
+
+template <typename List>
+struct thrift_list_traits_std {
+  using type = List;
+
+  using value_type = typename type::value_type;
+  using size_type = typename type::size_type;
+  using iterator = typename type::iterator;
+  using const_iterator = typename type::const_iterator;
+
+  static inline iterator begin(type &what) { return what.begin(); }
+  static inline iterator end(type &what) { return what.end(); }
+
+  static inline const_iterator cbegin(type const &what) {
+    return what.cbegin();
+  }
+  static inline const_iterator begin(type const &what) { return what.begin(); }
+  static inline const_iterator cend(type const &what) { return what.cend(); }
+  static inline const_iterator end(type const &what) { return what.end(); }
+
+  static inline void clear(type &what) { what.clear(); }
+  static inline bool empty(type const &what) { return what.empty(); }
+  static inline void push_back(type &what, value_type const &val) {
+    what.push_back(val);
+  }
+  static inline void push_back(type &what, value_type &&val) {
+    what.push_back(std::move(val));
+  }
+  static inline void reserve(type &what, size_type size) { what.reserve(size); }
+  static inline size_type size(type const &what) { return what.size(); }
+  static inline iterator erase(type& what, const_iterator pos) {
+    return what.erase(pos);
+  }
+};
+
+template <typename List>
+class thrift_list_traits_adapter {
+ private:
+  using orig = List;
+  using type = std::decay_t<orig>;
+  using deco = fatal::add_const_from_t<type, orig>;
+
+  using traits = thrift_list_traits<type>;
+  static_assert(
+      fatal::is_complete<traits>::value,
+      "the required thrift_list_traits specialization is missing");
+
+  deco &_;
+
+ public:
+  using value_type = typename traits::value_type;
+  using size_type = typename traits::size_type;
+  using iterator = typename traits::iterator;
+  using const_iterator = typename traits::const_iterator;
+
+  explicit thrift_list_traits_adapter(deco &what) : _(what) {}
+
+  auto& operator*() { return _; }
+  auto& operator*() const { return _; }
+
+  auto begin() { return traits::begin(_); }
+  auto end() { return traits::end(_); }
+
+  auto cbegin() const { return traits::cbegin(_); }
+  auto begin() const { return traits::begin(_); }
+  auto cend() const { return traits::cend(_); }
+  auto end() const { return traits::end(_); }
+
+  auto clear() { traits::clear(_); }
+  auto empty() const { return traits::empty(_); }
+  auto push_back(value_type const &e) { traits::push_back(_, e); }
+  auto push_back(value_type &&e) { traits::push_back(_, std::move(e)); }
+  auto reserve(size_type size) { traits::reserve(_, size); }
+  auto size() const { return traits::size(_); }
+  auto erase(const_iterator pos) {
+    return traits::erase(_, pos);
+  }
+};
 
 /**
  * This is the type trait class that provides uniform interface to the
@@ -1907,26 +2193,135 @@ template <typename> struct thrift_list_traits;
  *    using size_type = typename type::size_type;
  *    using iterator = typename type::iterator;
  *    using const_iterator = typename type::const_iterator;
- *
- *    using value_const_reference = value_type const &;
- *    using value_reference = value_type &;
+ *    using reference = typename type::reference;
+ *    using const_reference = typename type::const_reference;
  *
  *    static iterator begin(type &what) { return what.begin(); }
  *    static iterator end(type &what) { return what.end(); }
  *
- *    static const_iterator cbegin(type const &what) { return what.begin(); }
+ *    static const_iterator cbegin(type const &what) { return what.cbegin(); }
  *    static const_iterator begin(type const &what) { return what.begin(); }
- *    static const_iterator cend(type const &what) { return what.end(); }
+ *    static const_iterator cend(type const &what) { return what.cend(); }
  *    static const_iterator end(type const &what) { return what.end(); }
  *
  *    static void clear(type &what) { what.clear(); }
  *    static bool empty(type const &what) { return what.empty(); }
+ *    static iterator find(type &what, value_type const &val) {
+ *      return what.find(val); }
+ *    static const_iterator find(type const &what, value_type const &val) {
+ *      return what.find(val); }
+ *    static iterator insert(
+ *        type &what, const_iterator position, value_type const &val) {
+ *      return what.insert(position, val); }
+ *    static iterator insert(
+ *        type &what, const_iterator position, value_type &&val) {
+ *      return what.insert(position, std::move(e)); }
  *    static size_type size(type const &what) { return what.size(); }
  *  };
  *
  * @author: Marcelo Juchem <marcelo@fb.com>
  */
 template <typename> struct thrift_set_traits;
+
+template <typename Set>
+struct thrift_set_traits_std {
+  using type = Set;
+
+  using key_type = typename type::key_type;
+  using value_type = typename type::value_type;
+  using size_type = typename type::size_type;
+  using iterator = typename type::iterator;
+  using const_iterator = typename type::const_iterator;
+  using reference = typename type::reference;
+  using const_reference = typename type::const_reference;
+
+  static inline iterator begin(type &what) { return what.begin(); }
+  static inline iterator end(type &what) { return what.end(); }
+
+  static inline const_iterator cbegin(type const &what) {
+    return what.cbegin();
+  }
+  static inline const_iterator begin(type const &what) { return what.begin(); }
+  static inline const_iterator cend(type const &what) { return what.cend(); }
+  static inline const_iterator end(type const &what) { return what.end(); }
+
+  static inline void clear(type &what) { what.clear(); }
+  static inline bool empty(type const &what) { return what.empty(); }
+  static inline iterator find(type &what, value_type const &val) {
+    return what.find(val);
+  }
+  static inline const_iterator find(type const &what, value_type const &val) {
+    return what.find(val);
+  }
+  static inline iterator insert(
+      type &what, const_iterator position, value_type const &val) {
+    return what.insert(position, val);
+  }
+  static inline iterator insert(
+      type &what, const_iterator position, value_type &&val) {
+    return what.insert(position, std::move(val));
+  }
+  static inline size_type size(type const &what) { return what.size(); }
+  static inline iterator erase(type& what, const_iterator pos) {
+    return what.erase(pos);
+  }
+  static inline size_type erase(type& what, const key_type& key) {
+    return what.erase(key);
+  }
+};
+
+template <typename Set>
+class thrift_set_traits_adapter {
+ private:
+  using orig = Set;
+  using type = std::decay_t<orig>;
+  using deco = fatal::add_const_from_t<type, orig>;
+
+  using traits = thrift_set_traits<type>;
+  static_assert(
+      fatal::is_complete<traits>::value,
+      "the required thrift_set_traits specialization is missing");
+
+  deco &_;
+
+ public:
+  using key_type = typename traits::key_type;
+  using value_type = typename traits::value_type;
+  using size_type = typename traits::size_type;
+  using iterator = typename traits::iterator;
+  using const_iterator = typename traits::const_iterator;
+  using reference = typename traits::reference;
+  using const_reference = typename traits::const_reference;
+
+  explicit thrift_set_traits_adapter(deco &what) : _(what) {}
+
+  auto& operator*() { return _; }
+  auto& operator*() const { return _; }
+
+  auto begin() { return traits::begin(_); }
+  auto end() { return traits::end(_); }
+
+  auto cbegin() const { return traits::cbegin(_); }
+  auto begin() const { return traits::begin(_); }
+  auto cend() const { return traits::cend(_); }
+  auto end() const { return traits::end(_); }
+
+  auto clear() { traits::clear(_); }
+  auto empty() const { return traits::empty(_); }
+  auto find(key_type const &k) { return traits::find(_, k); }
+  auto find(key_type const &k) const { return traits::find(_, k); }
+  auto insert(const_iterator position, value_type const &val) {
+    return traits::insert(_, position, val); }
+  auto insert(const_iterator position, value_type &&val) {
+    return traits::insert(_, position, std::move(val)); }
+  auto size() const { return traits::size(_); }
+  auto erase(const_iterator pos) {
+    return traits::erase(_, pos);
+  }
+  auto erase(const key_type& key) {
+    return traits::erase(_, key);
+  }
+};
 
 /**
  * This is the type trait class that provides uniform interface to the
@@ -1950,9 +2345,12 @@ template <typename> struct thrift_set_traits;
  *
  *    using key_type = typename type::key_type;
  *    using mapped_type = typename type::mapped_type;
+ *    using value_type = typename type::value_type;
  *    using size_type = typename type::size_type;
  *    using iterator = typename type::iterator;
  *    using const_iterator = typename type::const_iterator;
+ *    using reference = typename type::reference;
+ *    using const_reference = typename type::const_reference;
  *
  *    using key_const_reference = key_type const &;
  *    using mapped_const_reference = mapped_type const &;
@@ -1961,18 +2359,27 @@ template <typename> struct thrift_set_traits;
  *    static iterator begin(type &what) { return what.begin(); }
  *    static iterator end(type &what) { return what.end(); }
  *
- *    static const_iterator cbegin(type const &what) { return what.begin(); }
+ *    static const_iterator cbegin(type const &what) { return what.cbegin(); }
  *    static const_iterator begin(type const &what) { return what.begin(); }
- *    static const_iterator cend(type const &what) { return what.end(); }
+ *    static const_iterator cend(type const &what) { return what.cend(); }
  *    static const_iterator end(type const &what) { return what.end(); }
  *
- *    key_const_reference key(const_iterator i) { return i->first; }
- *    key_const_reference key(iterator i) { return i->first; }
- *    mapped_const_reference mapped(const_iterator i) { return i->second; }
- *    mapped_reference mapped(iterator i) { return i->second; }
+ *    static key_const_reference key(const_iterator i) { return i->first; }
+ *    static key_const_reference key(iterator i) { return i->first; }
+ *    static mapped_const_reference mapped(const_iterator i) {
+ *      return i->second; }
+ *    static mapped_reference mapped(iterator i) { return i->second; }
  *
  *    static void clear(type &what) { what.clear(); }
  *    static bool empty(type const &what) { return what.empty(); }
+ *    static iterator find(type &what, key_type const &k) {
+ *      return what.find(k); }
+ *    static const_iterator find(type const &what, key_type const &k) {
+ *      return what.find(k); }
+ *    static mapped_type& get_or_create(type &what, key_type const &k) {
+ *      return what[k]; }
+ *    static mapped_type& get_or_create(type &what, key_type &&k) {
+ *      return what[std::move(k)]; }
  *    static size_type size(type const &what) { return what.size(); }
  *  };
  *
@@ -1980,8 +2387,127 @@ template <typename> struct thrift_set_traits;
  */
 template <typename> struct thrift_map_traits;
 
+template <typename Map>
+struct thrift_map_traits_std {
+  using type = Map;
+
+  using key_type = typename type::key_type;
+  using mapped_type = typename type::mapped_type;
+  using value_type = typename type::value_type;
+  using size_type = typename type::size_type;
+  using iterator = typename type::iterator;
+  using const_iterator = typename type::const_iterator;
+  using reference = typename type::reference;
+  using const_reference = typename type::const_reference;
+
+  using key_const_reference = key_type const &;
+  using mapped_const_reference = mapped_type const &;
+  using mapped_reference = mapped_type &;
+
+  static inline iterator begin(type &what) { return what.begin(); }
+  static inline iterator end(type &what) { return what.end(); }
+
+  static inline const_iterator cbegin(type const &what) {
+    return what.cbegin();
+  }
+  static inline const_iterator begin(type const &what) { return what.begin(); }
+  static inline const_iterator cend(type const &what) { return what.cend(); }
+  static inline const_iterator end(type const &what) { return what.end(); }
+
+  static inline key_const_reference key(const_iterator i) { return i->first; }
+  static inline key_const_reference key(iterator i) { return i->first; }
+  static inline key_const_reference key(const_reference v) {
+    return v.first;
+  }
+  static inline mapped_const_reference mapped(const_iterator i) {
+    return i->second;
+  }
+  static inline mapped_reference mapped(iterator i) { return i->second; }
+  static inline mapped_reference mapped(reference v) { return v.second; }
+  static inline mapped_const_reference mapped(const_reference v) {
+    return v.second;
+  }
+
+  static inline void clear(type &what) { what.clear(); }
+  static inline bool empty(type const &what) { return what.empty(); }
+  static inline iterator find(type &what, key_type const &k) {
+    return what.find(k);
+  }
+  static inline const_iterator find(type const &what, key_type const &k) {
+    return what.find(k);
+  }
+  static inline mapped_type& get_or_create(type &what, key_type const &k) {
+    return what[k];
+  }
+  static inline mapped_type& get_or_create(type &what, key_type &&k) {
+    return what[std::move(k)];
+  }
+  static inline size_type size(type const &what) { return what.size(); }
+  static inline iterator erase(type& what, const_iterator pos) {
+    return what.erase(pos);
+  }
+  static inline size_type erase(type& what, const key_type& key) {
+    return what.erase(key);
+  }
+};
+
+template <typename Map>
+class thrift_map_traits_adapter {
+ private:
+  using orig = Map;
+  using type = std::decay_t<orig>;
+  using deco = fatal::add_const_from_t<type, orig>;
+
+  using traits = thrift_map_traits<type>;
+  static_assert(
+      fatal::is_complete<traits>::value,
+      "the required thrift_map_traits specialization is missing");
+
+  deco &_;
+
+ public:
+  using key_type = typename traits::key_type;
+  using mapped_type = typename traits::mapped_type;
+  using value_type = typename traits::value_type;
+  using size_type = typename traits::size_type;
+  using iterator = typename traits::iterator;
+  using const_iterator = typename traits::const_iterator;
+
+  using key_const_reference = typename traits::key_const_reference;
+  using mapped_const_reference = typename traits::mapped_const_reference;
+  using mapped_reference = typename traits::mapped_reference;
+
+  explicit thrift_map_traits_adapter(deco &what) : _(what) {}
+
+  auto& operator*() { return _; }
+  auto& operator*() const { return _; }
+
+  auto begin() { return traits::begin(_); }
+  auto end() { return traits::end(_); }
+
+  auto cbegin() const { return traits::cbegin(_); }
+  auto begin() const { return traits::begin(_); }
+  auto cend() const { return traits::cend(_); }
+  auto end() const { return traits::end(_); }
+
+  auto clear() { traits::clear(_); }
+  auto empty() const { return traits::empty(_); }
+  auto find(key_const_reference k) { return traits::find(_, k); }
+  auto find(key_const_reference k) const { return traits::find(_, k); }
+  auto &operator[](key_type const &k) { return traits::get_or_create(_, k); }
+  auto &operator[](key_type &&k) {
+    return traits::get_or_create(_, std::move(k)); }
+  auto size() const { return traits::size(_); }
+  auto erase(const_iterator pos) {
+    return traits::erase(_, pos);
+  }
+  auto erase(const key_type& key) {
+    return traits::erase(_, key);
+  }
+};
+
 }} // apache::thrift
 
-#include <thrift/lib/cpp2/fatal/reflection-inl-post.h>
+#include <thrift/lib/cpp2/fatal/internal/reflection-inl-post.h>
 
 #endif // THRIFT_FATAL_REFLECTION_H_

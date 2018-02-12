@@ -1,3 +1,18 @@
+/*
+ * Copyright 2017-present Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 #include <wangle/client/ssl/test/TestUtil.h>
 
 namespace wangle {
@@ -336,7 +351,7 @@ SSLSessionPtr createPersistentTestSession(
     std::pair<SSL_SESSION*, size_t> session) {
   if (session.first) {
     // This simulates what openssl does before handing control to the cache.
-    CRYPTO_add(&(session.first)->references, 1, CRYPTO_LOCK_SSL_SESSION);
+    SSL_SESSION_up_ref(session.first);
   }
   return SSLSessionPtr(session.first);
 }

@@ -36,7 +36,7 @@
  * @author: Marcelo Juchem <marcelo@fb.com>
  */
 
-#include <thrift/lib/cpp2/fatal/debug-inl-pre.h>
+#include <thrift/lib/cpp2/fatal/internal/debug-inl-pre.h>
 
 #include <thrift/lib/cpp2/fatal/pretty_print.h>
 
@@ -64,8 +64,11 @@ namespace apache { namespace thrift {
  * @author: Marcelo Juchem <marcelo@fb.com>
  */
 template <typename T, typename Callback>
-bool debug_equals(T const &lhs, T const &rhs, Callback &&callback) {
-  std::string path("<root>");
+bool debug_equals(
+    T const& lhs,
+    T const& rhs,
+    Callback&& callback,
+    std::string path = "$") {
   return detail::debug_equals(path, lhs, rhs, callback);
 }
 
@@ -129,6 +132,6 @@ debug_output_callback<Output> make_debug_output_callback(Output &output) {
 
 }} // apache::thrift
 
-#include <thrift/lib/cpp2/fatal/debug-inl-post.h>
+#include <thrift/lib/cpp2/fatal/internal/debug-inl-post.h>
 
 #endif // THRIFT_FATAL_DEBUG_H_

@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #pragma once
@@ -49,7 +55,7 @@ class Handler : public HandlerBase<HandlerContext<Rout, Wout>> {
   typedef Win win;
   typedef Wout wout;
   typedef HandlerContext<Rout, Wout> Context;
-  virtual ~Handler() = default;
+  ~Handler() override = default;
 
   virtual void read(Context* ctx, Rin msg) = 0;
   virtual void readEOF(Context* ctx) {
@@ -110,7 +116,7 @@ class InboundHandler : public HandlerBase<InboundHandlerContext<Rout>> {
   typedef folly::Unit win;
   typedef folly::Unit wout;
   typedef InboundHandlerContext<Rout> Context;
-  virtual ~InboundHandler() = default;
+  ~InboundHandler() override = default;
 
   virtual void read(Context* ctx, Rin msg) = 0;
   virtual void readEOF(Context* ctx) {
@@ -137,7 +143,7 @@ class OutboundHandler : public HandlerBase<OutboundHandlerContext<Wout>> {
   typedef Win win;
   typedef Wout wout;
   typedef OutboundHandlerContext<Wout> Context;
-  virtual ~OutboundHandler() = default;
+  ~OutboundHandler() override = default;
 
   virtual folly::Future<folly::Unit> write(Context* ctx, Win msg) = 0;
   virtual folly::Future<folly::Unit> writeException(

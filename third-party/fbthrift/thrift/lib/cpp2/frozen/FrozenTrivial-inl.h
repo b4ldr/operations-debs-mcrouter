@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2004-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 namespace apache { namespace thrift { namespace frozen {
 
 namespace detail {
@@ -28,11 +29,15 @@ struct TrivialLayout : public LayoutBase {
   typedef LayoutBase Base;
   TrivialLayout() : LayoutBase(typeid(T)) {}
 
-  FieldPosition layout(LayoutRoot& root, const T& o, LayoutPosition start) {
+  FieldPosition maximize() {
     return FieldPosition(sizeof(T), 0);
   }
 
-  void freeze(FreezeRoot& root, const T& o, FreezePosition self) const {
+  FieldPosition layout(LayoutRoot&, const T&, LayoutPosition /* start */) {
+    return maximize();
+  }
+
+  void freeze(FreezeRoot&, const T& o, FreezePosition self) const {
     if (size == sizeof(T)) {
       *reinterpret_cast<T*>(self.start) = o;
     } else {
@@ -71,10 +76,22 @@ struct IsBlitType
           bool,
           (folly::IsTriviallyCopyable<T>::value && !std::is_pointer<T>::value &&
            !std::is_enum<T>::value && !std::is_integral<T>::value)> {};
-}
+
+// std::pair<trivially copyable T1, trivially copyable T2> became
+// trivially copyable too (first fixed in GCC 6.3) and conflicts with
+// the PairLayout specialization.
+template <class T>
+struct IsStdPair : public std::false_type {};
+
+template <class T1, class T2>
+struct IsStdPair<std::pair<T1, T2>> : public std::true_type {};
+
+} // namespace detail
 
 template <class T>
-struct Layout<T, typename std::enable_if<detail::IsBlitType<T>::value>::type>
+struct Layout<
+    T,
+    typename std::enable_if<
+        detail::IsBlitType<T>::value && !detail::IsStdPair<T>::value>::type>
     : detail::TrivialLayout<T> {};
-
 }}}

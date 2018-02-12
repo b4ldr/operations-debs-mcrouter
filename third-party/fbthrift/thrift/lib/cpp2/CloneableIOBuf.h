@@ -30,25 +30,25 @@ namespace detail {
 
 // Implementation of a subset of unique_ptr functionality that also supports
 // copy constructor
-template<typename T, typename Deleter = std::default_delete<T>>
+template <typename T, typename Deleter = std::default_delete<T>>
 class CloneableUniquePtr : public std::unique_ptr<T, Deleter> {
 public:
   typedef std::unique_ptr<T, Deleter> Base;
   CloneableUniquePtr()
     : std::unique_ptr<T, Deleter>() {}
-  CloneableUniquePtr(std::nullptr_t x)
+  explicit CloneableUniquePtr(std::nullptr_t)
     : std::unique_ptr<T, Deleter>(nullptr) {}
-  CloneableUniquePtr(typename Base::pointer p)
+  explicit CloneableUniquePtr(typename Base::pointer p)
     : std::unique_ptr<T, Deleter>(p) {}
   template<typename D>
   CloneableUniquePtr(typename Base::pointer p, D&& d)
     : std::unique_ptr<T, Deleter>(p, std::forward<D>(d)) {}
-  CloneableUniquePtr(Base&& other)
+  explicit CloneableUniquePtr(Base&& other)
     : std::unique_ptr<T, Deleter>(std::move(other)) {}
-  CloneableUniquePtr(CloneableUniquePtr&& other)
+  explicit CloneableUniquePtr(CloneableUniquePtr&& other) noexcept
     : std::unique_ptr<T, Deleter>(std::move(other)) {}
 
-  CloneableUniquePtr(const Base& other)
+  explicit CloneableUniquePtr(const Base& other)
     : std::unique_ptr<T, Deleter>(other ? other->clone() : nullptr) {
     LOG(INFO) << "Clone";
   }
@@ -64,7 +64,7 @@ public:
     Base::operator=(std::move(other));
     return *this;
   }
-  CloneableUniquePtr& operator=(std::nullptr_t x) {
+  CloneableUniquePtr& operator=(std::nullptr_t) {
     Base::operator=(nullptr);
     return *this;
   }
@@ -77,25 +77,20 @@ public:
     Base::operator=(other ? other->clone() : nullptr);
     return *this;
   }
-
-  friend void std::swap<>(CloneableUniquePtr<T, Deleter>& lhs,
-                          CloneableUniquePtr<T, Deleter>& rhs);
 };
+
+template <class T, class Deleter>
+void swap(
+    CloneableUniquePtr<T, Deleter>& lhs,
+    CloneableUniquePtr<T, Deleter>& rhs) {
+  using base = std::unique_ptr<T, Deleter>;
+  return swap(static_cast<base&>(lhs), static_cast<base&>(rhs));
+}
 
 }
 
 typedef detail::CloneableUniquePtr<folly::IOBuf> CloneableIOBuf;
 
 }} // apache::thrift
-
-namespace std {
-
-template<class T, class Deleter>
-void swap(apache::thrift::detail::CloneableUniquePtr<T, Deleter>& lhs,
-          apache::thrift::detail::CloneableUniquePtr<T, Deleter>& rhs) {
-  std::swap<std::unique_ptr<T, Deleter>>(lhs, rhs);
-}
-
-}
 
 #endif // #ifndef THRIFT_CLONEABLE_IOBUF_H_

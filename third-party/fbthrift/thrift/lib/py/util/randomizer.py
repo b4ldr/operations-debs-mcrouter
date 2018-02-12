@@ -9,6 +9,7 @@ from __future__ import unicode_literals
 
 import collections
 import random
+import sys
 
 import six
 import six.moves as sm
@@ -16,6 +17,9 @@ import six.moves as sm
 from thrift import Thrift
 
 INFINITY = float('inf')
+
+if sys.version_info[0] >= 3:
+    unicode = None
 
 def deep_dict_update(base, update):
     """Similar to dict.update(base, update), but if any values in base are
@@ -285,7 +289,7 @@ class EnumRandomizer(ScalarTypeRandomizer):
         self.ttype = self.spec_args
 
         self._whiteset = set()
-        for name, val in six.iteritems(self.ttype._NAMES_TO_VALUES):
+        for _, val in six.iteritems(self.ttype._NAMES_TO_VALUES):
             self._whiteset.add(val)
 
         self._whitelist = list(self._whiteset)
@@ -387,7 +391,10 @@ def _integer_randomizer_factory(name, ttype, n_bits):
             else:
                 raise TypeError("Invalid %s seed: %s" % (_name, seed))
 
-    NBitIntegerRandomizer.__name__ = six.binary_type("%sRandomizer" % _name)
+    if sys.version_info[0] == 2 and isinstance(_name, unicode):
+        NBitIntegerRandomizer.__name__ = "{}Randomizer".format(_name).encode("utf8")
+    else:
+        NBitIntegerRandomizer.__name__ = "{}Randomizer".format(_name)
 
     return NBitIntegerRandomizer
 

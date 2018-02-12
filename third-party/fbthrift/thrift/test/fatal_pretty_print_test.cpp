@@ -16,9 +16,9 @@
 
 #include <thrift/lib/cpp2/fatal/pretty_print.h>
 
-#include <thrift/test/gen-cpp2/reflection_fatal_enum.h>
-#include <thrift/test/gen-cpp2/reflection_fatal_struct.h>
-#include <thrift/test/gen-cpp2/reflection_fatal_union.h>
+#include <folly/String.h>
+
+#include <thrift/test/gen-cpp2/reflection_fatal_types.h>
 
 #include <sstream>
 #include <type_traits>
@@ -29,6 +29,10 @@ using output_result = std::false_type;
 
 namespace test_cpp2 {
 namespace cpp_reflection {
+
+std::string adjust(std::string input) {
+  return folly::rtrimWhitespace(folly::stripLeftMargin(std::move(input))).str();
+}
 
 #define TEST_IMPL(Expected, ...) \
   do { \
@@ -143,7 +147,7 @@ TEST(fatal_pretty_print, pretty_print) {
     "  a: 47,\n"
     "  b: \"hello, world\",\n"
     "  c: 132.98,\n"
-    "  d: 1,\n"
+    "  d: true,\n"
     "  e: field1,\n"
     "  f: field0_2,\n"
     "  g: <variant>{\n"
@@ -201,19 +205,19 @@ TEST(fatal_pretty_print, pretty_print) {
     "  k3: <set>{\n"
     "    <struct>{\n"
     "      c: 1.23,\n"
-    "      d: 1\n"
+    "      d: true\n"
     "    },\n"
     "    <struct>{\n"
     "      c: 9.8,\n"
-    "      d: 0\n"
+    "      d: false\n"
     "    },\n"
     "    <struct>{\n"
     "      c: 10.01,\n"
-    "      d: 1\n"
+    "      d: true\n"
     "    },\n"
     "    <struct>{\n"
     "      c: 159.73,\n"
-    "      d: 0\n"
+    "      d: false\n"
     "    }\n"
     "  },\n"
     "  l: <map>{},\n"
@@ -231,19 +235,19 @@ TEST(fatal_pretty_print, pretty_print) {
     "  l3: <map>{\n"
     "    56: <struct>{\n"
     "      c: 159.73,\n"
-    "      d: 0\n"
+    "      d: false\n"
     "    },\n"
     "    67: <struct>{\n"
     "      c: 10.01,\n"
-    "      d: 1\n"
+    "      d: true\n"
     "    },\n"
     "    78: <struct>{\n"
     "      c: 9.8,\n"
-    "      d: 0\n"
+    "      d: false\n"
     "    },\n"
     "    89: <struct>{\n"
     "      c: 1.23,\n"
-    "      d: 1\n"
+    "      d: true\n"
     "    }\n"
     "  },\n"
     "  m1: <map>{\n"
@@ -259,15 +263,15 @@ TEST(fatal_pretty_print, pretty_print) {
     "  m3: <map>{\n"
     "    field0: <struct>{\n"
     "      c: 1.23,\n"
-    "      d: 1\n"
+    "      d: true\n"
     "    },\n"
     "    field1: <struct>{\n"
     "      c: 9.8,\n"
-    "      d: 0\n"
+    "      d: false\n"
     "    },\n"
     "    field2: <struct>{\n"
     "      c: 10.01,\n"
-    "      d: 1\n"
+    "      d: true\n"
     "    }\n"
     "  },\n"
     "  n1: <map>{\n"
@@ -284,19 +288,19 @@ TEST(fatal_pretty_print, pretty_print) {
     "  n3: <map>{\n"
     "    \"vvv\": <struct>{\n"
     "      c: 1.23,\n"
-    "      d: 1\n"
+    "      d: true\n"
     "    },\n"
     "    \"www\": <struct>{\n"
     "      c: 9.8,\n"
-    "      d: 0\n"
+    "      d: false\n"
     "    },\n"
     "    \"xxx\": <struct>{\n"
     "      c: 10.01,\n"
-    "      d: 1\n"
+    "      d: true\n"
     "    },\n"
     "    \"yyy\": <struct>{\n"
     "      c: 159.73,\n"
-    "      d: 0\n"
+    "      d: false\n"
     "    }\n"
     "  },\n"
     "  o1: <map>{\n"
@@ -337,28 +341,28 @@ TEST(fatal_pretty_print, pretty_print) {
     "      b: \"abc\"\n"
     "    }: <struct>{\n"
     "      c: 1.23,\n"
-    "      d: 1\n"
+    "      d: true\n"
     "    },\n"
     "    <struct>{\n"
     "      a: 654,\n"
     "      b: \"bar\"\n"
     "    }: <struct>{\n"
     "      c: 10.01,\n"
-    "      d: 1\n"
+    "      d: true\n"
     "    },\n"
     "    <struct>{\n"
     "      a: 1001,\n"
     "      b: \"foo\"\n"
     "    }: <struct>{\n"
     "      c: 9.8,\n"
-    "      d: 0\n"
+    "      d: false\n"
     "    },\n"
     "    <struct>{\n"
     "      a: 9791,\n"
     "      b: \"baz\"\n"
     "    }: <struct>{\n"
     "      c: 159.73,\n"
-    "      d: 0\n"
+    "      d: false\n"
     "    }\n"
     "  }\n"
     "}",
@@ -370,7 +374,7 @@ TEST(fatal_pretty_print, pretty_print) {
     "===>*-=.|a: 47,\n"
     "===>*-=.|b: \"hello, world\",\n"
     "===>*-=.|c: 132.98,\n"
-    "===>*-=.|d: 1,\n"
+    "===>*-=.|d: true,\n"
     "===>*-=.|e: field1,\n"
     "===>*-=.|f: field0_2,\n"
     "===>*-=.|g: <variant>{\n"
@@ -428,19 +432,19 @@ TEST(fatal_pretty_print, pretty_print) {
     "===>*-=.|k3: <set>{\n"
     "===>*-=.|*-=.|<struct>{\n"
     "===>*-=.|*-=.|*-=.|c: 1.23,\n"
-    "===>*-=.|*-=.|*-=.|d: 1\n"
+    "===>*-=.|*-=.|*-=.|d: true\n"
     "===>*-=.|*-=.|},\n"
     "===>*-=.|*-=.|<struct>{\n"
     "===>*-=.|*-=.|*-=.|c: 9.8,\n"
-    "===>*-=.|*-=.|*-=.|d: 0\n"
+    "===>*-=.|*-=.|*-=.|d: false\n"
     "===>*-=.|*-=.|},\n"
     "===>*-=.|*-=.|<struct>{\n"
     "===>*-=.|*-=.|*-=.|c: 10.01,\n"
-    "===>*-=.|*-=.|*-=.|d: 1\n"
+    "===>*-=.|*-=.|*-=.|d: true\n"
     "===>*-=.|*-=.|},\n"
     "===>*-=.|*-=.|<struct>{\n"
     "===>*-=.|*-=.|*-=.|c: 159.73,\n"
-    "===>*-=.|*-=.|*-=.|d: 0\n"
+    "===>*-=.|*-=.|*-=.|d: false\n"
     "===>*-=.|*-=.|}\n"
     "===>*-=.|},\n"
     "===>*-=.|l: <map>{},\n"
@@ -458,19 +462,19 @@ TEST(fatal_pretty_print, pretty_print) {
     "===>*-=.|l3: <map>{\n"
     "===>*-=.|*-=.|56: <struct>{\n"
     "===>*-=.|*-=.|*-=.|c: 159.73,\n"
-    "===>*-=.|*-=.|*-=.|d: 0\n"
+    "===>*-=.|*-=.|*-=.|d: false\n"
     "===>*-=.|*-=.|},\n"
     "===>*-=.|*-=.|67: <struct>{\n"
     "===>*-=.|*-=.|*-=.|c: 10.01,\n"
-    "===>*-=.|*-=.|*-=.|d: 1\n"
+    "===>*-=.|*-=.|*-=.|d: true\n"
     "===>*-=.|*-=.|},\n"
     "===>*-=.|*-=.|78: <struct>{\n"
     "===>*-=.|*-=.|*-=.|c: 9.8,\n"
-    "===>*-=.|*-=.|*-=.|d: 0\n"
+    "===>*-=.|*-=.|*-=.|d: false\n"
     "===>*-=.|*-=.|},\n"
     "===>*-=.|*-=.|89: <struct>{\n"
     "===>*-=.|*-=.|*-=.|c: 1.23,\n"
-    "===>*-=.|*-=.|*-=.|d: 1\n"
+    "===>*-=.|*-=.|*-=.|d: true\n"
     "===>*-=.|*-=.|}\n"
     "===>*-=.|},\n"
     "===>*-=.|m1: <map>{\n"
@@ -486,15 +490,15 @@ TEST(fatal_pretty_print, pretty_print) {
     "===>*-=.|m3: <map>{\n"
     "===>*-=.|*-=.|field0: <struct>{\n"
     "===>*-=.|*-=.|*-=.|c: 1.23,\n"
-    "===>*-=.|*-=.|*-=.|d: 1\n"
+    "===>*-=.|*-=.|*-=.|d: true\n"
     "===>*-=.|*-=.|},\n"
     "===>*-=.|*-=.|field1: <struct>{\n"
     "===>*-=.|*-=.|*-=.|c: 9.8,\n"
-    "===>*-=.|*-=.|*-=.|d: 0\n"
+    "===>*-=.|*-=.|*-=.|d: false\n"
     "===>*-=.|*-=.|},\n"
     "===>*-=.|*-=.|field2: <struct>{\n"
     "===>*-=.|*-=.|*-=.|c: 10.01,\n"
-    "===>*-=.|*-=.|*-=.|d: 1\n"
+    "===>*-=.|*-=.|*-=.|d: true\n"
     "===>*-=.|*-=.|}\n"
     "===>*-=.|},\n"
     "===>*-=.|n1: <map>{\n"
@@ -511,19 +515,19 @@ TEST(fatal_pretty_print, pretty_print) {
     "===>*-=.|n3: <map>{\n"
     "===>*-=.|*-=.|\"vvv\": <struct>{\n"
     "===>*-=.|*-=.|*-=.|c: 1.23,\n"
-    "===>*-=.|*-=.|*-=.|d: 1\n"
+    "===>*-=.|*-=.|*-=.|d: true\n"
     "===>*-=.|*-=.|},\n"
     "===>*-=.|*-=.|\"www\": <struct>{\n"
     "===>*-=.|*-=.|*-=.|c: 9.8,\n"
-    "===>*-=.|*-=.|*-=.|d: 0\n"
+    "===>*-=.|*-=.|*-=.|d: false\n"
     "===>*-=.|*-=.|},\n"
     "===>*-=.|*-=.|\"xxx\": <struct>{\n"
     "===>*-=.|*-=.|*-=.|c: 10.01,\n"
-    "===>*-=.|*-=.|*-=.|d: 1\n"
+    "===>*-=.|*-=.|*-=.|d: true\n"
     "===>*-=.|*-=.|},\n"
     "===>*-=.|*-=.|\"yyy\": <struct>{\n"
     "===>*-=.|*-=.|*-=.|c: 159.73,\n"
-    "===>*-=.|*-=.|*-=.|d: 0\n"
+    "===>*-=.|*-=.|*-=.|d: false\n"
     "===>*-=.|*-=.|}\n"
     "===>*-=.|},\n"
     "===>*-=.|o1: <map>{\n"
@@ -564,28 +568,28 @@ TEST(fatal_pretty_print, pretty_print) {
     "===>*-=.|*-=.|*-=.|b: \"abc\"\n"
     "===>*-=.|*-=.|}: <struct>{\n"
     "===>*-=.|*-=.|*-=.|c: 1.23,\n"
-    "===>*-=.|*-=.|*-=.|d: 1\n"
+    "===>*-=.|*-=.|*-=.|d: true\n"
     "===>*-=.|*-=.|},\n"
     "===>*-=.|*-=.|<struct>{\n"
     "===>*-=.|*-=.|*-=.|a: 654,\n"
     "===>*-=.|*-=.|*-=.|b: \"bar\"\n"
     "===>*-=.|*-=.|}: <struct>{\n"
     "===>*-=.|*-=.|*-=.|c: 10.01,\n"
-    "===>*-=.|*-=.|*-=.|d: 1\n"
+    "===>*-=.|*-=.|*-=.|d: true\n"
     "===>*-=.|*-=.|},\n"
     "===>*-=.|*-=.|<struct>{\n"
     "===>*-=.|*-=.|*-=.|a: 1001,\n"
     "===>*-=.|*-=.|*-=.|b: \"foo\"\n"
     "===>*-=.|*-=.|}: <struct>{\n"
     "===>*-=.|*-=.|*-=.|c: 9.8,\n"
-    "===>*-=.|*-=.|*-=.|d: 0\n"
+    "===>*-=.|*-=.|*-=.|d: false\n"
     "===>*-=.|*-=.|},\n"
     "===>*-=.|*-=.|<struct>{\n"
     "===>*-=.|*-=.|*-=.|a: 9791,\n"
     "===>*-=.|*-=.|*-=.|b: \"baz\"\n"
     "===>*-=.|*-=.|}: <struct>{\n"
     "===>*-=.|*-=.|*-=.|c: 159.73,\n"
-    "===>*-=.|*-=.|*-=.|d: 0\n"
+    "===>*-=.|*-=.|*-=.|d: false\n"
     "===>*-=.|*-=.|}\n"
     "===>*-=.|}\n"
     "===>}",
@@ -593,6 +597,63 @@ TEST(fatal_pretty_print, pretty_print) {
     "*-=.|",
     "===>"
   );
+}
+
+TEST(fatal_pretty_print, ref_unique) {
+  hasRefUnique v;
+  TEST_IMPL(adjust(R"(
+    <struct>{
+      a: null
+    }
+  )"), v);
+
+  v.a = std::make_unique<structA>();
+  TEST_IMPL(adjust(R"(
+    <struct>{
+      a: <struct>{
+        a: 0,
+        b: ""
+      }
+    }
+  )"), v);
+}
+
+TEST(fatal_pretty_print, ref_shared) {
+  hasRefShared v;
+  TEST_IMPL(adjust(R"(
+    <struct>{
+      a: null
+    }
+  )"), v);
+
+  v.a = std::make_shared<structA>();
+  TEST_IMPL(adjust(R"(
+    <struct>{
+      a: <struct>{
+        a: 0,
+        b: ""
+      }
+    }
+  )"), v);
+}
+
+TEST(fatal_pretty_print, ref_shared_const) {
+  hasRefSharedConst v;
+  TEST_IMPL(adjust(R"(
+    <struct>{
+      a: null
+    }
+  )"), v);
+
+  v.a = std::make_shared<structA const>();
+  TEST_IMPL(adjust(R"(
+    <struct>{
+      a: <struct>{
+        a: 0,
+        b: ""
+      }
+    }
+  )"), v);
 }
 
 } // namespace cpp_reflection {

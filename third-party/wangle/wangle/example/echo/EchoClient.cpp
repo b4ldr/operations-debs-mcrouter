@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #include <gflags/gflags.h>
 #include <iostream>
@@ -27,14 +33,14 @@ typedef Pipeline<folly::IOBufQueue&, std::string> EchoPipeline;
 // the handler for receiving messages back from the server
 class EchoHandler : public HandlerAdapter<std::string> {
  public:
-  virtual void read(Context* ctx, std::string msg) override {
+  void read(Context*, std::string msg) override {
     std::cout << "received back: " << msg;
   }
-  virtual void readException(Context* ctx, exception_wrapper e) override {
+  void readException(Context* ctx, exception_wrapper e) override {
     std::cout << exceptionStr(e) << std::endl;
     close(ctx);
   }
-  virtual void readEOF(Context* ctx) override {
+  void readEOF(Context* ctx) override {
     std::cout << "EOF received :(" << std::endl;
     close(ctx);
   }
@@ -43,7 +49,8 @@ class EchoHandler : public HandlerAdapter<std::string> {
 // chains the handlers together to define the response pipeline
 class EchoPipelineFactory : public PipelineFactory<EchoPipeline> {
  public:
-  EchoPipeline::Ptr newPipeline(std::shared_ptr<AsyncTransportWrapper> sock) {
+  EchoPipeline::Ptr newPipeline(
+      std::shared_ptr<AsyncTransportWrapper> sock) override {
     auto pipeline = EchoPipeline::create();
     pipeline->addBack(AsyncSocketHandler(sock));
     pipeline->addBack(
@@ -57,10 +64,10 @@ class EchoPipelineFactory : public PipelineFactory<EchoPipeline> {
 };
 
 int main(int argc, char** argv) {
-  google::ParseCommandLineFlags(&argc, &argv, true);
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
 
   ClientBootstrap<EchoPipeline> client;
-  client.group(std::make_shared<wangle::IOThreadPoolExecutor>(1));
+  client.group(std::make_shared<folly::IOThreadPoolExecutor>(1));
   client.pipelineFactory(std::make_shared<EchoPipelineFactory>());
   auto pipeline = client.connect(SocketAddress(FLAGS_host, FLAGS_port)).get();
 

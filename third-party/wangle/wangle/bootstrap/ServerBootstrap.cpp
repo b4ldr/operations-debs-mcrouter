@@ -1,22 +1,28 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include <wangle/bootstrap/ServerBootstrap.h>
-#include <wangle/concurrent/NamedThreadFactory.h>
+#include <folly/executors/thread_factory/NamedThreadFactory.h>
 #include <wangle/channel/Handler.h>
 #include <folly/io/async/EventBaseManager.h>
 
 namespace wangle {
 
 void ServerWorkerPool::threadStarted(
-  wangle::ThreadPoolExecutor::ThreadHandle* h) {
+  folly::ThreadPoolExecutor::ThreadHandle* h) {
   auto worker = acceptorFactory_->newAcceptor(exec_->getEventBase(h));
   {
     Mutex::WriteHolder holder(workersMutex_.get());
@@ -33,34 +39,30 @@ void ServerWorkerPool::threadStarted(
 }
 
 void ServerWorkerPool::threadStopped(
-  wangle::ThreadPoolExecutor::ThreadHandle* h) {
-  Mutex::ReadHolder holder(workersMutex_.get());
-  auto worker = workers_->find(h);
-  CHECK(worker != workers_->end());
+  folly::ThreadPoolExecutor::ThreadHandle* h) {
+  auto worker = [&] {
+    Mutex::WriteHolder holder(workersMutex_.get());
+    auto workerIt = workers_->find(h);
+    CHECK(workerIt != workers_->end());
+    auto w = std::move(workerIt->second);
+    workers_->erase(workerIt);
+    return w;
+  }();
 
   for (auto socket : *sockets_) {
     socket->getEventBase()->runImmediatelyOrRunInEventBaseThreadAndWait(
       [&]() {
         socketFactory_->removeAcceptCB(
-          socket, worker->second.get(), nullptr);
+          socket, worker.get(), nullptr);
     });
   }
 
-  if (!worker->second->getEventBase()->isInEventBaseThread()) {
-    worker->second->getEventBase()->runImmediatelyOrRunInEventBaseThreadAndWait(
-      [=]() {
-        worker->second->dropAllConnections();
-      });
-  } else {
-    worker->second->dropAllConnections();
-  }
+  auto evb = worker->getEventBase();
 
-  auto workers = workers_;
-  auto workersMutex = workersMutex_;
-  worker->second->getEventBase()->runAfterDrain(
-    [workers, worker, workersMutex]() {
-      Mutex::WriteHolder writeHolder(workersMutex.get());
-      workers->erase(worker);
+  evb->runImmediatelyOrRunInEventBaseThreadAndWait(
+    [w = std::move(worker)]() mutable {
+      w->dropAllConnections();
+      w.reset();
     });
 }
 

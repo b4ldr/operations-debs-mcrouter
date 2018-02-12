@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #include <folly/futures/Barrier.h>
 #include <wangle/client/persistence/FilePersistentCache.h>
@@ -263,10 +269,10 @@ TYPED_TEST(FilePersistentCacheTest, destroy) {
   using CacheType = FilePersistentCache<int, int, TypeParam>;
   std::string cacheFile = getPersistentCacheFilename();
 
-  auto cache1 = folly::make_unique<CacheType>(
+  auto cache1 = std::make_unique<CacheType>(
     cacheFile, 10, std::chrono::seconds(3));
   cache1.reset();
-  auto cache2 = folly::make_unique<CacheType>(
+  auto cache2 = std::make_unique<CacheType>(
     cacheFile, 10, std::chrono::seconds(3));
   cache2.reset();
 }
@@ -279,7 +285,7 @@ TYPED_TEST(FilePersistentCacheTest, threadstress) {
   // their own set of values on the same cache
   using CacheType = FilePersistentCache<string, int, TypeParam>;
   auto cacheFile = getPersistentCacheFilename();
-  auto cache = folly::make_unique<CacheType>(
+  auto sharedCache = std::make_unique<CacheType>(
     cacheFile, 10, std::chrono::seconds(10));
 
   int numThreads = 3;
@@ -302,15 +308,15 @@ TYPED_TEST(FilePersistentCacheTest, threadstress) {
 
   std::vector<std::thread> threads;
   for (int i = 0; i < numThreads; ++i) {
-    threads.push_back(std::thread(threadFunc, cache.get(), i));
+    threads.push_back(std::thread(threadFunc, sharedCache.get(), i));
   }
   for (int i = 0; i < numThreads; ++i) {
     threads[i].join();
   }
-  EXPECT_EQ(cache->size(), numThreads);
+  EXPECT_EQ(sharedCache->size(), numThreads);
   for (auto i = 0; i < numThreads; ++i) {
     auto key = folly::to<string>("key", i);
-    auto val = cache->get(key);
+    auto val = sharedCache->get(key);
     EXPECT_TRUE(val.hasValue());
     EXPECT_EQ(*val, i);
   }

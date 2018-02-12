@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2012-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,21 +28,37 @@
 //
 // ... similar for testConcurrency, testDualLocking, etc.
 
-
-template <class Mutex> void testBasic();
-
-template <class Mutex> void testConcurrency();
-
-template <class Mutex> void testDualLocking();
-
-template <class Mutex> void testDualLockingWithConst();
-
-template <class Mutex> void testTimedSynchronized();
-
-template <class Mutex> void testTimedSynchronizedWithConst();
-
-template <class Mutex> void testConstCopy();
-
-template <class Mutex> void testInPlaceConstruction();
+namespace folly {
+namespace sync_tests {
+template <class Mutex>
+void testBasic();
+template <class Mutex>
+void testDeprecated();
+template <class Mutex>
+void testConcurrency();
+template <class Mutex>
+void testAcquireLocked();
+template <class Mutex>
+void testAcquireLockedWithConst();
+template <class Mutex>
+void testDualLockingWithConst();
+template <class Mutex>
+void testDualLocking();
+template <class Mutex>
+void testDualLockingWithConst();
+template <class Mutex>
+void testTimed();
+template <class Mutex>
+void testTimedShared();
+template <class Mutex>
+void testTimedSynchronizedDeprecated();
+template <class Mutex>
+void testTimedSynchronizedWithConst();
+template <class Mutex>
+void testConstCopy();
+template <class Mutex>
+void testInPlaceConstruction();
+} // namespace sync_tests
+} // namespace folly
 
 #include <folly/test/SynchronizedTestLib-inl.h>

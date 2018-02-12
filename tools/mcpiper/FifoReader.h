@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
+ *  Copyright (c) 2017, Facebook, Inc.
  *  All rights reserved.
  *
  *  This source code is licensed under the BSD-style license found in the
@@ -16,41 +16,51 @@
 
 #include <boost/regex.hpp>
 
-#include <folly/io/async/AsyncPipe.h>
-#include <folly/io/async/AsyncSocketException.h>
-#include <folly/io/IOBufQueue.h>
 #include <folly/Optional.h>
 #include <folly/SocketAddress.h>
+#include <folly/io/IOBufQueue.h>
+#include <folly/io/async/AsyncPipe.h>
+#include <folly/io/async/AsyncSocketException.h>
 
-#include "mcrouter/lib/debug/Fifo.h"
+#include "mcrouter/lib/debug/ConnectionFifoProtocol.h"
+#include "mcrouter/lib/network/gen/MemcacheRouterInfo.h"
 
 namespace folly {
 class EventBase;
 } // folly
 
-namespace facebook { namespace memcache {
+namespace facebook {
+namespace memcache {
 
 class FifoReader;
 
 /**
- * Function called when a message is completely read from the fifo.
+ * Function called when a message packet is completely read from the fifo.
  *
  * @param connectionId  Id of the connection.
  * @param packetId      Id of the packet.
  * @param from          Address of the endpoint that sent the message.
  * @param to            Address of the endpoint that received the message.
+ * @param typeId        Id of the type of the request/reply.
+ * @param msgStartTime  The time the request/reply was received/send.
+ * @param routerName    Generated router name that helps identify protocol.
  * @param data          The data of the message.
  */
-using MessageReadyFn = std::function<void(uint64_t connectionId,
-                                          uint64_t packetId,
-                                          folly::SocketAddress from,
-                                          folly::SocketAddress to,
-                                          folly::ByteRange data)>;
+using MessageReadyFn = std::function<void(
+    uint64_t connectionId,
+    uint64_t packetId,
+    folly::SocketAddress from,
+    folly::SocketAddress to,
+    uint32_t typeId,
+    uint64_t msgStartTime,
+    std::string routerName,
+    folly::ByteRange data)>;
 
 class FifoReadCallback : public folly::AsyncReader::ReadCallback {
  public:
-  FifoReadCallback(std::string fifoName,
-                   const MessageReadyFn& messageReady) noexcept;
+  FifoReadCallback(
+      std::string fifoName,
+      const MessageReadyFn& messageReady) noexcept;
 
   void getReadBuffer(void** bufReturn, size_t* lenReturn) override final;
   void readDataAvailable(size_t len) noexcept override final;
@@ -71,8 +81,15 @@ class FifoReadCallback : public folly::AsyncReader::ReadCallback {
   folly::SocketAddress from_;
   folly::SocketAddress to_;
 
-  void forwardMessage(const PacketHeader& header,
-                      std::unique_ptr<folly::IOBuf>&& buf);
+  uint32_t typeId_{0};
+  uint64_t msgStartTime_{0};
+
+  // Name of the carbon router.
+  std::string carbonRouterName_;
+
+  void forwardMessage(
+      const PacketHeader& header,
+      std::unique_ptr<folly::IOBuf> buf);
 
   void handleMessageHeader(MessageHeader msgHeader) noexcept;
 };
@@ -95,18 +112,20 @@ class FifoReaderManager {
    * @param dir             Directory to watch.
    * @param filenamePattern Regex that file names must match.
    */
-  FifoReaderManager(folly::EventBase& evb,
-                    MessageReadyFn messageReady,
-                    std::string dir,
-                    std::unique_ptr<boost::regex> filenamePattern);
+  FifoReaderManager(
+      folly::EventBase& evb,
+      MessageReadyFn messageReady,
+      std::string dir,
+      std::unique_ptr<boost::regex> filenamePattern);
 
   // non-copyable
   FifoReaderManager(const FifoReaderManager&) = delete;
   FifoReaderManager& operator=(const FifoReaderManager&) = delete;
 
  private:
-  using FifoReader = std::pair<folly::AsyncPipeReader::UniquePtr,
-                               std::unique_ptr<FifoReadCallback>>;
+  using FifoReader = std::pair<
+      folly::AsyncPipeReader::UniquePtr,
+      std::unique_ptr<FifoReadCallback>>;
 
   static constexpr size_t kPollDirectoryIntervalMs = 1000;
   folly::EventBase& evb_;
@@ -118,5 +137,5 @@ class FifoReaderManager {
   std::vector<std::string> getMatchedFiles() const;
   void runScanDirectory();
 };
-
-}} // facebook::memcache
+} // memcache
+} // facebook

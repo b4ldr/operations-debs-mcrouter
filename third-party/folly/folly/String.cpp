@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2012-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,19 +16,148 @@
 
 #include <folly/String.h>
 
-#include <folly/Format.h>
-#include <folly/ScopeGuard.h>
-
+#include <cctype>
 #include <cerrno>
 #include <cstdarg>
 #include <cstring>
-#include <stdexcept>
 #include <iterator>
-#include <cctype>
-#include <string.h>
+#include <stdexcept>
+
 #include <glog/logging.h>
 
+#include <folly/Portability.h>
+#include <folly/ScopeGuard.h>
+#include <folly/container/Array.h>
+
 namespace folly {
+
+static_assert(IsConvertible<float>::value, "");
+static_assert(IsConvertible<int>::value, "");
+static_assert(IsConvertible<bool>::value, "");
+static_assert(IsConvertible<int>::value, "");
+static_assert(!IsConvertible<std::vector<int>>::value, "");
+
+namespace detail {
+
+struct string_table_c_escape_make_item {
+  constexpr char operator()(std::size_t index) const {
+    // clang-format off
+    return
+        index == '"' ? '"' :
+        index == '\\' ? '\\' :
+        index == '?' ? '?' :
+        index == '\n' ? 'n' :
+        index == '\r' ? 'r' :
+        index == '\t' ? 't' :
+        index < 32 || index > 126 ? 'O' : // octal
+        'P'; // printable
+    // clang-format on
+  }
+};
+
+struct string_table_c_unescape_make_item {
+  constexpr char operator()(std::size_t index) const {
+    // clang-format off
+    return
+        index == '\'' ? '\'' :
+        index == '?' ? '?' :
+        index == '\\' ? '\\' :
+        index == '"' ? '"' :
+        index == 'a' ? '\a' :
+        index == 'b' ? '\b' :
+        index == 'f' ? '\f' :
+        index == 'n' ? '\n' :
+        index == 'r' ? '\r' :
+        index == 't' ? '\t' :
+        index == 'v' ? '\v' :
+        index >= '0' && index <= '7' ? 'O' : // octal
+        index == 'x' ? 'X' : // hex
+        'I'; // invalid
+    // clang-format on
+  }
+};
+
+struct string_table_hex_make_item {
+  constexpr unsigned char operator()(std::size_t index) const {
+    // clang-format off
+    return
+        index >= '0' && index <= '9' ? index - '0' :
+        index >= 'a' && index <= 'f' ? index - 'a' + 10 :
+        index >= 'A' && index <= 'F' ? index - 'A' + 10 :
+        16;
+    // clang-format on
+  }
+};
+
+struct string_table_uri_escape_make_item {
+  //  0 = passthrough
+  //  1 = unused
+  //  2 = safe in path (/)
+  //  3 = space (replace with '+' in query)
+  //  4 = always percent-encode
+  constexpr unsigned char operator()(std::size_t index) const {
+    // clang-format off
+    return
+        index >= '0' && index <= '9' ? 0 :
+        index >= 'A' && index <= 'Z' ? 0 :
+        index >= 'a' && index <= 'z' ? 0 :
+        index == '-' ? 0 :
+        index == '_' ? 0 :
+        index == '.' ? 0 :
+        index == '~' ? 0 :
+        index == '/' ? 2 :
+        index == ' ' ? 3 :
+        4;
+    // clang-format on
+  }
+};
+
+FOLLY_STORAGE_CONSTEXPR decltype(cEscapeTable) cEscapeTable =
+    make_array_with<256>(string_table_c_escape_make_item{});
+FOLLY_STORAGE_CONSTEXPR decltype(cUnescapeTable) cUnescapeTable =
+    make_array_with<256>(string_table_c_unescape_make_item{});
+FOLLY_STORAGE_CONSTEXPR decltype(hexTable) hexTable =
+    make_array_with<256>(string_table_hex_make_item{});
+FOLLY_STORAGE_CONSTEXPR decltype(uriEscapeTable) uriEscapeTable =
+    make_array_with<256>(string_table_uri_escape_make_item{});
+
+} // namespace detail
+
+static inline bool is_oddspace(char c) {
+  return c == '\n' || c == '\t' || c == '\r';
+}
+
+StringPiece ltrimWhitespace(StringPiece sp) {
+  // Spaces other than ' ' characters are less common but should be
+  // checked.  This configuration where we loop on the ' '
+  // separately from oddspaces was empirically fastest.
+
+loop:
+  for (; !sp.empty() && sp.front() == ' '; sp.pop_front()) {
+  }
+  if (!sp.empty() && is_oddspace(sp.front())) {
+    sp.pop_front();
+    goto loop;
+  }
+
+  return sp;
+}
+
+StringPiece rtrimWhitespace(StringPiece sp) {
+  // Spaces other than ' ' characters are less common but should be
+  // checked.  This configuration where we loop on the ' '
+  // separately from oddspaces was empirically fastest.
+
+loop:
+  for (; !sp.empty() && sp.back() == ' '; sp.pop_back()) {
+  }
+  if (!sp.empty() && is_oddspace(sp.back())) {
+    sp.pop_back();
+    goto loop;
+  }
+
+  return sp;
+}
 
 namespace {
 
@@ -66,24 +195,24 @@ void stringAppendfImpl(std::string& output, const char* format, va_list args) {
   }
 
   if (static_cast<size_t>(bytes_used) < inline_buffer.size()) {
-    output.append(inline_buffer.data(), bytes_used);
+    output.append(inline_buffer.data(), size_t(bytes_used));
     return;
   }
 
   // Couldn't fit.  Heap allocate a buffer, oh well.
-  std::unique_ptr<char[]> heap_buffer(new char[bytes_used + 1]);
-  int final_bytes_used =
-      stringAppendfImplHelper(heap_buffer.get(), bytes_used + 1, format, args);
+  std::unique_ptr<char[]> heap_buffer(new char[size_t(bytes_used + 1)]);
+  int final_bytes_used = stringAppendfImplHelper(
+      heap_buffer.get(), size_t(bytes_used + 1), format, args);
   // The second call can take fewer bytes if, for example, we were printing a
   // string buffer with null-terminating char using a width specifier -
   // vsnprintf("%.*s", buf.size(), buf)
   CHECK(bytes_used >= final_bytes_used);
 
   // We don't keep the trailing '\0' in our output string
-  output.append(heap_buffer.get(), final_bytes_used);
+  output.append(heap_buffer.get(), size_t(final_bytes_used));
 }
 
-} // anon namespace
+} // namespace
 
 std::string stringPrintf(const char* format, ...) {
   va_list ap;
@@ -146,7 +275,7 @@ const PrettySuffix kPrettyTimeSuffixes[] = {
   { "ns", 1e-9L },
   { "ps", 1e-12L },
   { "s ", 0 },
-  { 0, 0 },
+  { nullptr, 0 },
 };
 
 const PrettySuffix kPrettyBytesMetricSuffixes[] = {
@@ -155,7 +284,7 @@ const PrettySuffix kPrettyBytesMetricSuffixes[] = {
   { "MB", 1e6L },
   { "kB", 1e3L },
   { "B ", 0L },
-  { 0, 0 },
+  { nullptr, 0 },
 };
 
 const PrettySuffix kPrettyBytesBinarySuffixes[] = {
@@ -164,7 +293,7 @@ const PrettySuffix kPrettyBytesBinarySuffixes[] = {
   { "MB", int64_t(1) << 20 },
   { "kB", int64_t(1) << 10 },
   { "B ", 0L },
-  { 0, 0 },
+  { nullptr, 0 },
 };
 
 const PrettySuffix kPrettyBytesBinaryIECSuffixes[] = {
@@ -173,7 +302,7 @@ const PrettySuffix kPrettyBytesBinaryIECSuffixes[] = {
   { "MiB", int64_t(1) << 20 },
   { "KiB", int64_t(1) << 10 },
   { "B  ", 0L },
-  { 0, 0 },
+  { nullptr, 0 },
 };
 
 const PrettySuffix kPrettyUnitsMetricSuffixes[] = {
@@ -182,7 +311,7 @@ const PrettySuffix kPrettyUnitsMetricSuffixes[] = {
   { "M",    1e6L },
   { "k",    1e3L },
   { " ",      0  },
-  { 0, 0 },
+  { nullptr, 0 },
 };
 
 const PrettySuffix kPrettyUnitsBinarySuffixes[] = {
@@ -191,7 +320,7 @@ const PrettySuffix kPrettyUnitsBinarySuffixes[] = {
   { "M", int64_t(1) << 20 },
   { "k", int64_t(1) << 10 },
   { " ", 0 },
-  { 0, 0 },
+  { nullptr, 0 },
 };
 
 const PrettySuffix kPrettyUnitsBinaryIECSuffixes[] = {
@@ -200,7 +329,7 @@ const PrettySuffix kPrettyUnitsBinaryIECSuffixes[] = {
   { "Mi", int64_t(1) << 20 },
   { "Ki", int64_t(1) << 10 },
   { "  ", 0 },
-  { 0, 0 },
+  { nullptr, 0 },
 };
 
 const PrettySuffix kPrettySISuffixes[] = {
@@ -225,7 +354,7 @@ const PrettySuffix kPrettySISuffixes[] = {
   { "z", 1e-21L },
   { "y", 1e-24L },
   { " ", 0 },
-  { 0, 0}
+  { nullptr, 0}
 };
 
 const PrettySuffix* const kPrettySuffixes[PRETTY_NUM_TYPES] = {
@@ -239,7 +368,7 @@ const PrettySuffix* const kPrettySuffixes[PRETTY_NUM_TYPES] = {
   kPrettySISuffixes,
 };
 
-}  // namespace
+} // namespace
 
 std::string prettyPrint(double val, PrettyType type, bool addSpace) {
   char buf[100];
@@ -285,7 +414,7 @@ double prettyToDouble(folly::StringPiece *const prettyString,
         bestPrefixId = j;
       }
     } else if (prettyString->startsWith(suffixes[j].suffix)) {
-      int suffixLen = strlen(suffixes[j].suffix);
+      int suffixLen = int(strlen(suffixes[j].suffix));
       //We are looking for a longest suffix matching prefix of the string
       //after numeric value. We need this in case suffixes have common prefix.
       if (suffixLen > longestPrefixLen) {
@@ -299,7 +428,7 @@ double prettyToDouble(folly::StringPiece *const prettyString,
             "Unable to parse suffix \"",
             prettyString->toString(), "\""));
   }
-  prettyString->advance(longestPrefixLen);
+  prettyString->advance(size_t(longestPrefixLen));
   return suffixes[bestPrefixId].val ? value * suffixes[bestPrefixId].val :
                                       value;
 }
@@ -373,7 +502,7 @@ void toLowerAscii8(char& c) {
   // by adding 0x20.
 
   // Step 1: Clear the high order bit. We'll deal with it in Step 5.
-  unsigned char rotated = c & 0x7f;
+  uint8_t rotated = uint8_t(c & 0x7f);
   // Currently, the value of rotated, as a function of the original c is:
   //   below 'A':   0- 64
   //   'A'-'Z':    65- 90
@@ -419,7 +548,7 @@ void toLowerAscii8(char& c) {
   // At this point, rotated is 0x20 if c is 'A'-'Z' and 0x00 otherwise
 
   // Step 7: Add rotated to c
-  c += rotated;
+  c += char(rotated);
 }
 
 void toLowerAscii32(uint32_t& c) {
@@ -454,7 +583,7 @@ void toLowerAscii64(uint64_t& c) {
   c += rotated;
 }
 
-} // anon namespace
+} // namespace
 
 void toLowerAscii(char* str, size_t length) {
   static const size_t kAlignMask64 = 7;
@@ -507,6 +636,7 @@ namespace detail {
 
 size_t hexDumpLine(const void* ptr, size_t offset, size_t size,
                    std::string& line) {
+  static char hexValues[] = "0123456789abcdef";
   // Line layout:
   // 8: address
   // 1: space
@@ -520,13 +650,24 @@ size_t hexDumpLine(const void* ptr, size_t offset, size_t size,
   line.reserve(78);
   const uint8_t* p = reinterpret_cast<const uint8_t*>(ptr) + offset;
   size_t n = std::min(size - offset, size_t(16));
-  format("{:08x} ", offset).appendTo(line);
+  line.push_back(hexValues[(offset >> 28) & 0xf]);
+  line.push_back(hexValues[(offset >> 24) & 0xf]);
+  line.push_back(hexValues[(offset >> 20) & 0xf]);
+  line.push_back(hexValues[(offset >> 16) & 0xf]);
+  line.push_back(hexValues[(offset >> 12) & 0xf]);
+  line.push_back(hexValues[(offset >> 8) & 0xf]);
+  line.push_back(hexValues[(offset >> 4) & 0xf]);
+  line.push_back(hexValues[offset & 0xf]);
+  line.push_back(' ');
 
   for (size_t i = 0; i < n; i++) {
     if (i == 8) {
       line.push_back(' ');
     }
-    format(" {:02x}", p[i]).appendTo(line);
+
+    line.push_back(' ');
+    line.push_back(hexValues[(p[i] >> 4) & 0xf]);
+    line.push_back(hexValues[p[i] & 0xf]);
   }
 
   // 3 spaces for each byte we're not printing, one separating the halves
@@ -540,7 +681,7 @@ size_t hexDumpLine(const void* ptr, size_t offset, size_t size,
   }
   line.append(16 - n, ' ');
   line.push_back('|');
-  DCHECK_EQ(line.size(), 78);
+  DCHECK_EQ(line.size(), 78u);
 
   return n;
 }
@@ -575,7 +716,7 @@ std::string stripLeftMargin(std::string s) {
                           piece->end(),
                           [](char c) { return c != ' ' && c != '\t'; });
     if (needle != piece->end()) {
-      indent = std::min<size_t>(indent, needle - piece->begin());
+      indent = std::min<size_t>(indent, size_t(needle - piece->begin()));
     } else {
       max_length = std::max<size_t>(piece->size(), max_length);
     }
@@ -591,7 +732,7 @@ std::string stripLeftMargin(std::string s) {
   return join("\n", piecer);
 }
 
-}   // namespace folly
+} // namespace folly
 
 #ifdef FOLLY_DEFINED_DMGL
 # undef FOLLY_DEFINED_DMGL

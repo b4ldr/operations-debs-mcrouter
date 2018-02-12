@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
+ *  Copyright (c) 2017, Facebook, Inc.
  *  All rights reserved.
  *
  *  This source code is licensed under the BSD-style license found in the
@@ -9,35 +9,66 @@
  */
 #pragma once
 
-#include <folly/experimental/fibers/FiberManager.h>
-#include <folly/experimental/fibers/WhenN.h>
+#include <iterator>
+#include <type_traits>
+
+#include <folly/Range.h>
+#include <folly/fibers/FiberManager.h>
+#include <folly/fibers/WhenN.h>
 #include <folly/io/Cursor.h>
 #include <folly/io/IOBuf.h>
-#include <folly/Range.h>
 
 #include "mcrouter/lib/IOBufUtil.h"
+#include "mcrouter/lib/McResUtil.h"
+#include "mcrouter/lib/Operation.h"
+#include "mcrouter/lib/Reply.h"
 
-namespace facebook { namespace memcache { namespace mcrouter {
+namespace facebook {
+namespace memcache {
+namespace mcrouter {
 
-template <class Reply>
-std::vector<Reply> BigValueRoute::collectAllByBatches(
-  std::vector<std::function<Reply()>>& fs) const {
+namespace detail {
+template <class InputIterator>
+InputIterator reduce(InputIterator begin, InputIterator end) {
+  if (begin == end) {
+    return end;
+  }
+  InputIterator worstIt = begin;
+  auto worstSeverity = resultSeverity(begin->result());
 
-  auto batchSize = options_.batchSize_;
+  for (++begin; begin != end; ++begin) {
+    if (resultSeverity(begin->result()) > worstSeverity) {
+      worstIt = begin;
+      worstSeverity = resultSeverity(begin->result());
+    }
+  }
+  return worstIt;
+}
+} // detail
+
+template <class FuncIt>
+std::vector<typename std::result_of<
+    typename std::iterator_traits<FuncIt>::value_type()>::type>
+BigValueRoute::collectAllByBatches(FuncIt beginF, FuncIt endF) const {
+  using Reply = typename std::result_of<
+      typename std::iterator_traits<FuncIt>::value_type()>::type;
+
+  auto batchSize = options_.batchSize;
+  const size_t rangeSize = std::distance(beginF, endF);
   if (batchSize == 0) {
-    batchSize = fs.size();
+    batchSize = rangeSize;
   }
 
   std::vector<Reply> allReplies;
   size_t b = 0;
-  size_t e = std::min(fs.size(), batchSize);
-  while (b < fs.size()) {
-    auto replies = folly::fibers::collectAll(fs.begin() + b, fs.begin() + e);
+  size_t e = std::min(rangeSize, batchSize);
+  while (b < rangeSize) {
+    auto replies = folly::fibers::collectAll(beginF + b, beginF + e);
     for (auto& r : replies) {
       allReplies.emplace_back(std::move(r));
     }
     b = e;
-    e = std::min(fs.size(), e + batchSize);
+    e = std::min(rangeSize, e + batchSize);
   }
   return allReplies;
 }
@@ -45,159 +76,144 @@ std::vector<Reply> BigValueRoute::collectAllByBatches(
 template <class Request>
 void BigValueRoute::traverse(
     const Request& req,
-    const RouteHandleTraverser<McrouterRouteHandleIf>& t) const {
+    const RouteHandleTraverser<MemcacheRouteHandleIf>& t) const {
   t(*ch_, req);
 }
 
 template <class Request>
-ReplyT<Request> BigValueRoute::route(const Request& req,
-                                     GetLikeT<Request>) const {
-  using Reply = ReplyT<Request>;
-  using GetReply = ReplyT<ChunkGetT<Request>>;
-
+typename std::enable_if<
+    folly::IsOneOf<Request, McGetRequest, McGetsRequest>::value,
+    ReplyT<Request>>::type
+BigValueRoute::route(const Request& req) const {
   auto initialReply = ch_->route(req);
-  if (!initialReply.isHit() ||
+  if (!isHitResult(initialReply.result()) ||
       !(initialReply.flags() & MC_MSG_FLAG_BIG_VALUE)) {
     return initialReply;
   }
 
-  /* McMetagetReply does not have a value field, even though it is get-like. */
-  auto* value = initialReply.valuePtrUnsafe();
-  ChunksInfo chunks_info(value
-                         ? coalesceAndGetRange(*value)
-                         : folly::StringPiece(""));
-  if (!chunks_info.valid()) {
-    return Reply(DefaultReply, req);
+  ChunksInfo chunksInfo(coalesceAndGetRange(initialReply.value()));
+  if (!chunksInfo.valid()) {
+    return createReply(DefaultReply, req);
   }
 
-  auto reqs = chunkGetRequests<ChunkGetT<Request>>(req, chunks_info);
-  std::vector<std::function<GetReply()>> fs;
+  auto reqs = chunkGetRequests(req, chunksInfo);
+  std::vector<std::function<McGetReply()>> fs;
   fs.reserve(reqs.size());
 
   auto& target = *ch_;
-  for (const auto& req_b : reqs) {
-    fs.push_back(
-      [&target, &req_b]() {
-        return target.route(req_b);
-      }
-    );
+  for (const auto& chunkReq : reqs) {
+    fs.push_back([&target, &chunkReq]() { return target.route(chunkReq); });
   }
 
-  auto replies = collectAllByBatches(fs);
+  auto replies = collectAllByBatches(fs.begin(), fs.end());
   return mergeChunkGetReplies(
-    replies.begin(), replies.end(), std::move(initialReply));
+      replies.begin(), replies.end(), std::move(initialReply));
 }
 
 template <class Request>
-ReplyT<Request> BigValueRoute::route(const Request& req,
-                                     UpdateLikeT<Request>) const {
-
-  using Reply = ReplyT<Request>;
-  using UpdateReply = ReplyT<ChunkUpdateT<Request>>;
-
-  if (req->get_value().computeChainDataLength() <= options_.threshold_) {
+ReplyT<Request> BigValueRoute::route(
+    const Request& req,
+    carbon::UpdateLikeT<Request>) const {
+  if (req.value().computeChainDataLength() <= options_.threshold) {
     return ch_->route(req);
   }
 
-  auto reqs_info_pair = chunkUpdateRequests<ChunkUpdateT<Request>>(req);
-  std::vector<std::function<UpdateReply()>> fs;
-  fs.reserve(reqs_info_pair.first.size());
+  auto reqsInfoPair = chunkUpdateRequests(req);
+  std::vector<std::function<McSetReply()>> fs;
+  fs.reserve(reqsInfoPair.first.size());
 
   auto& target = *ch_;
-  for (const auto& req_b : reqs_info_pair.first) {
-    fs.push_back(
-      [&target, &req_b]() {
-        return target.route(req_b);
-      }
-    );
+  for (const auto& chunkReq : reqsInfoPair.first) {
+    fs.push_back([&target, &chunkReq]() { return target.route(chunkReq); });
   }
 
-  auto replies = collectAllByBatches(fs);
+  auto replies = collectAllByBatches(fs.begin(), fs.end());
 
   // reply for all chunk update requests
-  auto reducedReply = UpdateReply::reduce(replies.begin(), replies.end());
-  if (reducedReply->isStored()) {
+  auto reducedReply = detail::reduce(replies.begin(), replies.end());
+  if (isStoredResult(reducedReply->result())) {
     // original key with modified value stored at the back
-    auto new_req = req.clone();
-    new_req.setFlags(req.flags() | MC_MSG_FLAG_BIG_VALUE);
-    new_req.setValue(reqs_info_pair.second.toStringType());
-    return ch_->route(new_req);
+    auto newReq = req;
+    newReq.flags() = req.flags() | MC_MSG_FLAG_BIG_VALUE;
+    newReq.value() = reqsInfoPair.second.toStringType();
+    return ch_->route(newReq);
   } else {
-    return Reply(reducedReply->result());
+    return ReplyT<Request>(reducedReply->result());
   }
 }
 
 template <class Request>
 ReplyT<Request> BigValueRoute::route(
     const Request& req,
-    OtherThanT<Request, GetLike<>, UpdateLike<>>) const {
-
+    carbon::OtherThanT<Request, carbon::GetLike<>, carbon::UpdateLike<>>)
+    const {
   return ch_->route(req);
 }
 
-template <class ToRequest, class FromRequest>
-std::pair<std::vector<ToRequest>,
-          typename BigValueRoute::ChunksInfo>
+template <class FromRequest>
+std::pair<std::vector<McSetRequest>, BigValueRoute::ChunksInfo>
 BigValueRoute::chunkUpdateRequests(const FromRequest& req) const {
-  int num_chunks =
-      (req->get_value().computeChainDataLength() + options_.threshold_ - 1) /
-      options_.threshold_;
-  ChunksInfo info(num_chunks);
+  int numChunks =
+      (req.value().computeChainDataLength() + options_.threshold - 1) /
+      options_.threshold;
+  ChunksInfo info(numChunks);
 
-  std::vector<ToRequest> big_set_reqs;
-  big_set_reqs.reserve(num_chunks);
+  std::vector<McSetRequest> bigSetReqs;
+  bigSetReqs.reserve(numChunks);
 
-  auto base_key = req.fullKey();
+  auto baseKey = req.key().fullKey();
   folly::IOBuf chunkValue;
-  folly::io::Cursor cursor(&req->get_value());
-  for (int i = 0; i < num_chunks; ++i) {
-    cursor.cloneAtMost(chunkValue, options_.threshold_);
-    big_set_reqs.emplace_back(createChunkKey(base_key, i, info.randSuffix()));
-    big_set_reqs.back().setValue(std::move(chunkValue));
-    big_set_reqs.back().setExptime(req.exptime());
+  folly::io::Cursor cursor(&req.value());
+  for (int i = 0; i < numChunks; ++i) {
+    cursor.cloneAtMost(chunkValue, options_.threshold);
+    bigSetReqs.emplace_back(createChunkKey(baseKey, i, info.randSuffix()));
+    bigSetReqs.back().value() = std::move(chunkValue);
+    bigSetReqs.back().exptime() = req.exptime();
   }
 
-  return std::make_pair(std::move(big_set_reqs), info);
+  return std::make_pair(std::move(bigSetReqs), info);
 }
 
-template<class ToRequest, class FromRequest>
-std::vector<ToRequest>
-BigValueRoute::chunkGetRequests(const FromRequest& req,
-                                const ChunksInfo& info) const {
-  std::vector<ToRequest> big_get_reqs;
-  big_get_reqs.reserve(info.numChunks());
+template <class FromRequest>
+std::vector<McGetRequest> BigValueRoute::chunkGetRequests(
+    const FromRequest& req,
+    const ChunksInfo& info) const {
+  std::vector<McGetRequest> bigGetReqs;
+  bigGetReqs.reserve(info.numChunks());
 
-  auto base_key = req.fullKey();
+  auto baseKey = req.key().fullKey();
   for (uint32_t i = 0; i < info.numChunks(); i++) {
     // override key with chunk keys
-    big_get_reqs.emplace_back(createChunkKey(base_key, i, info.randSuffix()));
+    bigGetReqs.emplace_back(createChunkKey(baseKey, i, info.randSuffix()));
   }
 
-  return big_get_reqs;
+  return bigGetReqs;
 }
 
-template<typename InputIterator, class Reply>
+template <typename InputIterator, class Reply>
 Reply BigValueRoute::mergeChunkGetReplies(
-  InputIterator begin,
-  InputIterator end,
-  Reply&& initial_reply) const {
-
-  auto reduced_reply_it = Reply::reduce(begin, end);
-  if (!reduced_reply_it->isHit()) {
-    return Reply(reduced_reply_it->result());
+    InputIterator begin,
+    InputIterator end,
+    Reply&& initialReply) const {
+  auto reducedReplyIt = detail::reduce(begin, end);
+  if (!isHitResult(reducedReplyIt->result())) {
+    return Reply(reducedReplyIt->result());
   }
 
-  std::vector<std::unique_ptr<folly::IOBuf>> data_vec;
+  initialReply.result() = reducedReplyIt->result();
+
+  std::vector<std::unique_ptr<folly::IOBuf>> dataVec;
   while (begin != end) {
-    if (const auto* value = begin->valuePtrUnsafe()) {
-      data_vec.push_back(value->clone());
+    if (begin->value().hasValue()) {
+      dataVec.push_back(begin->value()->clone());
     }
     ++begin;
   }
 
-  initial_reply.setValue(concatAll(data_vec.begin(), data_vec.end()));
-  initial_reply.setResult(reduced_reply_it->result());
-  return std::move(initial_reply);
+  initialReply.value() = concatAll(dataVec.begin(), dataVec.end());
+  return initialReply;
 }
 
-}}}  // facebook::memcache::mcrouter
+} // mcrouter
+} // memcache
+} // facebook

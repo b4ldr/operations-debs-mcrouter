@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2015-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,11 @@
  */
 
 #include <random>
+
 #include <folly/Benchmark.h>
+#include <folly/Fingerprint.h>
 #include <folly/Format.h>
 #include <folly/detail/SlowFingerprint.h>
-#include <folly/Fingerprint.h>
 
 using namespace std;
 using namespace folly;
@@ -43,7 +44,7 @@ void initialize() {
   // word length = uniformly distributed between 1 and 10
   // charset = 0x20 - 0x7f
   std::uniform_int_distribution<size_t> term_len(1, 10);
-  std::uniform_int_distribution<uint8_t> term_char(0x20, 0x7f);
+  std::uniform_int_distribution<uint16_t> term_char(0x20, 0x7f);
   for (int i = 0; i < kMaxTerms; i++) {
     std::string& term = terms[i];
     int len = term_len(rng);
@@ -116,8 +117,7 @@ void fastFingerprintTerms128(int num_iterations, int num_ids) {
   fingerprintTerms<Fingerprint<128> >(num_iterations, num_ids);
 }
 
-
-}  // namespace
+} // namespace
 
 // Only benchmark one size of slowFingerprint; it's significantly slower
 // than fastFingeprint (as you can see for 64 bits) and it just slows down

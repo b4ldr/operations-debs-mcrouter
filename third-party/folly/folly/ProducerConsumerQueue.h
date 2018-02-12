@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2012-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,9 +22,12 @@
 #include <atomic>
 #include <cassert>
 #include <cstdlib>
+#include <memory>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
+
+#include <folly/concurrency/CacheLocality.h>
 
 namespace folly {
 
@@ -32,7 +35,7 @@ namespace folly {
  * ProducerConsumerQueue is a one producer and one consumer queue
  * without locks.
  */
-template<class T>
+template <class T>
 struct ProducerConsumerQueue {
   typedef T value_type;
 
@@ -61,12 +64,12 @@ struct ProducerConsumerQueue {
     // (No real synchronization needed at destructor time: only one
     // thread can be doing this.)
     if (!std::is_trivially_destructible<T>::value) {
-      size_t read = readIndex_;
-      size_t end = writeIndex_;
-      while (read != end) {
-        records_[read].~T();
-        if (++read == size_) {
-          read = 0;
+      size_t readIndex = readIndex_;
+      size_t endIndex = writeIndex_;
+      while (readIndex != endIndex) {
+        records_[readIndex].~T();
+        if (++readIndex == size_) {
+          readIndex = 0;
         }
       }
     }
@@ -74,7 +77,7 @@ struct ProducerConsumerQueue {
     std::free(records_);
   }
 
-  template<class ...Args>
+  template <class... Args>
   bool write(Args&&... recordArgs) {
     auto const currentWrite = writeIndex_.load(std::memory_order_relaxed);
     auto nextRecord = currentWrite + 1;
@@ -134,16 +137,16 @@ struct ProducerConsumerQueue {
   }
 
   bool isEmpty() const {
-   return readIndex_.load(std::memory_order_consume) ==
-         writeIndex_.load(std::memory_order_consume);
+    return readIndex_.load(std::memory_order_acquire) ==
+        writeIndex_.load(std::memory_order_acquire);
   }
 
   bool isFull() const {
-    auto nextRecord = writeIndex_.load(std::memory_order_consume) + 1;
+    auto nextRecord = writeIndex_.load(std::memory_order_acquire) + 1;
     if (nextRecord == size_) {
       nextRecord = 0;
     }
-    if (nextRecord != readIndex_.load(std::memory_order_consume)) {
+    if (nextRecord != readIndex_.load(std::memory_order_acquire)) {
       return false;
     }
     // queue is full
@@ -156,20 +159,30 @@ struct ProducerConsumerQueue {
   //   be removing items concurrently).
   // * It is undefined to call this from any other thread.
   size_t sizeGuess() const {
-    int ret = writeIndex_.load(std::memory_order_consume) -
-              readIndex_.load(std::memory_order_consume);
+    int ret = writeIndex_.load(std::memory_order_acquire) -
+        readIndex_.load(std::memory_order_acquire);
     if (ret < 0) {
       ret += size_;
     }
     return ret;
   }
 
-private:
+  // maximum number of items in the queue.
+  size_t capacity() const {
+    return size_ - 1;
+  }
+
+ private:
+  char pad0_[hardware_destructive_interference_size];
   const uint32_t size_;
   T* const records_;
 
-  std::atomic<unsigned int> readIndex_;
-  std::atomic<unsigned int> writeIndex_;
+  alignas(hardware_destructive_interference_size)
+      std::atomic<unsigned int> readIndex_;
+  alignas(hardware_destructive_interference_size)
+      std::atomic<unsigned int> writeIndex_;
+
+  char pad1_[hardware_destructive_interference_size - sizeof(writeIndex_)];
 };
 
-}
+} // namespace folly

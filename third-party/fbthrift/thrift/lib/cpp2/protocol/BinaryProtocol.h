@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2004-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -113,40 +113,42 @@ class BinaryProtocolWriter {
    * Functions that return the serialized size
    */
 
-  inline uint32_t serializedMessageSize(const std::string& name);
+  inline uint32_t serializedMessageSize(const std::string& name) const;
   inline uint32_t serializedFieldSize(const char* name,
                                       TType fieldType,
-                                      int16_t fieldId);
-  inline uint32_t serializedStructSize(const char* name);
+                                      int16_t fieldId) const;
+  inline uint32_t serializedStructSize(const char* name) const;
   inline uint32_t serializedSizeMapBegin(TType keyType,
                                          TType valType,
-                                         uint32_t size);
-  inline uint32_t serializedSizeMapEnd();
+                                         uint32_t size) const;
+  inline uint32_t serializedSizeMapEnd() const;
   inline uint32_t serializedSizeListBegin(TType elemType,
-                                            uint32_t size);
-  inline uint32_t serializedSizeListEnd();
+                                            uint32_t size) const;
+  inline uint32_t serializedSizeListEnd() const;
   inline uint32_t serializedSizeSetBegin(TType elemType,
-                                           uint32_t size);
-  inline uint32_t serializedSizeSetEnd();
-  inline uint32_t serializedSizeStop();
-  inline uint32_t serializedSizeBool(bool = false);
-  inline uint32_t serializedSizeByte(int8_t = 0);
-  inline uint32_t serializedSizeI16(int16_t = 0);
-  inline uint32_t serializedSizeI32(int32_t = 0);
-  inline uint32_t serializedSizeI64(int64_t = 0);
-  inline uint32_t serializedSizeDouble(double = 0.0);
-  inline uint32_t serializedSizeFloat(float = 0);
-  inline uint32_t serializedSizeString(folly::StringPiece str);
-  inline uint32_t serializedSizeBinary(folly::StringPiece str);
-  inline uint32_t serializedSizeBinary(folly::ByteRange);
-  inline uint32_t serializedSizeBinary(const std::unique_ptr<folly::IOBuf>& v);
-  inline uint32_t serializedSizeBinary(const folly::IOBuf& v);
-  inline uint32_t serializedSizeZCBinary(folly::StringPiece str);
-  inline uint32_t serializedSizeZCBinary(folly::ByteRange v);
-  inline uint32_t serializedSizeZCBinary(const std::unique_ptr<folly::IOBuf>&);
-  inline uint32_t serializedSizeZCBinary(const folly::IOBuf& /*v*/);
+                                           uint32_t size) const;
+  inline uint32_t serializedSizeSetEnd() const;
+  inline uint32_t serializedSizeStop() const;
+  inline uint32_t serializedSizeBool(bool = false) const;
+  inline uint32_t serializedSizeByte(int8_t = 0) const;
+  inline uint32_t serializedSizeI16(int16_t = 0) const;
+  inline uint32_t serializedSizeI32(int32_t = 0) const;
+  inline uint32_t serializedSizeI64(int64_t = 0) const;
+  inline uint32_t serializedSizeDouble(double = 0.0) const;
+  inline uint32_t serializedSizeFloat(float = 0) const;
+  inline uint32_t serializedSizeString(folly::StringPiece str) const;
+  inline uint32_t serializedSizeBinary(folly::StringPiece str) const;
+  inline uint32_t serializedSizeBinary(folly::ByteRange) const;
+  inline uint32_t serializedSizeBinary(
+    std::unique_ptr<folly::IOBuf> const& v) const;
+  inline uint32_t serializedSizeBinary(folly::IOBuf const& v) const;
+  inline uint32_t serializedSizeZCBinary(folly::StringPiece str) const;
+  inline uint32_t serializedSizeZCBinary(folly::ByteRange v) const;
+  inline uint32_t serializedSizeZCBinary(
+    std::unique_ptr<folly::IOBuf> const&) const;
+  inline uint32_t serializedSizeZCBinary(folly::IOBuf const& /*v*/) const;
   inline uint32_t serializedSizeSerializedData(
-      const std::unique_ptr<folly::IOBuf>& data);
+      std::unique_ptr<folly::IOBuf> const& data) const;
 
  protected:
   /**
@@ -185,6 +187,14 @@ class BinaryProtocolReader {
     return ProtocolType::T_BINARY_PROTOCOL;
   }
 
+  static constexpr bool kUsesFieldNames() {
+    return false;
+  }
+
+  static constexpr bool kOmitsContainerSizes() {
+    return false;
+  }
+
   void setStringSizeLimit(int32_t string_limit) {
     string_limit_ = string_limit;
   }
@@ -204,63 +214,103 @@ class BinaryProtocolReader {
    * set to some other buffer.
    */
   void setInput(const Cursor& cursor) { in_ = cursor; }
-  void setInput(const IOBuf* buf) { setInput(Cursor(buf)); }
+  void setInput(const IOBuf* buf) {
+    in_.reset(buf);
+  }
 
   /**
    * Reading functions
    */
-  inline uint32_t readMessageBegin(std::string& name,
-                                   MessageType& messageType,
-                                   int32_t& seqid);
-  inline uint32_t readMessageEnd();
-  inline uint32_t readStructBegin(std::string& name);
-  inline uint32_t readStructEnd();
-  inline uint32_t readFieldBegin(std::string& name,
-                                 TType& fieldType,
-                                 int16_t& fieldId);
-  inline uint32_t readFieldEnd();
-  inline uint32_t readMapBegin(TType& keyType,
-                               TType& valType,
-                               uint32_t& size);
-  inline uint32_t readMapEnd();
-  inline uint32_t readListBegin(TType& elemType, uint32_t& size);
-  inline uint32_t readListEnd();
-  inline uint32_t readSetBegin(TType& elemType, uint32_t& size);
-  inline uint32_t readSetEnd();
-  inline uint32_t readBool(bool& value);
-  inline uint32_t readBool(std::vector<bool>::reference value);
-  inline uint32_t readByte(int8_t& byte);
-  inline uint32_t readI16(int16_t& i16);
-  inline uint32_t readI32(int32_t& i32);
-  inline uint32_t readI64(int64_t& i64);
-  inline uint32_t readDouble(double& dub);
-  inline uint32_t readFloat(float& flt);
-  template<typename StrType>
-  inline uint32_t readString(StrType& str);
+  inline void
+  readMessageBegin(std::string& name, MessageType& messageType, int32_t& seqid);
+  inline void readMessageEnd();
+  inline void readStructBegin(std::string& name);
+  inline void readStructEnd();
+  inline void
+  readFieldBegin(std::string& name, TType& fieldType, int16_t& fieldId);
+  inline void readFieldEnd();
+  inline void readMapBegin(TType& keyType, TType& valType, uint32_t& size);
+  inline void readMapEnd();
+  inline void readListBegin(TType& elemType, uint32_t& size);
+  inline void readListEnd();
+  inline void readSetBegin(TType& elemType, uint32_t& size);
+  inline void readSetEnd();
+  inline void readBool(bool& value);
+  inline void readBool(std::vector<bool>::reference value);
+  inline void readByte(int8_t& byte);
+  inline void readI16(int16_t& i16);
+  inline void readI32(int32_t& i32);
+  inline void readI64(int64_t& i64);
+  inline void readDouble(double& dub);
+  inline void readFloat(float& flt);
   template <typename StrType>
-  inline uint32_t readBinary(StrType& str);
-  inline uint32_t readBinary(std::unique_ptr<folly::IOBuf>& str);
-  inline uint32_t readBinary(folly::IOBuf& str);
+  inline void readString(StrType& str);
+  template <typename StrType>
+  inline void readBinary(StrType& str);
+  inline void readBinary(std::unique_ptr<folly::IOBuf>& str);
+  inline void readBinary(folly::IOBuf& str);
   bool peekMap() { return false; }
   bool peekSet() { return false; }
   bool peekList() { return false; }
 
-  uint32_t skip(TType type) {
-    return apache::thrift::skip(*this, type);
+  void skip(TType type) {
+    apache::thrift::skip(*this, type);
   }
 
-  Cursor getCurrentPosition() const {
+  const Cursor& getCurrentPosition() const {
     return in_;
   }
+
   inline uint32_t readFromPositionAndAppend(Cursor& cursor,
                                             std::unique_ptr<folly::IOBuf>& ser);
 
+  struct StructReadState {
+    int16_t fieldId;
+    apache::thrift::protocol::TType fieldType;
+
+    void readStructBegin(BinaryProtocolReader* /*iprot*/) {}
+
+    void readStructEnd(BinaryProtocolReader* /*iprot*/) {}
+
+    void readFieldBegin(BinaryProtocolReader* iprot) {
+      iprot->readFieldBeginWithState(*this);
+    }
+
+    FOLLY_NOINLINE void readFieldBeginNoInline(BinaryProtocolReader* iprot) {
+      iprot->readFieldBeginWithState(*this);
+    }
+
+    void readFieldEnd(BinaryProtocolReader* /*iprot*/) {}
+
+    FOLLY_ALWAYS_INLINE bool advanceToNextField(
+        BinaryProtocolReader* iprot,
+        int32_t /*currFieldId*/,
+        int32_t nextFieldId,
+        TType nextFieldType) {
+      return iprot->advanceToNextField(nextFieldId, nextFieldType, *this);
+    }
+
+    std::string& fieldName() {
+      throw std::logic_error("BinaryProtocol doesn't support field names");
+    }
+  };
+
  protected:
-  template<typename StrType>
-  inline uint32_t readStringBody(StrType& str, int32_t sz);
+  template <typename StrType>
+  inline void readStringBody(StrType& str, int32_t sz);
+
+  FOLLY_ALWAYS_INLINE bool advanceToNextField(
+      int16_t nextFieldId,
+      TType nextFieldType,
+      StructReadState& state);
+
+  inline void readFieldBeginWithState(StructReadState& state);
 
   inline void checkStringSize(int32_t size);
   inline void checkContainerSize(int32_t size);
+
+  [[noreturn]] static void throwBadVersionIdentifier(int32_t sz);
+  [[noreturn]] static void throwMissingVersionIdentifier(int32_t sz);
 
   int32_t string_limit_;
   int32_t container_limit_;
@@ -277,10 +327,23 @@ class BinaryProtocolReader {
 
   template<typename T> friend class ProtocolReaderWithRefill;
   friend class BinaryProtocolReaderWithRefill;
+
+ private:
+  inline bool readBoolSafe();
 };
 
+namespace detail {
+
+template <class Protocol>
+struct ProtocolReaderStructReadState;
+
+template <>
+struct ProtocolReaderStructReadState<BinaryProtocolReader>
+    : BinaryProtocolReader::StructReadState {};
+
+} // namespace detail
 }} // apache::thrift
 
-#include "BinaryProtocol.tcc"
+#include <thrift/lib/cpp2/protocol/BinaryProtocol.tcc>
 
 #endif // #ifndef CPP2_PROTOCOL_TBINARYPROTOCOL_H_

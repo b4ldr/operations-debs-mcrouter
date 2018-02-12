@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2014-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,10 +26,11 @@
 #include <chrono>
 
 #include <folly/stats/BucketedTimeSeries.h>
-#include <folly/RWSpinLock.h>
-#include <thrift/lib/cpp2/security/SecurityLogger.h>
+#include <folly/synchronization/RWSpinLock.h>
 #include <thrift/lib/cpp/util/kerberos/Krb5CCacheStore.h>
+#include <thrift/lib/cpp/util/kerberos/Krb5CredentialsCacheManagerLogger.h>
 #include <thrift/lib/cpp/util/kerberos/Krb5Util.h>
+#include <thrift/lib/cpp2/security/SecurityLogger.h>
 
 namespace apache { namespace thrift { namespace krb5 {
 
@@ -44,14 +45,11 @@ class Krb5CredentialsCacheManager {
    * The logger object here will log internal events happening in the class.
    */
   explicit Krb5CredentialsCacheManager(
-    const std::shared_ptr<SecurityLogger>& logger =
-      std::make_shared<SecurityLogger>(),
-    int maxCacheSize = -1);
+      const std::shared_ptr<Krb5CredentialsCacheManagerLogger>& logger =
+          std::make_shared<Krb5CredentialsCacheManagerLogger>(),
+      int maxCacheSize = -1);
 
   virtual ~Krb5CredentialsCacheManager();
-
-  typedef std::mutex Mutex;
-  typedef std::unique_lock<Mutex> MutexGuard;
 
   /**
    * Wait for a credentials cache object to become available. This will throw
@@ -80,6 +78,7 @@ class Krb5CredentialsCacheManager {
   static const int MANAGE_THREAD_SLEEP_PERIOD;
   static const int ABOUT_TO_EXPIRE_THRESHOLD;
   static const int NUM_ELEMENTS_TO_PERSIST_TO_FILE;
+  static const int NUM_ELEMENTS_TO_LOG;
 
   /**
    * Read in credentials from the default CC file. Throws if
@@ -106,9 +105,14 @@ class Krb5CredentialsCacheManager {
 
   void initCacheStore();
 
-  bool aboutToExpire(const std::pair<uint64_t, uint64_t>& lifetime);
+  bool aboutToExpire(const Krb5Lifetime& lifetime);
   bool reachedRenewTime(
-    const std::pair<uint64_t, uint64_t>& lifetime, const std::string& client);
+      const Krb5Lifetime& lifetime,
+      const std::string& client);
+
+  void logTopCredentials(
+      const std::shared_ptr<Krb5CredentialsCacheManagerLogger>& logger,
+      const std::string& key);
 
   std::unique_ptr<Krb5Context> ctx_;
 
@@ -118,10 +122,10 @@ class Krb5CredentialsCacheManager {
    * Members for controlling the manager thread
    */
   std::thread manageThread_;
-  Mutex manageThreadMutex_; // A lock for the two members below
+  std::mutex manageThreadMutex_; // A lock for the two members below
   bool stopManageThread_;
   std::condition_variable manageThreadCondVar_;
-  std::shared_ptr<SecurityLogger> logger_;
+  std::shared_ptr<Krb5CredentialsCacheManagerLogger> logger_;
 
   bool ccacheTypeIsMemory_;
   bool updateFileCacheEnabled_;

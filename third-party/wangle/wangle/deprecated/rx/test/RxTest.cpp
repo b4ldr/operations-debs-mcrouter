@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include <wangle/deprecated/rx/Observer.h>
@@ -15,7 +21,7 @@
 using namespace wangle;
 
 static std::unique_ptr<Observer<int>> incrementer(int& counter) {
-  return Observer<int>::create([&] (int x) {
+  return Observer<int>::create([&] (int) {
     counter++;
   });
 }
@@ -77,7 +83,7 @@ TEST(RxTest, SubscribeDuringCallback) {
   Subject<int> subject;
   int outerCount = 0, innerCount = 0;
   Subscription<int> s1, s2;
-  s1 = subject.subscribe(Observer<int>::create([&] (int x) {
+  s1 = subject.subscribe(Observer<int>::create([&] (int) {
     outerCount++;
     s2 = subject.subscribe(incrementer(innerCount));
   }));
@@ -90,7 +96,7 @@ TEST(RxTest, SubscribeDuringCallback) {
 TEST(RxTest, ObserveDuringCallback) {
   Subject<int> subject;
   int outerCount = 0, innerCount = 0;
-  subject.observe(Observer<int>::create([&] (int x) {
+  subject.observe(Observer<int>::create([&] (int) {
     outerCount++;
     subject.observe(incrementer(innerCount));
   }));
@@ -104,7 +110,7 @@ TEST(RxTest, ObserveInlineDuringCallback) {
   Subject<int> subject;
   int outerCount = 0, innerCount = 0;
   auto innerO = incrementer(innerCount).release();
-  auto outerO = Observer<int>::create([&] (int x) {
+  auto outerO = Observer<int>::create([&] (int) {
     outerCount++;
     subject.observe(innerO);
   }).release();
@@ -123,7 +129,7 @@ TEST(RxTest, UnsubscribeDuringCallback) {
   Subject<int> subject;
   int count1 = 0, count2 = 0;
   auto s1 = subject.subscribe(incrementer(count1));
-  auto s2 = subject.subscribe(Observer<int>::create([&] (int x) {
+  auto s2 = subject.subscribe(Observer<int>::create([&] (int) {
     count2++;
     s1.~Subscription();
   }));
@@ -138,9 +144,9 @@ TEST(RxTest, SubscribeUnsubscribeDuringCallback) {
   // callback should not get any updates
   Subject<int> subject;
   int outerCount = 0, innerCount = 0;
-  auto s2 = subject.subscribe(Observer<int>::create([&] (int x) {
+  auto s2 = subject.subscribe(Observer<int>::create([&] (int) {
     outerCount++;
-    auto s2 = subject.subscribe(incrementer(innerCount));
+    auto s3 = subject.subscribe(incrementer(innerCount));
   }));
   subject.onNext(1);
   subject.onNext(2);
@@ -150,7 +156,7 @@ TEST(RxTest, SubscribeUnsubscribeDuringCallback) {
 
 // Move only type
 typedef std::unique_ptr<int> MO;
-static MO makeMO() { return folly::make_unique<int>(1); }
+static MO makeMO() { return std::make_unique<int>(1); }
 template <typename T>
 static ObserverPtr<T> makeMOObserver() {
   return Observer<T>::create([](const T& mo) {
@@ -178,7 +184,7 @@ struct CO {
 
 template <typename T>
 static ObserverPtr<T> makeCOObserver() {
-  return Observer<T>::create([](const T& mo) {});
+  return Observer<T>::create([](const T&) {});
 }
 
 TEST(RxTest, CopyOnly) {

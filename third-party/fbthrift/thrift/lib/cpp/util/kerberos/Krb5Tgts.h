@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2014-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -58,18 +58,18 @@ class Krb5Tgts {
   /**
    * Get lifetime of the currently loaded creds.
    */
-  std::pair<uint64_t, uint64_t> getLifetime();
+  Krb5Lifetime getLifetime();
+  std::map<std::string, Krb5Lifetime> getLifetimes();
 
   bool isInitialized();
-
-  typedef std::mutex Mutex;
-  typedef std::unique_lock<Mutex> MutexGuard;
 
   typedef boost::shared_mutex Lock;
   typedef boost::unique_lock<Lock> WriteLock;
   typedef boost::shared_lock<Lock> ReadLock;
 
  protected:
+  static const uint32_t EXPIRATION_THRESHOLD_SEC;
+
   void waitForInit();
   bool isPrincipalInKeytab(const Krb5Principal& princ);
   std::shared_ptr<Krb5Credentials> getForRealm(const std::string& realm);
@@ -77,7 +77,7 @@ class Krb5Tgts {
 
   Krb5Context ctx_;
 
-  Mutex initLock_;
+  std::mutex initLock_;
   std::condition_variable initCondVar_;
   std::string initError_;
 

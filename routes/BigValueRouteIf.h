@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2015, Facebook, Inc.
+ *  Copyright (c) 2017, Facebook, Inc.
  *  All rights reserved.
  *
  *  This source code is licensed under the BSD-style license found in the
@@ -9,16 +9,17 @@
  */
 #pragma once
 
-namespace facebook { namespace memcache { namespace mcrouter {
+namespace facebook {
+namespace memcache {
+namespace mcrouter {
 
 struct BigValueRouteOptions {
-  explicit BigValueRouteOptions(size_t threshold,
-                                size_t batchSize) :
-      threshold_(threshold),
-      batchSize_(batchSize) {
-  }
-  const size_t threshold_;
-  const size_t batchSize_;
+  constexpr explicit BigValueRouteOptions(size_t threshold_, size_t batchSize_)
+      : threshold(threshold_), batchSize(batchSize_) {}
+  const size_t threshold;
+  const size_t batchSize;
 };
 
-}}}  // facebook::memcache::mcrouter
+} // mcrouter
+} // memcache
+} // facebook
