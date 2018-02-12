@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #pragma once
 
@@ -25,7 +31,7 @@ class BroadcastHandler : public HandlerAdapter<T, std::unique_ptr<folly::IOBuf>>
  public:
   typedef typename HandlerAdapter<T, std::unique_ptr<folly::IOBuf>>::Context Context;
 
-  virtual ~BroadcastHandler() {
+  ~BroadcastHandler() override {
     CHECK(subscribers_.empty());
   }
 
@@ -56,19 +62,25 @@ class BroadcastHandler : public HandlerAdapter<T, std::unique_ptr<folly::IOBuf>>
    * Invoked when a new subscriber is added. Subclasses can override
    * to add custom behavior.
    */
-  virtual void onSubscribe(Subscriber<T, R>* subscriber) {}
+  virtual void onSubscribe(Subscriber<T, R>*) {}
 
   /**
    * Invoked when a subscriber is removed. Subclasses can override
    * to add custom behavior.
    */
-  virtual void onUnsubscribe(Subscriber<T, R>* subscriber) {}
+  virtual void onUnsubscribe(Subscriber<T, R>*) {}
 
   /**
    * Invoked for each data that is about to be broadcasted to the
    * subscribers. Subclasses can override to add custom behavior.
    */
-  virtual void onData(T& data) {}
+  virtual void onData(T& /* data */) {}
+
+  /**
+   * FOR TESTS ONLY!
+   * Return a unique identifier of this object.
+   */
+  uint64_t getArbitraryIdentifier();
 
  protected:
   template <typename FUNC> // FUNC: Subscriber<T, R>* -> void
@@ -82,13 +94,16 @@ class BroadcastHandler : public HandlerAdapter<T, std::unique_ptr<folly::IOBuf>>
  private:
   std::map<uint64_t, Subscriber<T, R>*> subscribers_;
   uint64_t nextSubscriptionId_{0};
+
+  // For unit tests only.
+  uint64_t identifier_{0};
 };
 
 template <typename T, typename R>
 class BroadcastPipelineFactory
     : public PipelineFactory<DefaultPipeline> {
  public:
-  virtual DefaultPipeline::Ptr newPipeline(
+  DefaultPipeline::Ptr newPipeline(
       std::shared_ptr<folly::AsyncTransportWrapper> socket) override = 0;
 
   virtual BroadcastHandler<T, R>* getBroadcastHandler(

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2014-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,8 +38,7 @@ TEST(FrozenVectorTypes, VectorAsMap) {
   dm.insert(dm.end(), {1, 1});
   // ensure it gets sorted
   auto fdm = freeze(dm);
-  EXPECT_EQ(1, fdm[0].first());
-  EXPECT_EQ(1, fdm[0].second());
+  EXPECT_EQ(1, fdm.at(1));
   EXPECT_EQ(81, fdm.at(9));
   EXPECT_EQ(25, fdm.at(5));
   {
@@ -113,6 +112,32 @@ TEST(FrozenVectorTypes, VectorAsHashSet) {
   EXPECT_EQ(1, fdm.count(3));
   EXPECT_EQ(1, fdm.count(7));
   EXPECT_EQ(0, fdm.count(4));
+}
+
+TEST(FrozenVectorTypes, DistinctChecking) {
+  VectorAsHashMap<int, int> hm{{1, 2}, {1, 3}};
+  VectorAsHashSet<int> hs{4, 4};
+  VectorAsMap<int, int> om{{5, 6}, {5, 7}};
+  VectorAsSet<int> os{8, 8};
+  EXPECT_THROW(freeze(hm), std::domain_error);
+  EXPECT_THROW(freeze(hs), std::domain_error);
+  EXPECT_THROW(freeze(om), std::domain_error);
+  EXPECT_THROW(freeze(os), std::domain_error);
+}
+
+TEST(FrozenVectorTypes, DistinctCheckingShouldPass) {
+  VectorAsHashMap<int, int> hm{{1, 2}, {2, 3}};
+  VectorAsHashSet<int> hs{4, 5};
+  VectorAsMap<int, int> om{{5, 6}, {6, 7}};
+  VectorAsSet<int> os{8, 9};
+  auto fhm = freeze(hm);
+  auto fhs = freeze(hs);
+  auto fom = freeze(om);
+  auto fos = freeze(os);
+  EXPECT_EQ(2, fhm.size());
+  EXPECT_EQ(2, fhs.size());
+  EXPECT_EQ(2, fom.size());
+  EXPECT_EQ(2, fos.size());
 }
 
 template<class TestType>
@@ -220,6 +245,6 @@ INSTANTIATE_TYPED_TEST_CASE_P(CppVerions, FrozenStructsWithVectors, MyTypes);
 int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   google::InitGoogleLogging(argv[0]);
-  google::ParseCommandLineFlags(&argc, &argv, true);
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
   return RUN_ALL_TESTS();
 }

@@ -1,18 +1,24 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #pragma once
 
-#include <tuple>
+#include <utility>
 
 #include <folly/dynamic.h>
-#include <folly/EvictingCacheMap.h>
+#include <folly/container/EvictingCacheMap.h>
 #include <folly/Optional.h>
 #include <wangle/client/persistence/PersistentCacheCommon.h>
 
@@ -28,7 +34,7 @@ class LRUInMemoryCache {
   /**
    * Create with the specified capacity.
    */
-  explicit LRUInMemoryCache(size_t capacity) : cache_(capacity) {};
+  explicit LRUInMemoryCache(size_t capacity) : cache_(capacity) {}
   ~LRUInMemoryCache() = default;
 
   folly::Optional<V> get(const K& key);
@@ -48,7 +54,7 @@ class LRUInMemoryCache {
   /**
    * Get the cache data as a list of kv pairs along with the version
    */
-  folly::Optional<std::tuple<folly::dynamic, CacheDataVersion>>
+  folly::Optional<std::pair<folly::dynamic, CacheDataVersion>>
   convertToKeyValuePairs() noexcept;
 
   /**

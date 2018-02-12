@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include <wangle/channel/FileRegion.h>
@@ -30,7 +36,7 @@ Singleton<IOThreadPoolExecutor, FileRegionReadPool> readPool(
 namespace wangle {
 
 FileRegion::FileWriteRequest::FileWriteRequest(AsyncSocket* socket,
-    WriteCallback* callback, int fd, off_t offset, size_t count)
+    WriteCallback* callback, int fd, loff_t offset, size_t count)
   : WriteRequest(socket, callback),
     readFd_(fd), offset_(offset), count_(count) {
 }
@@ -71,7 +77,7 @@ bool FileRegion::FileWriteRequest::isComplete() {
   return totalBytesWritten_ == count_;
 }
 
-void FileRegion::FileWriteRequest::messageAvailable(size_t&& count) {
+void FileRegion::FileWriteRequest::messageAvailable(size_t&& count) noexcept {
   bool shouldWrite = bytesInPipe_ == 0;
   bytesInPipe_ += count;
   if (shouldWrite) {
@@ -131,7 +137,7 @@ void FileRegion::FileWriteRequest::start() {
     socket_->getEventBase()->runInEventBaseThreadAndWait([&]{
       startConsuming(socket_->getEventBase(), &queue_);
     });
-    readHandler_ = folly::make_unique<FileReadHandler>(
+    readHandler_ = std::make_unique<FileReadHandler>(
         this, pipeFds[1], count_);
 #endif
   });

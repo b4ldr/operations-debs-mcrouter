@@ -1,15 +1,23 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include <iostream>
 #include <gflags/gflags.h>
+
+#include <folly/init/Init.h>
 
 #include <wangle/bootstrap/ClientBootstrap.h>
 #include <wangle/channel/AsyncSocketHandler.h>
@@ -27,14 +35,14 @@ typedef Pipeline<folly::IOBufQueue&, std::string> TelnetPipeline;
 
 class TelnetHandler : public HandlerAdapter<std::string> {
  public:
-  virtual void read(Context* ctx, std::string msg) override {
+  void read(Context*, std::string msg) override {
     std::cout << msg;
   }
-  virtual void readException(Context* ctx, exception_wrapper e) override {
+  void readException(Context* ctx, exception_wrapper e) override {
     std::cout << exceptionStr(e) << std::endl;
     close(ctx);
   }
-  virtual void readEOF(Context* ctx) override {
+  void readEOF(Context* ctx) override {
     std::cout << "EOF received :(" << std::endl;
     close(ctx);
   }
@@ -42,7 +50,8 @@ class TelnetHandler : public HandlerAdapter<std::string> {
 
 class TelnetPipelineFactory : public PipelineFactory<TelnetPipeline> {
  public:
-  TelnetPipeline::Ptr newPipeline(std::shared_ptr<AsyncTransportWrapper> sock) {
+  TelnetPipeline::Ptr newPipeline(
+      std::shared_ptr<AsyncTransportWrapper> sock) override {
     auto pipeline = TelnetPipeline::create();
     pipeline->addBack(AsyncSocketHandler(sock));
     pipeline->addBack(EventBaseHandler()); // ensure we can write from any thread
@@ -56,10 +65,10 @@ class TelnetPipelineFactory : public PipelineFactory<TelnetPipeline> {
 };
 
 int main(int argc, char** argv) {
-  google::ParseCommandLineFlags(&argc, &argv, true);
+  folly::init(&argc, &argv, true);
 
   ClientBootstrap<TelnetPipeline> client;
-  client.group(std::make_shared<wangle::IOThreadPoolExecutor>(1));
+  client.group(std::make_shared<folly::IOThreadPoolExecutor>(1));
   client.pipelineFactory(std::make_shared<TelnetPipelineFactory>());
   auto pipeline = client.connect(SocketAddress(FLAGS_host,FLAGS_port)).get();
 

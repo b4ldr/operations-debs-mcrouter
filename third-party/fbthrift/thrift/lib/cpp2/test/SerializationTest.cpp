@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2014-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -84,6 +83,41 @@ TEST(SerializationTest, MixedRoundtripFails) {
   }
 }
 
+TEST(SerializationTest, DeserializeReturningObjGivenCursor) {
+  using serializer = SimpleJSONSerializer;
+
+  auto s = makeTestStruct();
+  auto q = serializer::serialize<IOBufQueue>(s);
+
+  Cursor cursor{q.front()};
+  auto out = serializer::deserialize<TestStruct>(cursor);
+  EXPECT_EQ(s, out);
+  EXPECT_TRUE(cursor.isAtEnd());
+}
+
+TEST(SerializationTest, DeserializeReturningObjGivenCursorToMiddleOfBuffer) {
+  using serializer = SimpleJSONSerializer;
+
+  auto s = makeTestStruct();
+  auto str = serializer::serialize<std::string>(s);
+  // Copy the serialized data into an IOBuf, with 4 extra bytes on either end.
+  IOBuf buf{IOBuf::CREATE, str.size() + (sizeof(uint32_t) * 2)};
+  folly::io::Appender appender(&buf, 0);
+  appender.writeBE<uint32_t>(12);
+  appender(str);
+  appender.writeBE<uint32_t>(34);
+
+  // Create a Cursor pointing to the location of the serialized data
+  // in the buffer.
+  folly::io::Cursor cursor(&buf);
+  cursor.skip(sizeof(uint32_t));
+
+  auto out = serializer::deserialize<TestStruct>(cursor);
+  EXPECT_EQ(s, out);
+  cursor.skip(sizeof(uint32_t));
+  EXPECT_TRUE(cursor.isAtEnd());
+}
+
 TEST(SerializationTest, DeserializeReturningObjGivenIOBuf) {
   using serializer = SimpleJSONSerializer;
 
@@ -127,6 +161,37 @@ TEST(SerializationTest, SerializeReturningIOBufQueue) {
   serializer::serialize(s, &expected);
   auto actual = serializer::serialize<IOBufQueue>(s);
   EXPECT_EQ(expected, StringPiece(actual.move()->coalesce()));
+}
+
+TEST(SerializationTest, SerializeAppendsToString) {
+  using Serializer = SimpleJSONSerializer;
+  auto s = makeTestStruct();
+  string prefix = "existing_text";
+
+  string target = prefix;
+  Serializer::serialize(s, &target);
+
+  folly::StringPiece source = target;
+  EXPECT_TRUE(source.removePrefix(prefix));
+  TestStruct check;
+  Serializer::deserialize(source, check);
+  EXPECT_EQ(check, s);
+}
+
+TEST(SerializationTest, SerializeAppendsToFBString) {
+  using Serializer = SimpleJSONSerializer;
+  auto s = makeTestStruct();
+  for (fbstring prefix = "An existing string. "; prefix.size() < 2000;
+       prefix += prefix) {
+    fbstring target = prefix;
+    Serializer::serialize(s, &target);
+
+    folly::StringPiece source = target;
+    EXPECT_TRUE(source.removePrefix(prefix));
+    TestStruct check;
+    Serializer::deserialize(source, check);
+    EXPECT_EQ(check, s);
+  }
 }
 
 TEST(SerializationTest, SerializeReturningString) {

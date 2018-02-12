@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include <gflags/gflags.h>
@@ -26,16 +32,16 @@ class ProxyBackendHandler : public InboundBytesToBytesHandler {
   explicit ProxyBackendHandler(DefaultPipeline* frontendPipeline) :
       frontendPipeline_(frontendPipeline) {}
 
-  void read(Context* ctx, IOBufQueue& q) override {
+  void read(Context*, IOBufQueue& q) override {
     frontendPipeline_->write(q.move());
   }
 
-  void readEOF(Context* ctx) override {
+  void readEOF(Context*) override {
     LOG(INFO) << "Connection closed by remote host";
     frontendPipeline_->close();
   }
 
-  void readException(Context* ctx, exception_wrapper e) override {
+  void readException(Context*, exception_wrapper e) override {
     LOG(ERROR) << "Remote error: " << exceptionStr(e);
     frontendPipeline_->close();
   }
@@ -50,7 +56,7 @@ class ProxyBackendPipelineFactory : public PipelineFactory<DefaultPipeline> {
       frontendPipeline_(frontendPipeline) {}
 
   DefaultPipeline::Ptr newPipeline(
-      std::shared_ptr<AsyncTransportWrapper> sock) {
+      std::shared_ptr<AsyncTransportWrapper> sock) override {
     auto pipeline = DefaultPipeline::create();
     pipeline->addBack(AsyncSocketHandler(sock));
     pipeline->addBack(ProxyBackendHandler(frontendPipeline_));
@@ -67,7 +73,7 @@ class ProxyFrontendHandler : public BytesToBytesHandler {
   explicit ProxyFrontendHandler(SocketAddress remoteAddress) :
       remoteAddress_(remoteAddress) {}
 
-  void read(Context* ctx, IOBufQueue& q) override {
+  void read(Context*, IOBufQueue& q) override {
     backendPipeline_->write(q.move());
   }
 
@@ -121,7 +127,7 @@ class ProxyFrontendPipelineFactory : public PipelineFactory<DefaultPipeline> {
       remoteAddress_(remoteAddress) {}
 
   DefaultPipeline::Ptr newPipeline(
-      std::shared_ptr<AsyncTransportWrapper> sock) {
+      std::shared_ptr<AsyncTransportWrapper> sock) override {
     auto pipeline = DefaultPipeline::create();
     pipeline->addBack(AsyncSocketHandler(sock));
     pipeline->addBack(std::make_shared<ProxyFrontendHandler>(remoteAddress_));
@@ -134,7 +140,7 @@ class ProxyFrontendPipelineFactory : public PipelineFactory<DefaultPipeline> {
 };
 
 int main(int argc, char** argv) {
-  google::ParseCommandLineFlags(&argc, &argv, true);
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
 
   ServerBootstrap<DefaultPipeline> server;
   server.childPipeline(std::make_shared<ProxyFrontendPipelineFactory>(

@@ -21,33 +21,36 @@ namespace MODULE1 {
 enum Enum {
   ONE = 1,
   TWO = 2,
-  THREE = 3
+  THREE = 3,
 };
 
-extern const std::map<int, const char*> _Enum_VALUES_TO_NAMES;
+using _Enum_EnumMapFactory = apache::thrift::detail::TEnumMapFactory<Enum, int>;
 
-extern const std::map<const char*, int, apache::thrift::ltstr> _Enum_NAMES_TO_VALUES;
+extern const _Enum_EnumMapFactory::ValuesToNamesMapType _Enum_VALUES_TO_NAMES;
+
+extern const _Enum_EnumMapFactory::NamesToValuesMapType _Enum_NAMES_TO_VALUES;
 
 } // namespace
-namespace apache { namespace thrift { 
-template<>
-struct TEnumTraits< ::MODULE1::Enum> : public TEnumTraitsBase< ::MODULE1::Enum>
-{
-inline static constexpr  ::MODULE1::Enum min() {
+namespace apache { namespace thrift {
+template <> struct TEnumDataStorage< ::MODULE1::Enum>;
+template <> const std::size_t TEnumTraits< ::MODULE1::Enum>::size;
+template <> const folly::Range<const  ::MODULE1::Enum*> TEnumTraits< ::MODULE1::Enum>::values;
+template <> const folly::Range<const folly::StringPiece*> TEnumTraits< ::MODULE1::Enum>::names;
+template <> inline constexpr  ::MODULE1::Enum TEnumTraits< ::MODULE1::Enum>::min() {
 return  ::MODULE1::Enum::ONE;
 }
-inline static constexpr  ::MODULE1::Enum max() {
+template <> inline constexpr  ::MODULE1::Enum TEnumTraits< ::MODULE1::Enum>::max() {
 return  ::MODULE1::Enum::THREE;
 }
-};
-}} // apache:thrift
+}} // apache::thrift
 
 namespace MODULE1 {
+
 class Struct;
 
 void swap(Struct &a, Struct &b);
 
-class Struct : public apache::thrift::TStructType<Struct> {
+class Struct final : public apache::thrift::TStructType<Struct> {
  public:
 
   static const uint64_t _reflection_id = 18368202441649123916U;
@@ -87,9 +90,6 @@ class Struct : public apache::thrift::TStructType<Struct> {
   Struct& operator=(Struct&&) = default;
 
   void __clear();
-
-  virtual ~Struct() throw() {}
-
   int32_t first;
   std::string second;
 
@@ -113,6 +113,10 @@ class Struct : public apache::thrift::TStructType<Struct> {
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class Struct;

@@ -1,13 +1,9 @@
 import std.conv, std.getopt, std.stdio, core.time, core.thread;
-import common.fb303.d.FacebookBase;
 
+import load_types;
 import LoadTest;
 
-class LoadHandler : FacebookBase, LoadTest {
-  this (string n) {
-    super(n);
-  }
-
+class LoadHandler : LoadTest {
   void burnImpl(long microseconds) {
     auto end = TickDuration.currSystemTick() + TickDuration.from!"usecs"(microseconds);
     while (end > TickDuration.currSystemTick()) {
@@ -65,5 +61,10 @@ class LoadHandler : FacebookBase, LoadTest {
   }
   long add(long a, long b) {
     return a + b;
+  }
+  void largeContainer(BigStruct[] items) {
+  }
+  BigStruct[] iterAllFields(BigStruct[] items) {
+  return items;
   }
 }

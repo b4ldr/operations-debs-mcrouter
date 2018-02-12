@@ -40,10 +40,12 @@ class Lz4Immutable {
    * Builds Lz4Immutable.
    *
    * @param dictionary  Dictionary to use to compress the data.
-   *                    The dictionary have between sizeof(size_t)
-   *                    and 64 KB - otherwise it will crash!
+   *                    The dictionary has to be between sizeof(size_t)
+   *                    and 64 KB - otherwise it will throw!
+   *
+   * @throw std::invalid_argument If the dictionary is invalid.
    */
-  explicit Lz4Immutable(std::unique_ptr<folly::IOBuf> dictionary) noexcept;
+  explicit Lz4Immutable(std::unique_ptr<folly::IOBuf> dictionary);
 
   /**
    * Upper bound of compression size.
@@ -57,9 +59,12 @@ class Lz4Immutable {
    *
    * @param source  Data to compress.
    * @return        A newly allocated IOBuf with the compressed data.
+   *
+   * @throw std::invalid_argument   If the input is too large to be compressed.
    */
-  std::unique_ptr<folly::IOBuf> compress(const folly::IOBuf& source) const
-      noexcept;
+  std::unique_ptr<folly::IOBuf> compress(const folly::IOBuf& source) const;
+  std::unique_ptr<folly::IOBuf> compress(const struct iovec* iov, size_t iovcnt)
+      const;
 
   /**
    * Decompress the data.
@@ -72,6 +77,10 @@ class Lz4Immutable {
    */
   std::unique_ptr<folly::IOBuf> decompress(
       const folly::IOBuf& source,
+      size_t uncompressedSize) const noexcept;
+  std::unique_ptr<folly::IOBuf> decompress(
+      const struct iovec* iov,
+      size_t iovcnt,
       size_t uncompressedSize) const noexcept;
 
  private:

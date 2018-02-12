@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2011-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,9 @@
 
 #include <folly/dynamic.h>
 
+#include <folly/portability/GTest.h>
+
 #include <boost/next_prior.hpp>
-#include <gtest/gtest.h>
 
 using folly::dynamic;
 
@@ -28,6 +29,11 @@ using folly::dynamic;
 // normally provided by json.cpp.
 void dynamic::print_as_pseudo_json(std::ostream& out) const {
   out << "<folly::dynamic object of type " << type_ << ">";
+}
+
+TEST(Dynamic, Default) {
+  dynamic obj;
+  EXPECT_TRUE(obj.isNull());
 }
 
 TEST(Dynamic, ObjectBasics) {
@@ -246,7 +252,7 @@ TEST(Dynamic, Operator) {
     LOG(ERROR) << "operator < returned "
                << static_cast<int>(foo)
                << " instead of throwing";
-  } catch (std::exception const& e) {
+  } catch (std::exception const&) {
     caught = true;
   }
   EXPECT_TRUE(caught);
@@ -407,6 +413,9 @@ TEST(Dynamic, GetString) {
   EXPECT_EQ(s + " hello", d.getString());
 
   EXPECT_EQ(s, std::move(m).getString());
+  EXPECT_EQ(s, m.getString());
+  auto moved = std::move(m).getString();
+  EXPECT_EQ(s, moved);
   EXPECT_NE(dynamic(s), m);
 }
 
@@ -431,10 +440,10 @@ TEST(Dynamic, GetSmallThings) {
   EXPECT_EQ(6.0, ddouble.getDouble());
   EXPECT_EQ(5.0, std::move(mdouble).getDouble());
 
-  EXPECT_EQ(true, cbool.getBool());
+  EXPECT_TRUE(cbool.getBool());
   dbool.getBool() = false;
   EXPECT_FALSE(dbool.getBool());
-  EXPECT_EQ(true, std::move(mbool).getBool());
+  EXPECT_TRUE(std::move(mbool).getBool());
 }
 
 TEST(Dynamic, At) {
@@ -450,7 +459,10 @@ TEST(Dynamic, At) {
   EXPECT_EQ(dynamic(make_long_string() + " hello"), dd.at("key1"));
   EXPECT_EQ(dynamic(make_long_string() + " hello"), dd.at("key1"));
 
-  EXPECT_EQ(ds, std::move(md).at("key1"));
+  EXPECT_EQ(ds, std::move(md).at("key1")); // move available, but not performed
+  EXPECT_EQ(ds, md.at("key1"));
+  dynamic moved = std::move(md).at("key1"); // move performed
+  EXPECT_EQ(ds, moved);
   EXPECT_NE(ds, md.at("key1"));
 }
 
@@ -467,7 +479,10 @@ TEST(Dynamic, Brackets) {
   EXPECT_EQ(dynamic(make_long_string() + " hello"), dd["key1"]);
   EXPECT_EQ(dynamic(make_long_string() + " hello"), dd["key1"]);
 
-  EXPECT_EQ(ds, std::move(md)["key1"]);
+  EXPECT_EQ(ds, std::move(md)["key1"]); // move available, but not performed
+  EXPECT_EQ(ds, md["key1"]);
+  dynamic moved = std::move(md)["key1"]; // move performed
+  EXPECT_EQ(ds, moved);
   EXPECT_NE(ds, md["key1"]);
 }
 
@@ -475,4 +490,334 @@ TEST(Dynamic, PrintNull) {
   std::stringstream ss;
   ss << folly::dynamic(nullptr);
   EXPECT_EQ("null", ss.str());
+}
+
+TEST(Dynamic, WriteThroughArrayIterators) {
+  dynamic const cint(0);
+  dynamic d = dynamic::array(cint, cint, cint);
+  size_t size = d.size();
+
+  for (auto& val : d) {
+    EXPECT_EQ(val, cint);
+  }
+  EXPECT_EQ(d.size(), size);
+
+  dynamic ds(make_long_string());
+  for (auto& val : d) {
+    val = ds; // assign through reference
+  }
+
+  ds = "short string";
+  dynamic ds2(make_long_string());
+
+  for (auto& val : d) {
+    EXPECT_EQ(val, ds2);
+  }
+  EXPECT_EQ(d.size(), size);
+}
+
+TEST(Dynamic, MoveOutOfArrayIterators) {
+  dynamic ds(make_long_string());
+  dynamic d = dynamic::array(ds, ds, ds);
+  size_t size = d.size();
+
+  for (auto& val : d) {
+    EXPECT_EQ(val, ds);
+  }
+  EXPECT_EQ(d.size(), size);
+
+  for (auto& val : d) {
+    dynamic waste = std::move(val); // force moving out
+    EXPECT_EQ(waste, ds);
+  }
+
+  for (auto& val : d) {
+    EXPECT_NE(val, ds);
+  }
+  EXPECT_EQ(d.size(), size);
+}
+
+TEST(Dynamic, WriteThroughObjectIterators) {
+  dynamic const cint(0);
+  dynamic d = dynamic::object("key1", cint)("key2", cint);
+  size_t size = d.size();
+
+  for (auto& val : d.items()) {
+    EXPECT_EQ(val.second, cint);
+  }
+  EXPECT_EQ(d.size(), size);
+
+  dynamic ds(make_long_string());
+  for (auto& val : d.items()) {
+    val.second = ds; // assign through reference
+  }
+
+  ds = "short string";
+  dynamic ds2(make_long_string());
+  for (auto& val : d.items()) {
+    EXPECT_EQ(val.second, ds2);
+  }
+  EXPECT_EQ(d.size(), size);
+}
+
+TEST(Dynamic, MoveOutOfObjectIterators) {
+  dynamic ds(make_long_string());
+  dynamic d = dynamic::object("key1", ds)("key2", ds);
+  size_t size = d.size();
+
+  for (auto& val : d.items()) {
+    EXPECT_EQ(val.second, ds);
+  }
+  EXPECT_EQ(d.size(), size);
+
+  for (auto& val : d.items()) {
+    dynamic waste = std::move(val.second); // force moving out
+    EXPECT_EQ(waste, ds);
+  }
+
+  for (auto& val : d.items()) {
+    EXPECT_NE(val.second, ds);
+  }
+  EXPECT_EQ(d.size(), size);
+}
+
+TEST(Dynamic, ArrayIteratorInterop) {
+  dynamic d = dynamic::array(0, 1, 2);
+  dynamic const& cdref = d;
+
+  auto it = d.begin();
+  auto cit = cdref.begin();
+
+  EXPECT_EQ(it, cit);
+  EXPECT_EQ(cit, d.begin());
+  EXPECT_EQ(it, cdref.begin());
+
+  // Erase using non-const iterator
+  it = d.erase(it);
+  cit = cdref.begin();
+  EXPECT_EQ(*it, 1);
+  EXPECT_EQ(cit, it);
+
+  // Assign from non-const to const, preserve equality
+  decltype(cit) cit2 = it;
+  EXPECT_EQ(cit, cit2);
+}
+
+TEST(Dynamic, ObjectIteratorInterop) {
+  dynamic ds = make_long_string();
+  dynamic d = dynamic::object(0, ds)(1, ds)(2, ds);
+  dynamic const& cdref = d;
+
+  auto it = d.find(0);
+  auto cit = cdref.find(0);
+  EXPECT_NE(it, cdref.items().end());
+  EXPECT_NE(cit, cdref.items().end());
+  EXPECT_EQ(it, cit);
+
+  ++cit;
+  // Erase using non-const iterator
+  auto it2 = d.erase(it);
+  EXPECT_EQ(cit, it2);
+
+  // Assign from non-const to const, preserve equality
+  decltype(cit) cit2 = it2;
+  EXPECT_EQ(cit, cit2);
+}
+
+TEST(Dynamic, MergePatchWithNonObject) {
+  dynamic target = dynamic::object("a", "b")("c", "d");
+
+  dynamic patch = dynamic::array(1, 2, 3);
+  target.merge_patch(patch);
+
+  EXPECT_TRUE(target.isArray());
+}
+
+TEST(Dynamic, MergePatchReplaceInFlatObject) {
+  dynamic target = dynamic::object("a", "b")("c", "d");
+  dynamic patch = dynamic::object("a", "z");
+
+  target.merge_patch(patch);
+
+  EXPECT_EQ("z", target["a"].getString());
+  EXPECT_EQ("d", target["c"].getString());
+}
+
+TEST(Dynamic, MergePatchAddInFlatObject) {
+  dynamic target = dynamic::object("a", "b")("c", "d");
+  dynamic patch = dynamic::object("e", "f");
+  target.merge_patch(patch);
+
+  EXPECT_EQ("b", target["a"].getString());
+  EXPECT_EQ("d", target["c"].getString());
+  EXPECT_EQ("f", target["e"].getString());
+}
+
+TEST(Dynamic, MergePatchReplaceInNestedObject) {
+  dynamic target = dynamic::object("a", dynamic::object("d", 10))("b", "c");
+  dynamic patch = dynamic::object("a", dynamic::object("d", 100));
+  target.merge_patch(patch);
+
+  EXPECT_EQ(100, target["a"]["d"].getInt());
+  EXPECT_EQ("c", target["b"].getString());
+}
+
+TEST(Dynamic, MergePatchAddInNestedObject) {
+  dynamic target = dynamic::object("a", dynamic::object("d", 10))("b", "c");
+  dynamic patch = dynamic::object("a", dynamic::object("e", "f"));
+
+  target.merge_patch(patch);
+
+  EXPECT_EQ(10, target["a"]["d"].getInt());
+  EXPECT_EQ("f", target["a"]["e"].getString());
+  EXPECT_EQ("c", target["b"].getString());
+}
+
+TEST(Dynamic, MergeNestePatch) {
+  dynamic target = dynamic::object("a", dynamic::object("d", 10))("b", "c");
+  dynamic patch = dynamic::object(
+      "a", dynamic::object("d", dynamic::array(1, 2, 3)))("b", 100);
+  target.merge_patch(patch);
+
+  EXPECT_EQ(100, target["b"].getInt());
+  {
+    auto ary = patch["a"]["d"];
+    ASSERT_TRUE(ary.isArray());
+    EXPECT_EQ(1, ary[0].getInt());
+    EXPECT_EQ(2, ary[1].getInt());
+    EXPECT_EQ(3, ary[2].getInt());
+  }
+}
+
+TEST(Dynamic, MergePatchRemoveInFlatObject) {
+  dynamic target = dynamic::object("a", "b")("c", "d");
+  dynamic patch = dynamic::object("c", nullptr);
+  target.merge_patch(patch);
+
+  EXPECT_EQ("b", target["a"].getString());
+  EXPECT_EQ(0, target.count("c"));
+}
+
+TEST(Dynamic, MergePatchRemoveInNestedObject) {
+  dynamic target =
+      dynamic::object("a", dynamic::object("d", 10)("e", "f"))("b", "c");
+  dynamic patch = dynamic::object("a", dynamic::object("e", nullptr));
+  target.merge_patch(patch);
+
+  EXPECT_EQ(10, target["a"]["d"].getInt());
+  EXPECT_EQ(0, target["a"].count("e"));
+  EXPECT_EQ("c", target["b"].getString());
+}
+
+TEST(Dynamic, MergePatchRemoveNonExistent) {
+  dynamic target = dynamic::object("a", "b")("c", "d");
+  dynamic patch = dynamic::object("e", nullptr);
+  target.merge_patch(patch);
+
+  EXPECT_EQ("b", target["a"].getString());
+  EXPECT_EQ("d", target["c"].getString());
+  EXPECT_EQ(2, target.size());
+}
+
+TEST(Dynamic, MergeDiffFlatObjects) {
+  dynamic source = dynamic::object("a", 0)("b", 1)("c", 2);
+  dynamic target = dynamic::object("a", 1)("b", 2);
+  auto patch = dynamic::merge_diff(source, target);
+
+  EXPECT_EQ(3, patch.size());
+  EXPECT_EQ(1, patch["a"].getInt());
+  EXPECT_EQ(2, patch["b"].getInt());
+  EXPECT_TRUE(patch["c"].isNull());
+
+  source.merge_patch(patch);
+  EXPECT_EQ(source, target);
+}
+
+TEST(Dynamic, MergeDiffNestedObjects) {
+  dynamic source = dynamic::object("a", dynamic::object("b", 1)("c", 2))(
+      "d", dynamic::array(1, 2, 3));
+  dynamic target = dynamic::object("a", dynamic::object("b", 2))(
+      "d", dynamic::array(2, 3, 4));
+
+  auto patch = dynamic::merge_diff(source, target);
+
+  EXPECT_EQ(2, patch.size());
+  EXPECT_EQ(2, patch["a"].size());
+
+  EXPECT_EQ(2, patch["a"]["b"].getInt());
+  EXPECT_TRUE(patch["a"]["c"].isNull());
+
+  EXPECT_TRUE(patch["d"].isArray());
+  EXPECT_EQ(3, patch["d"].size());
+  EXPECT_EQ(2, patch["d"][0].getInt());
+  EXPECT_EQ(3, patch["d"][1].getInt());
+  EXPECT_EQ(4, patch["d"][2].getInt());
+
+  source.merge_patch(patch);
+  EXPECT_EQ(source, target);
+}
+
+using folly::json_pointer;
+
+TEST(Dynamic, JSONPointer) {
+  dynamic target = dynamic::object;
+  dynamic ary = dynamic::array("bar", "baz", dynamic::array("bletch", "xyzzy"));
+  target["foo"] = ary;
+  target[""] = 0;
+  target["a/b"] = 1;
+  target["c%d"] = 2;
+  target["e^f"] = 3;
+  target["g|h"] = 4;
+  target["i\\j"] = 5;
+  target["k\"l"] = 6;
+  target[" "] = 7;
+  target["m~n"] = 8;
+  target["xyz"] = dynamic::object;
+  target["xyz"][""] = dynamic::object("nested", "abc");
+  target["xyz"]["def"] = dynamic::array(1, 2, 3);
+  target["long_array"] = dynamic::array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+  target["-"] = dynamic::object("x", "y");
+
+  EXPECT_EQ(target, *target.get_ptr(json_pointer::parse("")));
+  EXPECT_EQ(ary, *(target.get_ptr(json_pointer::parse("/foo"))));
+  EXPECT_EQ("bar", target.get_ptr(json_pointer::parse("/foo/0"))->getString());
+  EXPECT_EQ(0, target.get_ptr(json_pointer::parse("/"))->getInt());
+  EXPECT_EQ(1, target.get_ptr(json_pointer::parse("/a~1b"))->getInt());
+  EXPECT_EQ(2, target.get_ptr(json_pointer::parse("/c%d"))->getInt());
+  EXPECT_EQ(3, target.get_ptr(json_pointer::parse("/e^f"))->getInt());
+  EXPECT_EQ(4, target.get_ptr(json_pointer::parse("/g|h"))->getInt());
+  EXPECT_EQ(5, target.get_ptr(json_pointer::parse("/i\\j"))->getInt());
+  EXPECT_EQ(6, target.get_ptr(json_pointer::parse("/k\"l"))->getInt());
+  EXPECT_EQ(7, target.get_ptr(json_pointer::parse("/ "))->getInt());
+  EXPECT_EQ(8, target.get_ptr(json_pointer::parse("/m~0n"))->getInt());
+  // empty key in path
+  EXPECT_EQ(
+      "abc", target.get_ptr(json_pointer::parse("/xyz//nested"))->getString());
+  EXPECT_EQ(3, target.get_ptr(json_pointer::parse("/xyz/def/2"))->getInt());
+  EXPECT_EQ("baz", ary.get_ptr(json_pointer::parse("/1"))->getString());
+  EXPECT_EQ("bletch", ary.get_ptr(json_pointer::parse("/2/0"))->getString());
+  // double-digit index
+  EXPECT_EQ(
+      12, target.get_ptr(json_pointer::parse("/long_array/11"))->getInt());
+  // allow '-' to index in objects
+  EXPECT_EQ("y", target.get_ptr(json_pointer::parse("/-/x"))->getString());
+
+  // invalid JSON pointers formatting when accessing array
+  EXPECT_THROW(
+      target.get_ptr(json_pointer::parse("/foo/01")), std::invalid_argument);
+
+  // non-existent keys/indexes
+  EXPECT_EQ(nullptr, ary.get_ptr(json_pointer::parse("/3")));
+  EXPECT_EQ(nullptr, target.get_ptr(json_pointer::parse("/unknown_key")));
+  // intermediate key not found
+  EXPECT_EQ(nullptr, target.get_ptr(json_pointer::parse("/foox/test")));
+  // Intermediate key is '-'
+  EXPECT_EQ(nullptr, target.get_ptr(json_pointer::parse("/foo/-/key")));
+
+  // invalid path in object (key in array)
+  EXPECT_THROW(
+      target.get_ptr(json_pointer::parse("/foo/1/bar")), folly::TypeError);
+
+  // Allow "-" index in the array
+  EXPECT_EQ(nullptr, target.get_ptr(json_pointer::parse("/foo/-")));
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2014-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 
 #include <thrift/lib/cpp2/async/HeaderServerChannel.h>
 #include <thrift/lib/cpp/async/TAsyncSocket.h>
-#include <thrift/lib/cpp/TApplicationException.h>
 #include <thrift/lib/cpp/transport/TTransportException.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <folly/io/Cursor.h>
@@ -29,7 +28,7 @@ using std::unique_ptr;
 using std::pair;
 using folly::IOBuf;
 using folly::IOBufQueue;
-using folly::make_unique;
+using std::make_unique;
 using namespace apache::thrift::transport;
 using namespace apache::thrift;
 using folly::EventBase;
@@ -60,8 +59,7 @@ HeaderServerChannel::HeaderServerChannel(
     , sampleRate_(0)
     , timeoutSASL_(5000)
     , saslServerCallback_(*this)
-    , cpp2Channel_(cpp2Channel)
-    , timer_(new folly::HHWheelTimer(getEventBase())) {}
+    , cpp2Channel_(cpp2Channel) {}
 
 void HeaderServerChannel::destroy() {
   DestructorGuard dg(this);
@@ -140,6 +138,8 @@ HeaderServerChannel::ServerFramingHandler::removeFrame(IOBufQueue* q) {
     protInBuf = PROTOCOL_TYPES::T_COMPACT_PROTOCOL;
   } else if (byte == 0x80) {
     protInBuf = PROTOCOL_TYPES::T_BINARY_PROTOCOL;
+  } else if (byte == 0x83) {
+    protInBuf = PROTOCOL_TYPES::T_FROZEN2_PROTOCOL;
   } else if (ct != THRIFT_HTTP_SERVER_TYPE) {
     LOG(ERROR) << "Received corrupted request from client: "
                << getTransportDebugString(channel_.getTransport()) << ". "
@@ -171,6 +171,10 @@ HeaderServerChannel::ServerFramingHandler::removeFrame(IOBufQueue* q) {
   // ServerSaslNegotiationHandler.
 
   header->setMinCompressBytes(channel_.getMinCompressBytes());
+  // Only set default transforms if client has not set any
+  if (header->getWriteTransforms().empty()) {
+    header->setTransforms(channel_.getDefaultWriteTransforms());
+  }
   return make_tuple(std::move(buf), 0, std::move(header));
 }
 
@@ -346,6 +350,9 @@ void HeaderServerChannel::HeaderRequest::sendReply(
     if (!buf) {
       // oneway calls are OK do this, but is a bug for twoway.
       DCHECK(isOneway());
+      if (cb) {
+        cb->messageSent();
+      }
       return;
     }
     try {
@@ -355,6 +362,33 @@ void HeaderServerChannel::HeaderRequest::sendReply(
       LOG(ERROR) << "Failed to send message: " << e.what();
     }
   }
+}
+
+void HeaderServerChannel::HeaderRequest::serializeAndSendError(
+    apache::thrift::transport::THeader& header,
+    TApplicationException& tae,
+    const std::string& methodName,
+    int32_t protoSeqId,
+    MessageChannel::SendCallback* cb) {
+  if (isOneway()) {
+    sendReply(std::unique_ptr<folly::IOBuf>(), cb);
+    return;
+  }
+
+  std::unique_ptr<folly::IOBuf> exbuf;
+  uint16_t proto = header.getProtocolId();
+  try {
+    exbuf = serializeError(proto, tae, methodName, protoSeqId);
+  } catch (const TProtocolException& pe) {
+    LOG(ERROR) << "serializeError failed. type=" << pe.getType()
+               << " what()=" << pe.what();
+    channel_->closeNow();
+    return;
+  }
+  exbuf = THeader::transform(std::move(exbuf),
+                             header.getWriteTransforms(),
+                             header.getMinCompressBytes());
+  sendReply(std::move(exbuf), cb);
 }
 
 /**
@@ -401,21 +435,7 @@ void HeaderServerChannel::HeaderRequest::sendErrorWrapped(
 
   header_->setHeader("ex", exCode);
   ew.with_exception([&](TApplicationException& tae) {
-      std::unique_ptr<folly::IOBuf> exbuf;
-      uint16_t proto = header_->getProtocolId();
-      auto transforms = header_->getWriteTransforms();
-      try {
-        exbuf = serializeError(proto, tae, methodName, protoSeqId);
-      } catch (const TProtocolException& pe) {
-        LOG(ERROR) << "serializeError failed. type=" << pe.getType()
-            << " what()=" << pe.what();
-        channel_->closeNow();
-        return;
-      }
-      exbuf = THeader::transform(std::move(exbuf),
-                                 transforms,
-                                 header_->getMinCompressBytes());
-      sendReply(std::move(exbuf), cb);
+      serializeAndSendError(*header_, tae, methodName, protoSeqId, cb);
     });
 }
 
@@ -423,38 +443,27 @@ void HeaderServerChannel::HeaderRequest::sendTimeoutResponse(
     const std::string& methodName,
     int32_t protoSeqId,
     MessageChannel::SendCallback* cb,
-    const std::map<std::string, std::string>& headers) {
-  // Sending tiemout response always happens on eb thread, while normal
+    const std::map<std::string, std::string>& headers,
+    TimeoutResponseType responseType) {
+  // Sending timeout response always happens on eb thread, while normal
   // request handling might still be work-in-progress on tm thread and
   // touches the per-request THeader at any time. This builds a new THeader
   // and only reads certain fields from header_. To avoid race condition,
   // DO NOT read any header from the per-request THeader.
   timeoutHeader_ = header_->clone();
-  timeoutHeader_->setHeader("ex", kTaskExpiredErrorCode);
+  auto errorCode = responseType == TimeoutResponseType::QUEUE ?
+    kServerQueueTimeoutErrorCode : kTaskExpiredErrorCode;
+  timeoutHeader_->setHeader("ex", errorCode);
+  auto errorMsg = responseType == TimeoutResponseType::QUEUE ?
+    "Queue Timeout" : "Task expired";
   for (const auto& it : headers) {
     timeoutHeader_->setHeader(it.first, it.second);
   }
 
-  std::unique_ptr<folly::IOBuf> exbuf;
   TApplicationException tae(
       TApplicationException::TApplicationExceptionType::TIMEOUT,
-      "Task expired");
-  try {
-    exbuf = serializeError(timeoutHeader_->getProtocolId(),
-                           tae,
-                           methodName,
-                           protoSeqId);
-  } catch (const TProtocolException& pe) {
-    LOG(ERROR) << "serializeError failed. type=" << pe.getType()
-      << " what()=" << pe.what();
-    channel_->closeNow();
-    return;
-  }
-
-  exbuf = THeader::transform(std::move(exbuf),
-                             timeoutHeader_->getWriteTransforms(),
-                             timeoutHeader_->getMinCompressBytes());
-  sendReply(std::move(exbuf), cb);
+      errorMsg);
+  serializeAndSendError(*timeoutHeader_, tae, methodName, protoSeqId, cb);
 }
 
 void HeaderServerChannel::sendCatchupRequests(
@@ -578,7 +587,7 @@ void HeaderServerChannel::messageReceiveErrorWrapped(
 void HeaderServerChannel::SaslServerCallback::saslSendClient(
     std::unique_ptr<folly::IOBuf>&& response) {
   if (channel_.timeoutSASL_ > 0) {
-    channel_.timer_->scheduleTimeout(this,
+    channel_.getEventBase()->timer().scheduleTimeout(this,
         std::chrono::milliseconds(channel_.timeoutSASL_));
   }
   try {
@@ -619,7 +628,7 @@ void HeaderServerChannel::SaslServerCallback::saslError(
     observer->saslFallBack();
   }
 
-  LOG(INFO) << "SASL server falling back to insecure: " << ex.what();
+  VLOG(1) << "SASL server falling back to insecure: " << ex.what();
 
   // Send the client a null message so the client will try again.
   // TODO mhorowitz: generate a real message here.

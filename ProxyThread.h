@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
+ *  Copyright (c) 2017, Facebook, Inc.
  *  All rights reserved.
  *
  *  This source code is licensed under the BSD-style license found in the
@@ -15,16 +15,17 @@
 
 #include <folly/io/async/EventBase.h>
 
-#include "mcrouter/proxy.h"
+#include "mcrouter/Proxy.h"
 
-namespace facebook { namespace memcache { namespace mcrouter {
+namespace facebook {
+namespace memcache {
+namespace mcrouter {
 
-class McrouterInstance;
-struct proxy_t;
+class CarbonRouterInstanceBase;
 
 class ProxyThread {
  public:
-  explicit ProxyThread(McrouterInstance& router);
+  ProxyThread(const CarbonRouterInstanceBase& router, size_t id);
 
   /**
    * Stops the underlying proxy thread and joins it.
@@ -34,31 +35,13 @@ class ProxyThread {
    */
   void stopAndJoin() noexcept;
 
-  /**
-   * Spawns a new proxy thread for execution. Should be called at most once.
-   *
-   * @throws std::system_error  If failed to spawn thread
-   */
-  void spawn();
-
-  proxy_t& proxy() { return *proxy_; }
-  folly::EventBase& eventBase() { return evb_; }
+  folly::EventBase& getEventBase() const;
 
  private:
-  folly::EventBase evb_;
-  proxy_t::Pointer proxy_;
-  std::thread thread_;
-
-  enum class State {
-    RUNNING,
-    STOPPING,
-    STOPPED
-  };
-  std::atomic<State> state_{State::STOPPED};
-
-  void stopAwriterThreads();
-  void proxyThreadRun();
+  folly::EventBaseThread thread_;
 };
+}
+}
+} // facebook::memcache::mcrouter
 
-
-}}}  // facebook::memcache::mcrouter
+#include "ProxyThread-inl.h"

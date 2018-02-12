@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2014-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,11 @@
 #ifndef THRIFT_ASYNC_THEADERCLIENTCHANNEL_H_
 #define THRIFT_ASYNC_THEADERCLIENTCHANNEL_H_ 1
 
-#include <folly/io/async/HHWheelTimer.h>
+#include <deque>
+#include <limits>
+#include <memory>
+#include <unordered_map>
+
 #include <thrift/lib/cpp2/async/ChannelCallbacks.h>
 #include <thrift/lib/cpp2/async/MessageChannel.h>
 #include <thrift/lib/cpp2/async/RequestChannel.h>
@@ -31,10 +35,6 @@
 #include <thrift/lib/cpp/transport/THeader.h>
 #include <folly/io/async/EventBase.h>
 #include <thrift/lib/cpp/util/THttpParser.h>
-#include <memory>
-
-#include <unordered_map>
-#include <deque>
 
 namespace apache { namespace thrift {
 
@@ -141,7 +141,7 @@ class HeaderClientChannel : public ClientChannel,
     return keepRegisteredForClose_;
   }
 
-  folly::EventBase* getEventBase() override {
+  folly::EventBase* getEventBase() const override {
       return cpp2Channel_->getEventBase();
   }
 
@@ -149,6 +149,12 @@ class HeaderClientChannel : public ClientChannel,
    * Set the channel up in HTTP CLIENT mode. host can be an empty string
    */
   void useAsHttpClient(const std::string& host, const std::string& uri);
+
+  bool good() override;
+
+  SaturationStatus getSaturationStatus() override {
+    return SaturationStatus(0, std::numeric_limits<uint32_t>::max());
+  }
 
   // event base methods
   void attachEventBase(folly::EventBase*) override;
@@ -315,8 +321,6 @@ private:
   SaslClientCallback saslClientCallback_;
 
   std::shared_ptr<Cpp2Channel> cpp2Channel_;
-
-  folly::HHWheelTimer::UniquePtr timer_;
 
   uint16_t protocolId_;
   uint16_t userProtocolId_;

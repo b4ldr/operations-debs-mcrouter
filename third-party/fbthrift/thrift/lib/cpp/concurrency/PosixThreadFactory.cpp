@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2014-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include <thrift/lib/cpp/concurrency/PosixThreadFactory.h>
 #include <thrift/lib/cpp/concurrency/Exception.h>
 #include <thrift/lib/cpp/concurrency/Mutex.h>
@@ -23,13 +22,14 @@
 #  include <google/base/Profiler.h>
 #endif
 
-#include <assert.h>
-#include <pthread.h>
-#include <sys/resource.h>
-
+#include <cassert>
 #include <iostream>
 
 #include <folly/String.h>
+#include <folly/portability/PThread.h>
+#include <folly/portability/SysResource.h>
+#include <folly/system/ThreadId.h>
+#include <folly/system/ThreadName.h>
 #include <glog/logging.h>
 
 namespace apache { namespace thrift { namespace concurrency {
@@ -46,13 +46,13 @@ bool PthreadThread::updateName() {
   if (!pthread_ || name_.empty()) {
     return false;
   }
-  return setPosixThreadName(pthread_, name_);
+  return folly::setThreadName(pthread_, name_);
 }
 
 PthreadThread::PthreadThread(int policy, int priority, int stackSize,
                              bool detached,
                              shared_ptr<Runnable> runnable) :
-  pthread_(0),
+  pthread_(),
   state_(uninitialized),
   policy_(policy),
   priority_(priority),
@@ -138,7 +138,11 @@ void PthreadThread::join() {
 }
 
 Thread::id_t PthreadThread::getId() {
-  return (Thread::id_t)pthread_;
+#ifdef _WIN32
+  return (Thread::id_t)pthread_getw32threadid_np(pthread_);
+#else
+   return (Thread::id_t)pthread_;
+#endif
 }
 
 shared_ptr<Runnable> PthreadThread::runnable() const {
@@ -185,10 +189,12 @@ void* PthreadThread::threadMain(void* arg) {
               << err << ": " << folly::errnoStr(err);
     }
   } else if (thread->policy_ == SCHED_OTHER) {
+#ifndef _MSC_VER
     if (setpriority(PRIO_PROCESS, 0, thread->priority_) != 0) {
       VLOG(1) << "setpriority failed (are you root?) with error " << errno
               << ": " << folly::errnoStr(errno);
     }
+#endif
   }
 
   thread->runnable()->run();
@@ -305,7 +311,7 @@ void PosixThreadFactory::Impl::setDetachState(DetachState value) {
 }
 
 Thread::id_t PosixThreadFactory::Impl::getCurrentThreadId() const {
-  return (Thread::id_t)pthread_self();
+  return (Thread::id_t)folly::getCurrentThreadID();
 }
 
 

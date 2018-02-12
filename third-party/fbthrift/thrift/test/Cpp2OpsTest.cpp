@@ -1,4 +1,6 @@
 /*
+ * Copyright 2017-present Facebook, Inc.
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements. See the NOTICE file
  * distributed with this work for additional information
@@ -16,7 +18,6 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
@@ -67,8 +68,8 @@ TYPED_TEST_P(Cpp2OpsTest, Simple) {
     reader.setInput(buf.get());
 
     TypeParam obj;
-    EXPECT_EQ(size,
-              apache::thrift::Cpp2Ops<TypeParam>::read(&reader, &obj));
+    apache::thrift::Cpp2Ops<TypeParam>::read(&reader, &obj);
+    EXPECT_EQ(size, reader.getCurrentPosition().getCurrentPosition());
 
     EXPECT_EQ(cpp2::Cpp2OpsCompat_constants::num_test_value(), obj.num);
     EXPECT_EQ(cpp2::Cpp2OpsCompat_constants::str_test_value(), obj.str);
@@ -84,6 +85,6 @@ INSTANTIATE_TYPED_TEST_CASE_P(Cpp2OpsTest, Cpp2OpsTest, Types);
 
 int main(int argc, char *argv[]) {
   testing::InitGoogleTest(&argc, argv);
-  google::ParseCommandLineFlags(&argc, &argv, true);
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
   return RUN_ALL_TESTS();
 }

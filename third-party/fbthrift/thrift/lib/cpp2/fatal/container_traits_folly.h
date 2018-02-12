@@ -18,64 +18,27 @@
 
 #include <thrift/lib/cpp2/fatal/reflection.h>
 
+#include <folly/FBString.h>
+#include <folly/small_vector.h>
 #include <folly/sorted_vector_types.h>
 
 namespace apache { namespace thrift {
 
+template <typename C, typename T, typename A, typename S>
+struct thrift_string_traits<folly::basic_fbstring<C, T, A, S>>
+    : thrift_string_traits_std<folly::basic_fbstring<C, T, A, S>> {};
+
+template<class T, std::size_t M, class A, class B, class C>
+struct thrift_list_traits<folly::small_vector<T, M, A, B, C>>
+    : thrift_list_traits_std<folly::small_vector<T, M, A, B, C>> {};
+
 template <typename T, typename C, typename A, typename G>
-struct thrift_set_traits<folly::sorted_vector_set<T, C, A, G>> {
-  using type = folly::sorted_vector_set<T, C, A, G>;
-
-  using key_type = typename type::key_type;
-  using value_type = typename type::value_type;
-  using size_type = typename type::size_type;
-  using iterator = typename type::iterator;
-  using const_iterator = typename type::const_iterator;
-
-  static iterator begin(type &what) { return what.begin(); }
-  static iterator end(type &what) { return what.end(); }
-
-  static const_iterator cbegin(type const &what) { return what.begin(); }
-  static const_iterator begin(type const &what) { return what.begin(); }
-  static const_iterator cend(type const &what) { return what.end(); }
-  static const_iterator end(type const &what) { return what.end(); }
-
-  static void clear(type &what) { what.clear(); }
-  static bool empty(type const &what) { return what.empty(); }
-  static size_type size(type const &what) { return what.size(); }
-};
+struct thrift_set_traits<folly::sorted_vector_set<T, C, A, G>>
+    : thrift_set_traits_std<folly::sorted_vector_set<T, C, A, G>> {};
 
 template <typename K, typename V, typename C, typename A, typename G>
-struct thrift_map_traits<folly::sorted_vector_map<K, V, C, A, G>> {
-  using type = folly::sorted_vector_map<K, V, C, A, G>;
-
-  using key_type = typename type::key_type;
-  using mapped_type = typename type::mapped_type;
-  using size_type = typename type::size_type;
-  using iterator = typename type::iterator;
-  using const_iterator = typename type::const_iterator;
-
-  using key_const_reference = key_type const &;
-  using mapped_const_reference = mapped_type const &;
-  using mapped_reference = mapped_type &;
-
-  static iterator begin(type &what) { return what.begin(); }
-  static iterator end(type &what) { return what.end(); }
-
-  static const_iterator cbegin(type const &what) { return what.begin(); }
-  static const_iterator begin(type const &what) { return what.begin(); }
-  static const_iterator cend(type const &what) { return what.end(); }
-  static const_iterator end(type const &what) { return what.end(); }
-
-  static key_const_reference key(const_iterator i) { return i->first; }
-  static key_const_reference key(iterator i) { return i->first; }
-  static mapped_const_reference mapped(const_iterator i) { return i->second; }
-  static mapped_reference mapped(iterator i) { return i->second; }
-
-  static void clear(type &what) { what.clear(); }
-  static bool empty(type const &what) { return what.empty(); }
-  static size_type size(type const &what) { return what.size(); }
-};
+struct thrift_map_traits<folly::sorted_vector_map<K, V, C, A, G>>
+    : thrift_map_traits_std<folly::sorted_vector_map<K, V, C, A, G>> {};
 
 }} // apache::thrift
 

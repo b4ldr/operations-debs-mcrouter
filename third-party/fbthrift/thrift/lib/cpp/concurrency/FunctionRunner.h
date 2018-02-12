@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2008-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@
 #ifndef _THRIFT_CONCURRENCY_FUNCTION_RUNNER_H
 #define _THRIFT_CONCURRENCY_FUNCTION_RUNNER_H 1
 
-#include <unistd.h>
 #include <folly/Function.h>
+#include <folly/portability/Unistd.h>
 #include <thrift/lib/cpp/concurrency/Monitor.h>
 #include <thrift/lib/cpp/concurrency/Thread.h>
 
@@ -45,7 +45,7 @@ namespace apache { namespace thrift { namespace concurrency {
  *
  */
 
-class FunctionRunner : public Runnable {
+class FunctionRunner : public virtual Runnable {
  public:
   // This is the type of callback 'pthread_create()' expects.
   typedef void* (*PthreadFuncPtr)(void *arg);
@@ -116,17 +116,20 @@ class FunctionRunner : public Runnable {
   }
 
   void run() override {
-    apache::thrift::concurrency::Synchronized s(monitor_);
     if (initFunc_) {
-      initFunc_();
+      apache::thrift::concurrency::Synchronized s(monitor_);
+      if (initFunc_) {
+        initFunc_();
+      }
     }
     if (intervalMs_ != -1) {
+      apache::thrift::concurrency::Synchronized s(monitor_);
       while (repFunc_ && repFunc_()) {
         try {
           // this wait could time out (normal interval-"sleep" case),
           // or the monitor_ could have been notify()'ed by stop method.
           monitor_.waitForTimeRelative(intervalMs_);
-        } catch (const TimedOutException& te) { /* restart loop */ }
+        } catch (const TimedOutException&) { /* restart loop */ }
       }
     } else {
       func_();

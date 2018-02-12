@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2015-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@
 
 #include <folly/Subprocess.h>
 #include <folly/experimental/io/FsUtil.h>
+#include <folly/portability/GTest.h>
 #include <glog/logging.h>
-#include <gtest/gtest.h>
 
 namespace folly { namespace test {
 
@@ -32,7 +32,7 @@ std::string getHelperPath() {
   if (!fs::exists(path)) {
     path = path.parent_path().parent_path() / basename / basename;
   }
-  return path.native();
+  return path.string();
 }
 
 std::string callHelper(std::initializer_list<std::string> args,
@@ -47,7 +47,7 @@ std::string callHelper(std::initializer_list<std::string> args,
 
   Subprocess::Options options;
   if (stdoutFd != -1) {
-    options.stdout(stdoutFd);
+    options.stdoutFd(stdoutFd);
   } else {
     options.pipeStdout();
   }
@@ -60,7 +60,7 @@ std::string callHelper(std::initializer_list<std::string> args,
   return p.first;
 }
 
-}  // namespace
+} // namespace
 
 TEST(ProgramOptionsTest, Errors) {
   callHelper({}, 1);
@@ -75,6 +75,7 @@ TEST(ProgramOptionsTest, Help) {
   callHelper({"--help"});
   callHelper({"--help", "foo"});
   callHelper({"--help", "bar"});
+  callHelper({"--help", "--", "bar"});
   callHelper({"help"});
   callHelper({"help", "foo"});
   callHelper({"help", "bar"});
@@ -82,11 +83,28 @@ TEST(ProgramOptionsTest, Help) {
   // wrong command name
   callHelper({"--help", "qux"}, 1);
   callHelper({"help", "qux"}, 1);
+
+  // anything after -- is parsed as arguments
+  callHelper({"--", "help", "bar"}, 1);
 }
 
 TEST(ProgramOptionsTest, DevFull) {
   folly::File full("/dev/full", O_RDWR);
   callHelper({"--help"}, 1, full.fd());
+}
+
+TEST(ProgramOptionsTest, CutArguments) {
+  // anything after -- is parsed as arguments
+  EXPECT_EQ(
+      "running foo\n"
+      "foo global-foo 43\n"
+      "foo local-foo 42\n"
+      "foo arg b\n"
+      "foo arg --local-foo\n"
+      "foo arg 44\n"
+      "foo arg a\n",
+      callHelper(
+          {"foo", "--global-foo", "43", "--", "b", "--local-foo", "44", "a"}));
 }
 
 TEST(ProgramOptionsTest, Success) {
@@ -127,4 +145,5 @@ TEST(ProgramOptionsTest, Aliases) {
                   "a", "b"}));
 }
 
-}}  // namespaces
+} // namespace test
+} // namespace folly

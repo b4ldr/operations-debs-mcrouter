@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #include <gflags/gflags.h>
 
@@ -52,7 +58,7 @@ class RpcPipelineFactory : public PipelineFactory<SerializePipeline> {
 class BonkMultiplexClientDispatcher
     : public ClientDispatcherBase<SerializePipeline, Bonk, Xtruct> {
  public:
-  void read(Context* ctx, Xtruct in) override {
+  void read(Context*, Xtruct in) override {
     auto search = requests_.find(in.i32_thing);
     CHECK(search != requests_.end());
     auto p = std::move(search->second);
@@ -63,7 +69,7 @@ class BonkMultiplexClientDispatcher
   Future<Xtruct> operator()(Bonk arg) override {
     auto& p = requests_[arg.type];
     auto f = p.getFuture();
-    p.setInterruptHandler([arg, this](const folly::exception_wrapper& e) {
+    p.setInterruptHandler([arg, this](const folly::exception_wrapper&) {
       this->requests_.erase(arg.type);
     });
     this->pipeline_->write(arg);
@@ -73,12 +79,12 @@ class BonkMultiplexClientDispatcher
 
   // Print some nice messages for close
 
-  virtual Future<Unit> close() override {
+  Future<Unit> close() override {
     printf("Channel closed\n");
     return ClientDispatcherBase::close();
   }
 
-  virtual Future<Unit> close(Context* ctx) override {
+  Future<Unit> close(Context* ctx) override {
     printf("Channel closed\n");
     return ClientDispatcherBase::close(ctx);
   }
@@ -88,7 +94,7 @@ class BonkMultiplexClientDispatcher
 };
 
 int main(int argc, char** argv) {
-  google::ParseCommandLineFlags(&argc, &argv, true);
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
 
   /**
    * For specific protocols, all the following code would be wrapped
@@ -97,7 +103,7 @@ int main(int argc, char** argv) {
    * TODO: examples of ServiceFactoryFilters, for connection pooling, etc.
    */
   ClientBootstrap<SerializePipeline> client;
-  client.group(std::make_shared<wangle::IOThreadPoolExecutor>(1));
+  client.group(std::make_shared<folly::IOThreadPoolExecutor>(1));
   client.pipelineFactory(std::make_shared<RpcPipelineFactory>());
   auto pipeline = client.connect(SocketAddress(FLAGS_host, FLAGS_port)).get();
   // A serial dispatcher would assert if we tried to send more than one

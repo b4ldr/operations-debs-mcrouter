@@ -1,5 +1,4 @@
-# @lint-avoid-pyflakes2
-# @lint-avoid-python-3-compatibility-imports
+#!/usr/bin/env python3
 
 import asyncio
 import functools
@@ -11,14 +10,18 @@ from contextlib import contextmanager
 from thrift_asyncio.tutorial import Calculator
 from thrift_asyncio.sleep import Sleep
 from thrift.util.asyncio import create_client
+from thrift.protocol.THeaderProtocol import THeaderProtocol
 from thrift.server.TAsyncioServer import (
     ThriftAsyncServerFactory,
     ThriftClientProtocolFactory,
+    ThriftHeaderClientProtocol,
 )
 from thrift.server.test.handler import (
     AsyncCalculatorHandler,
     AsyncSleepHandler,
 )
+from thrift.transport.TTransport import TTransportException
+from thrift.Thrift import TApplicationException
 
 
 def server_loop_runner(loop, sock, handler):
@@ -27,16 +30,15 @@ def server_loop_runner(loop, sock, handler):
     )
 
 
-@asyncio.coroutine
-def test_server_with_client(sock, loop):
+async def test_server_with_client(sock, loop, factory=ThriftClientProtocolFactory):
     port = sock.getsockname()[1]
-    (transport, protocol) = yield from loop.create_connection(
-        ThriftClientProtocolFactory(Calculator.Client, loop=loop),
+    (transport, protocol) = await loop.create_connection(
+        factory(Calculator.Client, loop=loop),
         host='localhost',
         port=port,
     )
     client = protocol.client
-    add_result = yield from asyncio.wait_for(
+    add_result = await asyncio.wait_for(
         client.add(1, 2),
         timeout=None,
         loop=loop,
@@ -46,7 +48,156 @@ def test_server_with_client(sock, loop):
     return add_result
 
 
+async def test_echo_timeout(sock, loop, factory=ThriftClientProtocolFactory):
+    port = sock.getsockname()[1]
+    (transport, protocol) = await loop.create_connection(
+        factory(Sleep.Client, loop=loop, timeouts={'echo': 1}),
+        host='localhost',
+        port=port,
+    )
+    client = protocol.client
+    # Ask the server to delay for 30 seconds.
+    # However, we told the client factory above to use a 1 second timeout
+    # for the echo() function.
+    await asyncio.wait_for(
+        client.echo('test', 30),
+        timeout=None,
+        loop=loop,
+    )
+    transport.close()
+    protocol.close()
+
+
+async def test_overflow(sock, value, loop, factory=ThriftClientProtocolFactory):
+    port = sock.getsockname()[1]
+    (transport, protocol) = await loop.create_connection(
+        factory(Sleep.Client, loop=loop, timeouts={'echo': 1}),
+        host='localhost',
+        port=port,
+    )
+    client = protocol.client
+
+    await asyncio.wait_for(
+        client.overflow(value),
+        timeout=None,
+        loop=loop,
+    )
+    transport.close()
+    protocol.close()
+
+
+class TestTHeaderProtocol(THeaderProtocol):
+
+    def __init__(self, probe, *args, **kwargs):
+        THeaderProtocol.__init__(self, *args, **kwargs)
+        self.probe = probe
+
+    def readMessageBegin(self):
+        self.probe.touch()
+        return THeaderProtocol.readMessageBegin(self)
+
+
+class TestTHeaderProtocolFactory(object):
+
+    def __init__(self, probe, *args, **kwargs):
+        self.probe = probe
+        self.args = args
+        self.kwargs = kwargs
+
+    def getProtocol(self, trans):
+        return TestTHeaderProtocol(
+            self.probe,
+            trans,
+            *self.args,
+            **self.kwargs,
+        )
+
+
+class TestThriftClientProtocol(ThriftHeaderClientProtocol):
+    THEADER_PROTOCOL_FACTORY = None
+
+    def __init__(self, probe, *args, **kwargs):
+        ThriftHeaderClientProtocol.__init__(self, *args, **kwargs)
+
+        def factory(*args, **kwargs):
+            return TestTHeaderProtocolFactory(probe, *args, **kwargs)
+
+        self.THEADER_PROTOCOL_FACTORY = factory
+
+
 class TAsyncioServerTest(unittest.TestCase):
+
+    def test_THEADER_PROTOCOL_FACTORY_readMessageBegin(self):
+        loop = asyncio.get_event_loop()
+        loop.set_debug(True)
+        sock = socket.socket()
+        server_loop_runner(loop, sock, AsyncCalculatorHandler())
+
+        class Probe(object):
+            def __init__(self):
+                self.touched = False
+
+            def touch(self):
+                self.touched = True
+
+        probe = Probe()
+
+        def factory(*args, **kwargs):
+            return functools.partial(
+                TestThriftClientProtocol,
+                probe,
+                *args,
+                **kwargs,
+            )
+
+        add_result = loop.run_until_complete(
+            test_server_with_client(
+                sock,
+                loop,
+                factory=factory,
+            )
+        )
+        self.assertTrue(probe.touched)
+        self.assertEqual(42, add_result)
+
+    def test_read_error(self):
+        '''Test the behavior if readMessageBegin() throws an exception'''
+        loop = asyncio.get_event_loop()
+        loop.set_debug(True)
+        sock = socket.socket()
+        server_loop_runner(loop, sock, AsyncCalculatorHandler())
+
+        # A helper Probe class that will raise an exception when
+        # it is invoked by readMessageBegin()
+        class Probe(object):
+            def touch(self):
+                raise TTransportException(
+                    TTransportException.INVALID_TRANSFORM,
+                    'oh noes')
+
+        probe = Probe()
+
+        def factory(*args, **kwargs):
+            return functools.partial(
+                TestThriftClientProtocol,
+                probe,
+                *args,
+                **kwargs,
+            )
+
+        try:
+            add_result = loop.run_until_complete(
+                test_server_with_client(
+                    sock,
+                    loop,
+                    factory=factory,
+                )
+            )
+            self.fail('expected client method to throw; instead returned %r' %
+                      (add_result,))
+        except TTransportException as ex:
+            self.assertEqual(str(ex), 'oh noes')
+            self.assertEqual(ex.type, TTransportException.INVALID_TRANSFORM)
 
     def _test_using_event_loop(self, loop):
         sock = socket.socket()
@@ -92,10 +243,9 @@ class TAsyncioServerTest(unittest.TestCase):
         server_loop.call_soon_threadsafe(server.close)
         server_thread.join()
 
-    @asyncio.coroutine
-    def _make_out_of_order_calls(self, sock, loop):
+    async def _make_out_of_order_calls(self, sock, loop):
         port = sock.getsockname()[1]
-        client_manager = yield from create_client(
+        client_manager = await create_client(
             Sleep.Client,
             host='localhost',
             port=port,
@@ -108,7 +258,7 @@ class TAsyncioServerTest(unittest.TestCase):
             ]
             results_in_arrival_order = []
             for f in asyncio.as_completed(futures, loop=loop):
-                result = yield from f
+                result = await f
                 results_in_arrival_order.append(result)
             self.assertEquals(['1', '2', '3'], results_in_arrival_order)
 
@@ -134,10 +284,9 @@ class TAsyncioServerTest(unittest.TestCase):
                 self._make_out_of_order_calls(sock, client_loop),
             )
 
-    @asyncio.coroutine
-    def _assert_transport_is_closed_on_error(self, sock, loop):
+    async def _assert_transport_is_closed_on_error(self, sock, loop):
         port = sock.getsockname()[1]
-        client_manager = yield from create_client(
+        client_manager = await create_client(
             Sleep.Client,
             host='localhost',
             port=port,
@@ -146,7 +295,7 @@ class TAsyncioServerTest(unittest.TestCase):
         try:
             with client_manager as client:
                 raise Exception('expected exception from test')
-        except:
+        except Exception:
             self.assertFalse(client._oprot.trans.isOpen())
 
     def test_close_client_on_error(self):
@@ -157,3 +306,36 @@ class TAsyncioServerTest(unittest.TestCase):
             loop.run_until_complete(
                 self._assert_transport_is_closed_on_error(sock, loop),
             )
+
+    def test_overflow_failure(self):
+        loop = asyncio.get_event_loop()
+        loop.set_debug(True)
+        sock = socket.socket()
+        server_loop_runner(loop, sock, AsyncSleepHandler(loop))
+        with self.assertRaises(
+            TTransportException, msg='Connection closed'
+        ):
+            # This will raise an exception on the server. The
+            # OverflowResult.value is byte and 0xffff will result in exception
+            #
+            #    struct.error('byte format requires -128 <= number <= 127',)
+            loop.run_until_complete(test_overflow(sock, 0xffff, loop))
+
+    def test_overflow_success(self):
+        loop = asyncio.get_event_loop()
+        loop.set_debug(True)
+        sock = socket.socket()
+        server_loop_runner(loop, sock, AsyncSleepHandler(loop))
+
+        # This shouldn't raise any exceptions
+        loop.run_until_complete(test_overflow(sock, 0x7f, loop))
+
+    def test_timeout(self):
+        loop = asyncio.get_event_loop()
+        loop.set_debug(True)
+        sock = socket.socket()
+        server_loop_runner(loop, sock, AsyncSleepHandler(loop))
+        with self.assertRaisesRegex(
+            TApplicationException, 'Call to echo timed out'
+        ):
+            loop.run_until_complete(test_echo_timeout(sock, loop))

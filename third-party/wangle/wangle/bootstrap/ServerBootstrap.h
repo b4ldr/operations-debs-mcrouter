@@ -1,17 +1,23 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #pragma once
 
 #include <wangle/bootstrap/ServerBootstrap-inl.h>
-#include <folly/Baton.h>
+#include <folly/synchronization/Baton.h>
 #include <wangle/channel/Pipeline.h>
 #include <iostream>
 #include <thread>
@@ -95,7 +101,7 @@ class ServerBootstrap {
    * @param io_group - io executor to use for IO threads.
    */
   ServerBootstrap* group(
-      std::shared_ptr<wangle::IOThreadPoolExecutor> io_group) {
+      std::shared_ptr<folly::IOThreadPoolExecutor> io_group) {
     return group(nullptr, io_group);
   }
 
@@ -109,11 +115,11 @@ class ServerBootstrap {
    * @param io_group - io executor to use for IO threads.
    */
   ServerBootstrap* group(
-      std::shared_ptr<wangle::IOThreadPoolExecutor> accept_group,
-      std::shared_ptr<wangle::IOThreadPoolExecutor> io_group) {
+      std::shared_ptr<folly::IOThreadPoolExecutor> accept_group,
+      std::shared_ptr<folly::IOThreadPoolExecutor> io_group) {
     if (!accept_group) {
-      accept_group = std::make_shared<wangle::IOThreadPoolExecutor>(
-        1, std::make_shared<wangle::NamedThreadFactory>("Acceptor Thread"));
+      accept_group = std::make_shared<folly::IOThreadPoolExecutor>(
+        1, std::make_shared<folly::NamedThreadFactory>("Acceptor Thread"));
     }
     if (!io_group) {
       auto threads = std::thread::hardware_concurrency();
@@ -121,8 +127,8 @@ class ServerBootstrap {
         // Reasonable mid-point for concurrency when actual value unknown
         threads = 8;
       }
-      io_group = std::make_shared<wangle::IOThreadPoolExecutor>(
-        threads, std::make_shared<wangle::NamedThreadFactory>("IO Thread"));
+      io_group = std::make_shared<folly::IOThreadPoolExecutor>(
+        threads, std::make_shared<folly::NamedThreadFactory>("IO Thread"));
     }
 
     // TODO better config checking
@@ -165,6 +171,8 @@ class ServerBootstrap {
 
     std::shared_ptr<folly::AsyncServerSocket> socket(
       s.release(), AsyncServerSocketFactory::ThreadSafeDestructor());
+    socket->setMaxNumMessagesInQueue(
+        accConfig_.maxNumPendingConnectionsPerWorker);
 
     folly::via(acceptor_group_.get(), [&] {
       socket->attachEventBase(folly::EventBaseManager::get()->getEventBase());
@@ -301,12 +309,15 @@ class ServerBootstrap {
     return *sockets_;
   }
 
-  std::shared_ptr<wangle::IOThreadPoolExecutor> getIOGroup() const {
+  std::shared_ptr<folly::IOThreadPoolExecutor> getIOGroup() const {
     return io_group_;
   }
 
   template <typename F>
   void forEachWorker(F&& f) const {
+    if (!workerFactory_) {
+      return;
+    }
     workerFactory_->forEachWorker(f);
   }
 
@@ -318,8 +329,8 @@ class ServerBootstrap {
   }
 
  private:
-  std::shared_ptr<wangle::IOThreadPoolExecutor> acceptor_group_;
-  std::shared_ptr<wangle::IOThreadPoolExecutor> io_group_;
+  std::shared_ptr<folly::IOThreadPoolExecutor> acceptor_group_;
+  std::shared_ptr<folly::IOThreadPoolExecutor> io_group_;
 
   std::shared_ptr<ServerWorkerPool> workerFactory_;
   std::shared_ptr<std::vector<std::shared_ptr<folly::AsyncSocketBase>>> sockets_{
@@ -337,7 +348,7 @@ class ServerBootstrap {
   bool reusePort_{false};
 
   std::unique_ptr<folly::Baton<>> stopBaton_{
-    folly::make_unique<folly::Baton<>>()};
+    std::make_unique<folly::Baton<>>()};
   bool stopped_{false};
 };
 

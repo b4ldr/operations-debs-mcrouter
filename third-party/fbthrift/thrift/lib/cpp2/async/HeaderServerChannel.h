@@ -19,7 +19,8 @@
 #ifndef THRIFT_ASYNC_THEADERSERVERCHANNEL_H_
 #define THRIFT_ASYNC_THEADERSERVERCHANNEL_H_ 1
 
-#include <folly/io/async/HHWheelTimer.h>
+#include <thrift/lib/cpp/TApplicationException.h>
+#include <thrift/lib/cpp/transport/TTransportException.h>
 #include <thrift/lib/cpp2/async/MessageChannel.h>
 #include <thrift/lib/cpp2/async/ServerChannel.h>
 #include <thrift/lib/cpp2/async/HeaderChannelTrait.h>
@@ -132,6 +133,13 @@ protected:
     void sendReply(std::unique_ptr<folly::IOBuf>&&,
                    MessageChannel::SendCallback* cb = nullptr) override;
 
+    void serializeAndSendError(
+      apache::thrift::transport::THeader& header,
+      TApplicationException& tae,
+      const std::string& methodName,
+      int32_t protoSeqId,
+      MessageChannel::SendCallback* cb);
+
     void sendErrorWrapped(folly::exception_wrapper ex,
                           std::string exCode,
                           MessageChannel::SendCallback* cb = nullptr) override;
@@ -142,10 +150,23 @@ protected:
                           int32_t protoSeqId,
                           MessageChannel::SendCallback* cb = nullptr);
 
+    /* We differentiate between two types of timeouts:
+       1) Task timeouts refer to timeouts that fire while the request is
+       currently being proceesed
+       2) Queue timeouts refer to timeouts that fire before processing
+       of the request has begun
+    */
+    enum TimeoutResponseType {
+      TASK,
+      QUEUE
+    };
+
     void sendTimeoutResponse(const std::string& methodName,
                              int32_t protoSeqId,
                              MessageChannel::SendCallback* cb,
-                             const std::map<std::string, std::string>& headers);
+                             const std::map<std::string, std::string>& headers,
+                             TimeoutResponseType responseType);
+
    private:
     HeaderServerChannel* channel_;
     std::unique_ptr<apache::thrift::transport::THeader> header_;
@@ -183,6 +204,12 @@ protected:
     cpp2Channel_->setQueueSends(queueSends);
   }
 
+  void setDefaultWriteTransforms(std::vector<uint16_t>& writeTrans) {
+    writeTrans_ = writeTrans;
+  }
+
+  std::vector<uint16_t>& getDefaultWriteTransforms() { return writeTrans_; }
+
   void closeNow() {
     cpp2Channel_->closeNow();
   }
@@ -211,8 +238,9 @@ protected:
 
     bool handleSecurityMessage(
         std::unique_ptr<folly::IOBuf>&& buf,
-        std::unique_ptr<apache::thrift::transport::THeader>&& header);
-  private:
+        std::unique_ptr<apache::thrift::transport::THeader>&& header) override;
+
+   private:
     HeaderServerChannel& channel_;
   };
 
@@ -273,6 +301,8 @@ private:
 
   folly::Optional<bool> outOfOrder_;
 
+  std::vector<uint16_t> writeTrans_;
+
   static const int MAX_REQUEST_SIZE = 2000;
   static std::atomic<uint32_t> sample_;
   uint32_t sampleRate_;
@@ -282,8 +312,6 @@ private:
   SaslServerCallback saslServerCallback_;
 
   std::shared_ptr<Cpp2Channel> cpp2Channel_;
-
-  folly::HHWheelTimer::UniquePtr timer_;
 };
 
 }} // apache::thrift

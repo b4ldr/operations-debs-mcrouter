@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2015-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,7 @@
 
 #include <folly/test/SocketAddressTestHelper.h>
 
-#include <sys/socket.h>
-#include <netdb.h>
+#include <folly/portability/Sockets.h>
 #include <glog/logging.h>
 
 namespace folly {
@@ -48,5 +47,4 @@ bool SocketAddressTestHelper::isFamilyOfAddrEnabled(const char* addr) {
   freeaddrinfo(resultsp);
   return !err;
 }
-
-}
+} // namespace folly

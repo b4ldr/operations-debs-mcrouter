@@ -7,14 +7,22 @@ import traceback
 
 from thrift.protocol.THeaderProtocol import THeaderProtocol
 from thrift.server.TServer import TServer, TConnectionContext
+from thrift.Thrift import TPriority
 from thrift.transport.THeaderTransport import THeaderTransport
 from thrift.transport.TTransport import TMemoryBuffer
 
 from thrift.server.CppServerWrapper import CppServerWrapper, CppContextData, \
-        SSLPolicy, SSLVerifyPeerEnum, CallbackWrapper
+    SSLPolicy, SSLVerifyPeerEnum, SSLVersion, CallbackWrapper, CallTimestamps
 
 from concurrent.futures import Future
 from functools import partial
+
+import time
+
+# Default sampling rate for expensive sampling operations, such as histogram
+# counters.
+kDefaultSampleRate = 32
+
 
 class TCppConnectionContext(TConnectionContext):
     def __init__(self, context_data):
@@ -25,6 +33,8 @@ class TCppConnectionContext(TConnectionContext):
 
     def getClientPrincipalUser(self):
         principal = self.getClientPrincipal()
+        if not principal:
+            return None
         user, match, domain = principal.partition('@')
         if match:
             return user
@@ -36,12 +46,23 @@ class TCppConnectionContext(TConnectionContext):
     def getSockName(self):
         return self.context_data.getLocalAddress()
 
+
 class _ProcessorAdapter(object):
     CONTEXT_DATA = CppContextData
     CALLBACK_WRAPPER = CallbackWrapper
 
     def __init__(self, processor):
         self.processor = processor
+        self.observer = None
+        self.sampleRate = kDefaultSampleRate
+        self.sampleCount = 0
+
+    def setObserver(self, observer):
+        self.observer = observer
+
+    def _shouldSample(self):
+        self.sampleCount = (self.sampleCount + 1) % self.sampleRate
+        return self.sampleCount == 0
 
     # TODO mhorowitz: add read headers here, so they can be added to
     # the constructed header buffer.  Also add endpoint addrs to the
@@ -54,6 +75,14 @@ class _ProcessorAdapter(object):
             # order to reconstitute the message with headers, we use
             # the THeaderProtocol object to write into a memory
             # buffer, then pass that buffer to the python processor.
+
+            should_sample = self._shouldSample()
+
+            timestamps = CallTimestamps()
+            timestamps.processBegin = 0
+            timestamps.processEnd = 0
+            if self.observer and should_sample:
+                timestamps.processBegin = int(time.time() * 10**6)
 
             write_buf = TMemoryBuffer()
             trans = THeaderTransport(write_buf)
@@ -74,6 +103,16 @@ class _ProcessorAdapter(object):
                                     prot_buf=prot_buf,
                                     client_type=client_type,
                                     callback=callback)
+
+            if self.observer:
+                if should_sample:
+                    timestamps.processEnd = int(time.time() * 10**6)
+
+                # This only bumps counters if `processBegin != 0` and
+                # `processEnd != 0` and these will only be non-zero if
+                # we are sampling this request.
+                self.observer.callCompleted(timestamps)
+
             # This future is created by and returned from the processor's
             # ThreadPoolExecutor, which keeps a reference to it. So it is
             # fine for this future to end its lifecycle here.
@@ -81,7 +120,7 @@ class _ProcessorAdapter(object):
                 ret.add_done_callback(lambda x, d=done_callback: d())
             else:
                 done_callback()
-        except:
+        except:  # noqa
             # Don't let exceptions escape back into C++
             traceback.print_exc()
 
@@ -100,11 +139,20 @@ class _ProcessorAdapter(object):
                 trans = THeaderTransport(read_buf, client_types=[client_type])
                 trans.readFrame(len(response))
                 callback.call(trans.cstringio_buf.read())
-        except:
+        except:  # noqa
+            # Don't let exceptions escape back into C++
             traceback.print_exc()
 
     def oneway_methods(self):
         return self.processor.onewayMethods()
+
+    def get_priority(self, fname):
+        try:
+            return self.processor.get_priority(fname)
+        except:  # noqa
+            traceback.print_exc()
+            return TPriority.NORMAL
+
 
 class TSSLConfig(object):
     def __init__(self):
@@ -118,6 +166,17 @@ class TSSLConfig(object):
         self.ticket_file_path = ''
         self.alpn_protocols = []
         self.session_context = None
+        self.ssl_version = None
+
+    @property
+    def ssl_version(self):
+        return self._ssl_version
+
+    @ssl_version.setter
+    def ssl_version(self, val):
+        if val is not None and not isinstance(val, SSLVersion):
+            raise ValueError("{} is an invalid version".format(val))
+        self._ssl_version = val
 
     @property
     def ssl_policy(self):
@@ -139,11 +198,13 @@ class TSSLConfig(object):
             raise ValueError("{} is an invalid value".format(val))
         self._verify = val
 
+
 class TSSLCacheOptions(object):
     def __init__(self):
         self.ssl_cache_timeout_seconds = 86400
         self.max_ssl_cache_size = 20480
         self.ssl_cache_flush_size = 200
+
 
 class TCppServer(CppServerWrapper, TServer):
     def __init__(self, processor):
@@ -152,6 +213,14 @@ class TCppServer(CppServerWrapper, TServer):
         self.setAdapter(_ProcessorAdapter(self.processor))
         self._setup_done = False
         self.serverEventHandler = None
+
+    def setAdapter(self, adapter):
+        self.processorAdapter = adapter
+        CppServerWrapper.setAdapter(self, adapter)
+
+    def setObserver(self, observer):
+        self.processorAdapter.setObserver(observer)
+        CppServerWrapper.setObserver(self, observer)
 
     def setServerEventHandler(self, handler):
         TServer.setServerEventHandler(self, handler)
@@ -169,13 +238,11 @@ class TCppServer(CppServerWrapper, TServer):
             raise ValueError("Options might be of type TSSLCacheOptions")
         self.setCppSSLCacheOptions(cache_options)
 
+    def setFastOpenOptions(self, enabled, tfo_max_queue):
+        self.setCppFastOpenOptions(enabled, tfo_max_queue)
+
     def getTicketSeeds(self):
         return self.getCppTicketSeeds()
-
-    def validateSSLConfig(self, config):
-        if not isinstance(config, TSSLConfig):
-            return (False, "Config must be of type TSSLConfig")
-        return self.validateCppSSLConfig(config)
 
     def setup(self):
         if self._setup_done:

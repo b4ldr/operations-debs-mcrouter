@@ -16,6 +16,7 @@
 
 #include <thrift/test/gen-cpp2/reflection_fatal.h>
 
+#include <thrift/lib/cpp2/fatal/container_traits.h>
 #include <thrift/lib/cpp2/fatal/internal/test_helpers.h>
 
 #include <gtest/gtest.h>
@@ -23,50 +24,59 @@
 namespace test_cpp2 {
 namespace cpp_reflection {
 
-FATAL_STR(cpp_s, "cpp");
-FATAL_STR(cpp_ns, "test_cpp1::cpp_reflection");
-FATAL_STR(cpp2_s, "cpp2");
-FATAL_STR(cpp2_ns, "test_cpp2::cpp_reflection");
-FATAL_STR(d_s, "d");
-FATAL_STR(d_2ns, "test_d.cpp_reflection");
-FATAL_STR(java_s, "java");
-FATAL_STR(java_ns, "test_java.cpp_reflection");
-FATAL_STR(java_swift_s, "java.swift");
-FATAL_STR(java_swift_ns, "test_swift.cpp_reflection");
-FATAL_STR(php_s, "php");
-FATAL_STR(php_ns, "test_php_cpp_reflection");
-FATAL_STR(python_s, "python");
-FATAL_STR(python_ns, "test_py.cpp_reflection");
+FATAL_S(cpp_s, "cpp");
+FATAL_S(cpp_ns, "test_cpp1::cpp_reflection");
+FATAL_S(cpp2_s, "cpp2");
+FATAL_S(cpp2_ns, "test_cpp2::cpp_reflection");
+FATAL_S(d_s, "d");
+FATAL_S(d_2ns, "test_d.cpp_reflection");
+FATAL_S(java_s, "java");
+FATAL_S(java_ns, "test_java.cpp_reflection");
+FATAL_S(java_swift_s, "java.swift");
+FATAL_S(java_swift_ns, "test_swift.cpp_reflection");
+FATAL_S(php_s, "php");
+FATAL_S(php_ns, "test_php_cpp_reflection");
+FATAL_S(python_s, "python");
+FATAL_S(python_ns, "test_py.cpp_reflection");
 
-FATAL_STR(enum1s, "enum1");
-FATAL_STR(enum2s, "enum2");
-FATAL_STR(enum3s, "enum3");
+FATAL_S(enum1s, "enum1");
+FATAL_S(enum2s, "enum2");
+FATAL_S(enum3s, "enum3");
 
-FATAL_STR(union1s, "union1");
-FATAL_STR(union2s, "union2");
-FATAL_STR(union3s, "union3");
-FATAL_STR(unionAs, "unionA");
+FATAL_S(union1s, "union1");
+FATAL_S(union2s, "union2");
+FATAL_S(union3s, "union3");
+FATAL_S(unionAs, "unionA");
 
-FATAL_STR(structAs, "structA");
-FATAL_STR(structBs, "structB");
-FATAL_STR(structCs, "structC");
-FATAL_STR(struct1s, "struct1");
-FATAL_STR(struct2s, "struct2");
-FATAL_STR(struct3s, "struct3");
+FATAL_S(structAs, "structA");
+FATAL_S(structBs, "structB");
+FATAL_S(structCs, "structC");
+FATAL_S(struct1s, "struct1");
+FATAL_S(struct2s, "struct2");
+FATAL_S(struct3s, "struct3");
+FATAL_S(struct4s, "struct4");
+FATAL_S(struct5s, "struct5");
+FATAL_S(struct_binarys, "struct_binary");
+FATAL_S(dep_A_structs, "dep_A_struct");
+FATAL_S(annotateds, "annotated");
+FATAL_S(my_structAs, "my_structA");
+FATAL_S(hasRefUnique_name, "hasRefUnique");
+FATAL_S(hasRefShared_name, "hasRefShared");
+FATAL_S(hasRefSharedConst_name, "hasRefSharedConst");
 
-FATAL_STR(constant1s, "constant1");
-FATAL_STR(constant2s, "constant2");
-FATAL_STR(constant3s, "constant3");
+FATAL_S(constant1s, "constant1");
+FATAL_S(constant2s, "constant2");
+FATAL_S(constant3s, "constant3");
 
-FATAL_STR(service1s, "service1");
-FATAL_STR(service2s, "service2");
-FATAL_STR(service3s, "service3");
+FATAL_S(service1s, "service1");
+FATAL_S(service2s, "service2");
+FATAL_S(service3s, "service3");
 
-FATAL_STR(enum_with_special_namess, "enum_with_special_names");
-FATAL_STR(union_with_special_namess, "union_with_special_names");
-FATAL_STR(struct_with_special_namess, "struct_with_special_names");
-FATAL_STR(service_with_special_namess, "service_with_special_names");
-FATAL_STR(constant_with_special_names, "constant_with_special_name");
+FATAL_S(enum_with_special_namess, "enum_with_special_names");
+FATAL_S(union_with_special_namess, "union_with_special_names");
+FATAL_S(struct_with_special_namess, "struct_with_special_names");
+FATAL_S(service_with_special_namess, "service_with_special_names");
+FATAL_S(constant_with_special_names, "constant_with_special_name");
 
 TEST(fatal, tags) {
   EXPECT_SAME<cpp_s, reflection_tags::languages::cpp>();
@@ -98,10 +108,13 @@ TEST(fatal, tags) {
   EXPECT_SAME<struct1s, reflection_tags::structs::struct1>();
   EXPECT_SAME<struct2s, reflection_tags::structs::struct2>();
   EXPECT_SAME<struct3s, reflection_tags::structs::struct3>();
+  EXPECT_SAME<struct_binarys, reflection_tags::structs::struct_binary>();
+  EXPECT_SAME<annotateds, reflection_tags::structs::annotated>();
   EXPECT_SAME<
     struct_with_special_namess,
     reflection_tags::structs::struct_with_special_names
   >();
+  EXPECT_SAME<my_structAs, reflection_tags::structs::my_structA>();
 
   EXPECT_SAME<constant1s, reflection_tags::constants::constant1>();
   EXPECT_SAME<constant2s, reflection_tags::constants::constant2>();
@@ -130,54 +143,63 @@ TEST(fatal, metadata) {
   EXPECT_SAME<void, apache::thrift::try_reflect_module<int, void>>();
 
   EXPECT_SAME<
-    fatal::build_type_map<
-      cpp_s, cpp_ns,
-      cpp2_s, cpp2_ns,
-      d_s, d_2ns,
-      java_s, java_ns,
-      java_swift_s, java_swift_ns,
-      php_s, php_ns,
-      python_s, python_ns
+    fatal::list<
+      fatal::pair<cpp_s, cpp_ns>,
+      fatal::pair<cpp2_s, cpp2_ns>,
+      fatal::pair<d_s, d_2ns>,
+      fatal::pair<java_s, java_ns>,
+      fatal::pair<java_swift_s, java_swift_ns>,
+      fatal::pair<php_s, php_ns>,
+      fatal::pair<python_s, python_ns>
     >,
     info::namespaces
   >();
 
   EXPECT_SAME<
-    fatal::build_type_map<
-      enum1, enum1s,
-      enum2, enum2s,
-      enum3, enum3s,
-      enum_with_special_names, enum_with_special_namess
+    fatal::list<
+      fatal::pair<enum1, enum1s>,
+      fatal::pair<enum2, enum2s>,
+      fatal::pair<enum3, enum3s>,
+      fatal::pair<enum_with_special_names, enum_with_special_namess>
     >,
     info::enums
   >();
 
   EXPECT_SAME<
-    fatal::build_type_map<
-      union1, union1s,
-      union2, union2s,
-      union3, union3s,
-      unionA, unionAs,
-      union_with_special_names, union_with_special_namess
+    fatal::list<
+      fatal::pair<union1, union1s>,
+      fatal::pair<union2, union2s>,
+      fatal::pair<union3, union3s>,
+      fatal::pair<unionA, unionAs>,
+      fatal::pair<union_with_special_names, union_with_special_namess>
     >,
     info::unions
   >();
 
   EXPECT_SAME<
-    fatal::build_type_map<
-      structA, structAs,
-      structB, structBs,
-      structC, structCs,
-      struct1, struct1s,
-      struct2, struct2s,
-      struct3, struct3s,
-      struct_with_special_names, struct_with_special_namess
+    fatal::list<
+      fatal::pair<structA, structAs>,
+      fatal::pair<structB, structBs>,
+      fatal::pair<structC, structCs>,
+      fatal::pair<struct1, struct1s>,
+      fatal::pair<struct2, struct2s>,
+      fatal::pair<struct3, struct3s>,
+      fatal::pair<struct4, struct4s>,
+      fatal::pair<struct5, struct5s>,
+      fatal::pair<struct_binary, struct_binarys>,
+      fatal::pair<dep_A_struct, dep_A_structs>,
+      fatal::pair<annotated, annotateds>,
+      fatal::pair<struct_with_special_names, struct_with_special_namess>,
+      fatal::pair<hasRefUnique, hasRefUnique_name>,
+      fatal::pair<hasRefShared, hasRefShared_name>,
+      fatal::pair<hasRefSharedConst, hasRefSharedConst_name>,
+      fatal::pair<my_structA, my_structAs>
     >,
     info::structs
   >();
 
   EXPECT_SAME<
-    fatal::type_list<
+    fatal::list<
       service1s,
       service2s,
       service3s,
@@ -190,11 +212,7 @@ TEST(fatal, metadata) {
 } // namespace cpp_reflection {
 } // namespace test_cpp2 {
 
-#include <thrift/test/gen-cpp2/reflection_fatal_constant.h>
-#include <thrift/test/gen-cpp2/reflection_fatal_enum.h>
-#include <thrift/test/gen-cpp2/reflection_fatal_service.h>
-#include <thrift/test/gen-cpp2/reflection_fatal_struct.h>
-#include <thrift/test/gen-cpp2/reflection_fatal_union.h>
+#include <thrift/test/gen-cpp2/reflection_fatal_all.h>
 
 namespace test_cpp2 {
 namespace cpp_reflection {
@@ -223,10 +241,13 @@ TEST(fatal, reflect_module_tag) {
   EXPECT_SAME<tag, apache::thrift::reflect_module_tag<struct1>>();
   EXPECT_SAME<tag, apache::thrift::reflect_module_tag<struct2>>();
   EXPECT_SAME<tag, apache::thrift::reflect_module_tag<struct3>>();
+  EXPECT_SAME<tag, apache::thrift::reflect_module_tag<struct_binary>>();
+  EXPECT_SAME<tag, apache::thrift::reflect_module_tag<annotated>>();
   EXPECT_SAME<
     tag,
     apache::thrift::reflect_module_tag<struct_with_special_names>
   >();
+  EXPECT_SAME<tag, apache::thrift::reflect_module_tag<my_structA>>();
 }
 
 TEST(fatal, try_reflect_module_tag) {
@@ -255,8 +276,14 @@ TEST(fatal, try_reflect_module_tag) {
   EXPECT_SAME<tag, apache::thrift::try_reflect_module_tag<struct3, void>>();
   EXPECT_SAME<
     tag,
+    apache::thrift::try_reflect_module_tag<struct_binary, void>
+  >();
+  EXPECT_SAME<tag, apache::thrift::try_reflect_module_tag<annotated, void>>();
+  EXPECT_SAME<
+    tag,
     apache::thrift::try_reflect_module_tag<struct_with_special_names, void>
   >();
+  EXPECT_SAME<tag, apache::thrift::try_reflect_module_tag<my_structA, void>>();
 
   EXPECT_SAME<void, apache::thrift::try_reflect_module_tag<int, void>>();
   EXPECT_SAME<void, apache::thrift::try_reflect_module_tag<void, void>>();
@@ -264,6 +291,604 @@ TEST(fatal, try_reflect_module_tag) {
     void,
     apache::thrift::try_reflect_module_tag<std::string, void>
   >();
+}
+
+TEST(reflection, is_reflectable_module) {
+  EXPECT_SAME<
+    std::true_type,
+    apache::thrift::is_reflectable_module<reflection_tags::module>
+  >();
+
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_module<enum1>>();
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_module<enum2>>();
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_module<enum3>>();
+
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_module<union1>>();
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_module<union2>>();
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_module<union3>>();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_module<struct1>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_module<struct2>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_module<struct3>
+  >();
+
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_module<void>>();
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_module<int>>();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_module<std::string>
+  >();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_module<std::vector<int>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_module<std::vector<std::string>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_module<std::vector<struct1>>
+  >();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_module<std::set<int>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_module<std::set<std::string>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_module<std::set<struct1>>
+  >();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_module<std::unordered_set<int>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_module<std::unordered_set<std::string>>
+  >();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_module<std::map<int, std::string>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_module<std::map<std::string, struct1>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_module<std::map<struct1, struct2>>
+  >();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_module<std::unordered_map<int, std::string>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_module<
+      std::unordered_map<std::string, struct1>
+    >
+  >();
+}
+
+TEST(reflection, is_reflectable_struct) {
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_struct<reflection_tags::module>
+  >();
+
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_struct<enum1>>();
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_struct<enum2>>();
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_struct<enum3>>();
+
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_struct<union1>>();
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_struct<union2>>();
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_struct<union3>>();
+
+  EXPECT_SAME<std::true_type, apache::thrift::is_reflectable_struct<struct1>>();
+  EXPECT_SAME<std::true_type, apache::thrift::is_reflectable_struct<struct2>>();
+  EXPECT_SAME<std::true_type, apache::thrift::is_reflectable_struct<struct3>>();
+
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_struct<void>>();
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_struct<int>>();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_struct<std::string>
+  >();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_struct<std::vector<int>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_struct<std::vector<std::string>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_struct<std::vector<struct1>>
+  >();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_struct<std::set<int>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_struct<std::set<std::string>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_struct<std::set<struct1>>
+  >();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_struct<std::unordered_set<int>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_struct<std::unordered_set<std::string>>
+  >();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_struct<std::map<int, std::string>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_struct<std::map<std::string, struct1>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_struct<std::map<struct1, struct2>>
+  >();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_struct<std::unordered_map<int, std::string>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_struct<
+      std::unordered_map<std::string, struct1>
+    >
+  >();
+}
+
+TEST(reflection, is_reflectable_enum) {
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_enum<reflection_tags::module>
+  >();
+
+  EXPECT_SAME<std::true_type, apache::thrift::is_reflectable_enum<enum1>>();
+  EXPECT_SAME<std::true_type, apache::thrift::is_reflectable_enum<enum2>>();
+  EXPECT_SAME<std::true_type, apache::thrift::is_reflectable_enum<enum3>>();
+
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_enum<union1>>();
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_enum<union2>>();
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_enum<union3>>();
+
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_enum<struct1>>();
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_enum<struct2>>();
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_enum<struct3>>();
+
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_enum<void>>();
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_enum<int>>();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_enum<std::string>
+  >();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_enum<std::vector<int>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_enum<std::vector<std::string>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_enum<std::vector<struct1>>
+  >();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_enum<std::set<int>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_enum<std::set<std::string>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_enum<std::set<struct1>>
+  >();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_enum<std::unordered_set<int>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_enum<std::unordered_set<std::string>>
+  >();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_enum<std::map<int, std::string>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_enum<std::map<std::string, struct1>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_enum<std::map<struct1, struct2>>
+  >();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_enum<std::unordered_map<int, std::string>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_enum<
+      std::unordered_map<std::string, struct1>
+    >
+  >();
+}
+
+TEST(reflection, is_reflectable_union) {
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_union<reflection_tags::module>
+  >();
+
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_union<enum1>>();
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_union<enum2>>();
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_union<enum3>>();
+
+  EXPECT_SAME<std::true_type, apache::thrift::is_reflectable_union<union1>>();
+  EXPECT_SAME<std::true_type, apache::thrift::is_reflectable_union<union2>>();
+  EXPECT_SAME<std::true_type, apache::thrift::is_reflectable_union<union3>>();
+
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_union<struct1>>();
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_union<struct2>>();
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_union<struct3>>();
+
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_union<void>>();
+  EXPECT_SAME<std::false_type, apache::thrift::is_reflectable_union<int>>();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_union<std::string>
+  >();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_union<std::vector<int>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_union<std::vector<std::string>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_union<std::vector<struct1>>
+  >();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_union<std::set<int>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_union<std::set<std::string>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_union<std::set<struct1>>
+  >();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_union<std::unordered_set<int>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_union<std::unordered_set<std::string>>
+  >();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_union<std::map<int, std::string>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_union<std::map<std::string, struct1>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_union<std::map<struct1, struct2>>
+  >();
+
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_union<std::unordered_map<int, std::string>>
+  >();
+  EXPECT_SAME<
+    std::false_type,
+    apache::thrift::is_reflectable_union<
+      std::unordered_map<std::string, struct1>
+    >
+  >();
+}
+
+TEST(reflection, reflect_type_class) {
+  EXPECT_SAME<
+    apache::thrift::type_class::unknown,
+    apache::thrift::reflect_type_class<reflection_tags::module>
+  >();
+
+  EXPECT_SAME<
+    apache::thrift::type_class::nothing,
+    apache::thrift::reflect_type_class<void>
+  >();
+
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<signed char>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<signed short>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<signed int>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<signed long>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<signed long long>
+  >();
+
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<bool>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<unsigned char>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<unsigned short>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<unsigned int>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<unsigned long>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<unsigned long long>
+  >();
+
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<std::int8_t>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<std::int16_t>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<std::int32_t>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<std::int64_t>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<std::intmax_t>
+  >();
+
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<std::uint8_t>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<std::uint16_t>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<std::uint32_t>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<std::uint64_t>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<std::uintmax_t>
+  >();
+
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<std::size_t>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<std::intptr_t>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::integral,
+    apache::thrift::reflect_type_class<std::uintptr_t>
+  >();
+
+  EXPECT_SAME<
+    apache::thrift::type_class::floating_point,
+    apache::thrift::reflect_type_class<float>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::floating_point,
+    apache::thrift::reflect_type_class<double>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::floating_point,
+    apache::thrift::reflect_type_class<long double>
+  >();
+
+  EXPECT_SAME<
+    apache::thrift::type_class::string,
+    apache::thrift::reflect_type_class<std::string>
+  >();
+
+  EXPECT_SAME<
+    apache::thrift::type_class::enumeration,
+    apache::thrift::reflect_type_class<enum1>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::enumeration,
+    apache::thrift::reflect_type_class<enum2>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::enumeration,
+    apache::thrift::reflect_type_class<enum3>
+  >();
+
+  EXPECT_SAME<
+    apache::thrift::type_class::variant,
+    apache::thrift::reflect_type_class<union1>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::variant,
+    apache::thrift::reflect_type_class<union2>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::variant,
+    apache::thrift::reflect_type_class<union3>
+  >();
+
+  EXPECT_SAME<
+    apache::thrift::type_class::structure,
+    apache::thrift::reflect_type_class<struct1>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::structure,
+    apache::thrift::reflect_type_class<struct2>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::structure,
+    apache::thrift::reflect_type_class<struct3>
+  >();
+
+  EXPECT_SAME<
+    apache::thrift::type_class::list<apache::thrift::type_class::integral>,
+    apache::thrift::reflect_type_class<std::vector<int>>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::list<apache::thrift::type_class::string>,
+    apache::thrift::reflect_type_class<std::vector<std::string>>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::list<apache::thrift::type_class::structure>,
+    apache::thrift::reflect_type_class<std::vector<struct1>>
+  >();
+
+  EXPECT_SAME<
+    apache::thrift::type_class::set<apache::thrift::type_class::integral>,
+    apache::thrift::reflect_type_class<std::set<int>>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::set<apache::thrift::type_class::string>,
+    apache::thrift::reflect_type_class<std::set<std::string>>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::set<apache::thrift::type_class::structure>,
+    apache::thrift::reflect_type_class<std::set<struct1>>
+  >();
+
+  EXPECT_SAME<
+    apache::thrift::type_class::set<apache::thrift::type_class::integral>,
+    apache::thrift::reflect_type_class<std::unordered_set<int>>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::set<apache::thrift::type_class::string>,
+    apache::thrift::reflect_type_class<std::unordered_set<std::string>>
+  >();
+
+  EXPECT_SAME<
+    apache::thrift::type_class::map<
+      apache::thrift::type_class::integral,
+      apache::thrift::type_class::string
+    >,
+    apache::thrift::reflect_type_class<std::map<int, std::string>>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::map<
+      apache::thrift::type_class::string,
+      apache::thrift::type_class::structure
+    >,
+    apache::thrift::reflect_type_class<std::map<std::string, struct1>>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::map<
+      apache::thrift::type_class::structure,
+      apache::thrift::type_class::structure
+    >,
+    apache::thrift::reflect_type_class<std::map<struct1, struct2>>
+  >();
+
+  EXPECT_SAME<
+    apache::thrift::type_class::map<
+      apache::thrift::type_class::integral,
+      apache::thrift::type_class::string
+    >,
+    apache::thrift::reflect_type_class<std::unordered_map<int, std::string>>
+  >();
+  EXPECT_SAME<
+    apache::thrift::type_class::map<
+      apache::thrift::type_class::string,
+      apache::thrift::type_class::structure
+    >,
+    apache::thrift::reflect_type_class<std::unordered_map<std::string, struct1>>
+  >();
+}
+
+TEST(reflection, reflected_module_name) {
+  using module = test_cpp2::cpp_reflection::reflection_tags::module;
+  using module_meta = apache::thrift::reflect_module<module>;
+  const auto module_name = fatal::to_instance<std::string, module_meta::name>();
+  EXPECT_EQ("reflection", module_name);
 }
 
 } // namespace cpp_reflection {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2014-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,9 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include <folly/File.h>
-#include <folly/MemoryMapping.h>
+#include <folly/system/MemoryMapping.h>
 
 #include <thrift/lib/cpp/protocol/TDebugProtocol.h>
 #include <thrift/lib/cpp/test/gen-cpp/FrozenTypes_types.h>
@@ -72,7 +71,7 @@ TEST(FrozenUtilTest, Shrink ) {
   File f = File::temporary();
 
   size_t count = 1 << 16;
-  for (int i = 0; i < count; ++i) {
+  for (size_t i = 0; i < count; ++i) {
     people.emplace_back();
     people.back().id = i + count;
   }
@@ -95,7 +94,7 @@ TEST(FrozenUtilTest, Sparse ) {
   std::vector<Person> people;
 
   size_t count = 1 << 20;
-  for (int i = 0; i < count; ++i) {
+  for (size_t i = 0; i < count; ++i) {
     people.emplace_back();
     people.back().id = i + count;
   }

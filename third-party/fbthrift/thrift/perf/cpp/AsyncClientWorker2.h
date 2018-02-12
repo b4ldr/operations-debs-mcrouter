@@ -1,4 +1,6 @@
 /*
+ * Copyright 2012-present Facebook, Inc.
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements. See the NOTICE file
  * distributed with this work for additional information
@@ -16,17 +18,17 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+
 #ifndef THRIFT_TEST_PERF_ASYNCCLIENTWORKER2_H_
 #define THRIFT_TEST_PERF_ASYNCCLIENTWORKER2_H_ 1
 
-#include <thrift/perf/cpp/ClientLoadConfig.h>
-#include <thrift/perf/if/gen-cpp2/LoadTest.h>
-#include <thrift/lib/cpp/test/loadgen/Worker.h>
 #include <folly/io/async/EventBase.h>
+#include <folly/io/async/SSLContext.h>
 #include <thrift/lib/cpp/protocol/TBinaryProtocol.h>
 #include <thrift/lib/cpp/protocol/THeaderProtocol.h>
-
-#include "servicerouter/client/cpp2/ClientFactory.h"
+#include <thrift/lib/cpp/test/loadgen/Worker.h>
+#include <thrift/perf/cpp/ClientLoadConfig.h>
+#include <thrift/perf/if/gen-cpp2/LoadTest.h>
 
 using apache::thrift::test::ClientLoadConfig;
 using apache::thrift::loadgen::Worker;
@@ -63,8 +65,9 @@ class AsyncClientWorker2 : public Worker<
   std::shared_ptr<Client> createConnection() override;
   // this is now a no-op, AsyncClientWorker::run works differently
   // from Worker::run
-  void performOperation(const std::shared_ptr<Client>& client,
-                        uint32_t opType) override{};
+  void performOperation(
+      const std::shared_ptr<Client>& /* client */,
+      uint32_t /* opType */) override{}
   void run() override;
 
  private:

@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
+ *  Copyright (c) 2016-present, Facebook, Inc.
  *  All rights reserved.
  *
  *  This source code is licensed under the BSD-style license found in the
@@ -9,30 +9,17 @@
  */
 #pragma once
 
-#include <memory>
+#include "mcrouter/lib/network/gen/MemcacheRouteHandleIf.h"
+#include "mcrouter/lib/network/gen/MemcacheRouterInfo.h"
 
-#include "mcrouter/lib/fbi/cpp/TypeList.h"
-#include "mcrouter/lib/McOperation.h"
-#include "mcrouter/lib/McRequest.h"
-#include "mcrouter/lib/McRequestList.h"
-#include "mcrouter/lib/network/gen-cpp2/mc_caret_protocol_types.h"
-#include "mcrouter/lib/network/ThriftMessageList.h"
-#include "mcrouter/lib/network/TypedThriftMessage.h"
-#include "mcrouter/lib/RouteHandleIf.h"
+namespace facebook {
+namespace memcache {
 
-namespace facebook { namespace memcache {
+using TestRouteHandleIf = MemcacheRouteHandleIf;
+using TestRouterInfo = MemcacheRouterInfo;
 
-using TestRequestList = ConcatenateListsT<RequestList, ThriftRequestList>;
+template <class Route>
+using TestRouteHandle = MemcacheRouteHandle<Route>;
 
-class TestRouteHandleIf : public RouteHandleIf<TestRouteHandleIf,
-                                               TestRequestList> {
-};
-
-typedef std::shared_ptr<TestRouteHandleIf> TestRouteHandlePtr;
-
-template <typename Route>
-using TestRouteHandle = RouteHandle<Route,
-                                    TestRouteHandleIf,
-                                    TestRequestList>;
-
-}}  // facebook::memcache
+} // memcache
+} // facebook

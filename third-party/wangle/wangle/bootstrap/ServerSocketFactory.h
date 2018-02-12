@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #pragma once
@@ -21,7 +27,7 @@ class ServerSocketFactory {
  public:
   virtual std::shared_ptr<folly::AsyncSocketBase> newSocket(
       folly::SocketAddress address, int backlog,
-      bool reuse, ServerSocketConfig& config) = 0;
+      bool reuse, const ServerSocketConfig& config) = 0;
 
   virtual void removeAcceptCB(
       std::shared_ptr<folly::AsyncSocketBase> sock,
@@ -40,13 +46,18 @@ class AsyncServerSocketFactory : public ServerSocketFactory {
  public:
   std::shared_ptr<folly::AsyncSocketBase> newSocket(
       folly::SocketAddress address, int /*backlog*/, bool reuse,
-      ServerSocketConfig& config) override {
+      const ServerSocketConfig& config) override {
 
     auto* evb = folly::EventBaseManager::get()->getEventBase();
     std::shared_ptr<folly::AsyncServerSocket> socket(
         new folly::AsyncServerSocket(evb),
         ThreadSafeDestructor());
+    socket->setMaxNumMessagesInQueue(
+        config.maxNumPendingConnectionsPerWorker);
     socket->setReusePortEnabled(reuse);
+    if (config.enableTCPFastOpen) {
+      socket->setTFOEnabled(true, config.fastOpenQueueSize);
+    }
     socket->bind(address);
 
     socket->listen(config.acceptBacklog);
@@ -88,7 +99,7 @@ class AsyncUDPServerSocketFactory : public ServerSocketFactory {
  public:
   std::shared_ptr<folly::AsyncSocketBase> newSocket(
       folly::SocketAddress address, int /*backlog*/, bool reuse,
-      ServerSocketConfig& /*config*/) override {
+      const ServerSocketConfig& /*config*/) override {
 
     folly::EventBase* evb = folly::EventBaseManager::get()->getEventBase();
     std::shared_ptr<folly::AsyncUDPServerSocket> socket(

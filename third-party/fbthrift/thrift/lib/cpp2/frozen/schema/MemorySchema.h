@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2014-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,12 @@
  */
 #pragma once
 
-#include <vector>
-#include <cstdint>
-#include <thrift/lib/cpp/DistinctTable.h>
+#include <folly/hash/Hash.h>
 #include <glog/logging.h>
-#include <folly/Hash.h>
+#include <thrift/lib/cpp/DistinctTable.h>
 #include <thrift/lib/thrift/gen-cpp/frozen_types.h>
+#include <cstdint>
+#include <vector>
 
 #define THRIFT_DECLARE_HASH(T)           \
   namespace std {                        \
@@ -159,7 +159,7 @@ class MemorySchema {
   }
 
   inline void setRootLayoutId(int16_t rootId) {
-    DCHECK(rootId < layouts.size());
+    DCHECK(rootId < static_cast<int16_t>(layouts.size()));
     rootLayout = rootId;
   }
 

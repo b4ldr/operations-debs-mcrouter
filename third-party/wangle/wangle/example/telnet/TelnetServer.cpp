@@ -1,14 +1,22 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include <gflags/gflags.h>
+
+#include <folly/init/Init.h>
 
 #include <wangle/bootstrap/ServerBootstrap.h>
 #include <wangle/channel/AsyncSocketHandler.h>
@@ -24,7 +32,7 @@ typedef Pipeline<IOBufQueue&, std::string> TelnetPipeline;
 
 class TelnetHandler : public HandlerAdapter<std::string> {
  public:
-  virtual void read(Context* ctx, std::string msg) override {
+  void read(Context* ctx, std::string msg) override {
     if (msg.empty()) {
       write(ctx, "Please type something.\r\n");
     } else if (msg == "bye") {
@@ -36,7 +44,7 @@ class TelnetHandler : public HandlerAdapter<std::string> {
     }
   }
 
-  virtual void transportActive(Context* ctx) override {
+  void transportActive(Context* ctx) override {
     auto sock = ctx->getTransport();
     SocketAddress localAddress;
     sock->getLocalAddress(&localAddress);
@@ -47,7 +55,8 @@ class TelnetHandler : public HandlerAdapter<std::string> {
 
 class TelnetPipelineFactory : public PipelineFactory<TelnetPipeline> {
  public:
-  TelnetPipeline::Ptr newPipeline(std::shared_ptr<AsyncTransportWrapper> sock) {
+  TelnetPipeline::Ptr newPipeline(
+      std::shared_ptr<AsyncTransportWrapper> sock) override {
     auto pipeline = TelnetPipeline::create();
     pipeline->addBack(AsyncSocketHandler(sock));
     pipeline->addBack(LineBasedFrameDecoder(8192));
@@ -60,7 +69,7 @@ class TelnetPipelineFactory : public PipelineFactory<TelnetPipeline> {
 };
 
 int main(int argc, char** argv) {
-  google::ParseCommandLineFlags(&argc, &argv, true);
+  folly::init(&argc, &argv, true);
 
   ServerBootstrap<TelnetPipeline> server;
   server.childPipeline(std::make_shared<TelnetPipelineFactory>());

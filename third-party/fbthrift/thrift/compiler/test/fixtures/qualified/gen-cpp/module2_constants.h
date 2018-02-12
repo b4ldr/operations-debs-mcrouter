@@ -14,14 +14,10 @@ namespace MODULE2 {
 
 struct module2_constants {
   static Struct const& c2();
+  static Struct const& c3();
+  static Struct const& c4();
 };
 
-class __attribute__((__deprecated__("module2Constants suffers from the 'static initialization order fiasco' (https://isocpp.org/wiki/faq/ctors#static-init-order) and may CRASH your program. Instead, use module2_constants::CONSTANT_NAME()"))) module2Constants {
-public:
-  module2Constants();
-
-  Struct c2;
-};
 
 } // namespace
 

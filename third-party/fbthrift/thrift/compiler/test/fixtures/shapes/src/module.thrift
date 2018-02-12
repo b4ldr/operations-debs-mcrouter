@@ -1,3 +1,10 @@
+namespace java.swift test.fixtures.shapes
+namespace hack test.fixtures
+
+enum Enum {
+  ENUM = 1;
+}
+
 struct A {
   1: string a;
 }
@@ -19,6 +26,7 @@ struct B {
   14: list<map<string, A>> list_of_map_of_string_to_A;
   15: list<B> list_of_self;
   16: map<string, B> map_of_string_to_self;
+  17: Enum just_an_enum;
 
   51: optional A optional_just_an_A;
   52: optional set<i32>  optional_set_of_i32;
@@ -29,5 +37,20 @@ struct B {
   57: optional map<string, list<i32>>  optional_map_of_string_to_list_of_i32;
   58: optional map<string, list<A>>  optional_map_of_string_to_list_of_A;
   59: optional map<string, set<i32>>  optional_map_of_string_to_set_of_i32;
+  60: optional Enum optional_enum;
 
+  70: required Enum required_enum_with_default = ENUM;
+
+  80: string string_with_default_value = "de_fault_in_our_stars";
+  81: i32 i32_with_default_value = 1729;
+  82: double double_with_default_value = 3.1415926;
+  83: Enum enum_with_default_value = ENUM;
+  84: A A_with_default_value = {"a": "bc"};
+  85: set<i32> set_of_i32_with_default_value = [3 7 31 127];
+  86: map<i32, string> map_of_i32_to_string_with_default_value
+        = {1: "fish", 2: "fish"};
+  87: list<string> list_of_string_with_default_value
+        = ["red fish" "blue fish"];
+  88: map<string, list<i32>> map_of_string_to_list_of_i32_with_default_value
+        = {"Jenny": [8 6 7 5 3 0 9]};
 }

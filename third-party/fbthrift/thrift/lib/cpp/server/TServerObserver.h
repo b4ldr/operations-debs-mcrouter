@@ -59,6 +59,8 @@ class TServerObserver {
 
   virtual void connRejected() {}
 
+  virtual void activeConnections(int32_t /*numConnections*/) {}
+
   virtual void saslError() {}
 
   virtual void saslFallBack() {}
@@ -85,11 +87,15 @@ class TServerObserver {
 
   virtual void queueTimeout() {}
 
+  virtual void shadowQueueTimeout() {}
+
   virtual void sentReply() {}
 
   virtual void activeRequests(int32_t /*numRequests*/) {}
 
   virtual void callCompleted(const CallTimestamps& /*runtimes*/) {}
+
+  virtual void protocolError() {}
 
   // The observer has to specify a sample rate for callCompleted notifications
   inline uint32_t getSampleRate() const {

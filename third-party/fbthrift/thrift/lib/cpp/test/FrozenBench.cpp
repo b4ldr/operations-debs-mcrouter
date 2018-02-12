@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2014-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,14 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #define BOOST_TEST_MODULE FrozenTest
 
-#include <folly/Conv.h>
-#include <folly/Hash.h>
 #include <folly/Benchmark.h>
-#include <thrift/lib/cpp/util/ThriftSerializer.h>
+#include <folly/Conv.h>
+#include <folly/hash/Hash.h>
 #include <thrift/lib/cpp/test/gen-cpp/FrozenTypes_types.h>
+#include <thrift/lib/cpp/util/ThriftSerializer.h>
 
 using namespace FrozenTypes;
 using std::string;
@@ -43,7 +42,8 @@ Team testValue() {
     p.nums.insert(-i);
     folly::toAppend("Person ", i, &p.name);
     team.peopleById[p.id] = p;
-    team.peopleByName[p.name] = std::move(p);
+    auto& peopleByNameEntry = team.peopleByName[p.name];
+    peopleByNameEntry = std::move(p);
   }
   team.projects.insert("alpha");
   team.projects.insert("beta");
@@ -268,7 +268,7 @@ FreezeBigHashMap                                 227.49%    98.63ms    10.14
 ============================================================================
  */
 int main(int argc, char** argv) {
-  google::ParseCommandLineFlags(&argc, &argv, true);
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
   folly::runBenchmarks();
 
   return 0;

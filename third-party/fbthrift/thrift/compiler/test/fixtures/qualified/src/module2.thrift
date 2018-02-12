@@ -2,6 +2,7 @@ namespace cpp MODULE2
 namespace cpp2 module2
 namespace java module2
 namespace py module2
+namespace java.swift test.fixtures.module2
 
 include "module0.thrift"
 include "module1.thrift"
@@ -20,3 +21,6 @@ const Struct c2 = {
   "first": module0.c0,
   "second": module1.c1,
 };
+
+const Struct c3 = c2;
+const Struct c4 = c3;

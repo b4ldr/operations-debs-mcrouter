@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2011-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,56 +22,29 @@
 #include <type_traits>
 #include <utility>
 
+#include <folly/Portability.h>
 #include <folly/Preprocessor.h>
-#include <folly/detail/UncaughtExceptionCounter.h>
+#include <folly/UncaughtExceptions.h>
 
 namespace folly {
 
-/**
- * ScopeGuard is a general implementation of the "Initialization is
- * Resource Acquisition" idiom.  Basically, it guarantees that a function
- * is executed upon leaving the currrent scope unless otherwise told.
- *
- * The makeGuard() function is used to create a new ScopeGuard object.
- * It can be instantiated with a lambda function, a std::function<void()>,
- * a functor, or a void(*)() function pointer.
- *
- *
- * Usage example: Add a friend to memory iff it is also added to the db.
- *
- * void User::addFriend(User& newFriend) {
- *   // add the friend to memory
- *   friends_.push_back(&newFriend);
- *
- *   // If the db insertion that follows fails, we should
- *   // remove it from memory.
- *   // (You could also declare this as "auto guard = makeGuard(...)")
- *   ScopeGuard guard = makeGuard([&] { friends_.pop_back(); });
- *
- *   // this will throw an exception upon error, which
- *   // makes the ScopeGuard execute UserCont::pop_back()
- *   // once the Guard's destructor is called.
- *   db_->addFriend(GetName(), newFriend.GetName());
- *
- *   // an exception was not thrown, so don't execute
- *   // the Guard.
- *   guard.dismiss();
- * }
- *
- * Examine ScopeGuardTest.cpp for some more sample usage.
- *
- * Stolen from:
- *   Andrei's and Petru Marginean's CUJ article:
- *     http://drdobbs.com/184403758
- *   and the loki library:
- *     http://loki-lib.sourceforge.net/index.php?n=Idioms.ScopeGuardPointer
- *   and triendl.kj article:
- *     http://www.codeproject.com/KB/cpp/scope_guard.aspx
- */
+namespace detail {
+
 class ScopeGuardImplBase {
  public:
   void dismiss() noexcept {
     dismissed_ = true;
+  }
+
+  template <typename T>
+  FOLLY_ALWAYS_INLINE static void runAndWarnAboutToCrashOnException(
+      T& function) noexcept {
+    try {
+      function();
+    } catch (...) {
+      warnAboutToCrash();
+      std::terminate();
+    }
   }
 
  protected:
@@ -87,6 +60,9 @@ class ScopeGuardImplBase {
   }
 
   bool dismissed_;
+
+ private:
+  static void warnAboutToCrash() noexcept;
 };
 
 template <typename FunctionType>
@@ -150,24 +126,64 @@ class ScopeGuardImpl : public ScopeGuardImplBase {
 
   void* operator new(std::size_t) = delete;
 
-  void execute() noexcept { function_(); }
+  void execute() noexcept {
+    runAndWarnAboutToCrashOnException(function_);
+  }
 
   FunctionType function_;
 };
 
-template <typename FunctionType>
-ScopeGuardImpl<typename std::decay<FunctionType>::type>
-makeGuard(FunctionType&& fn) noexcept(
-    std::is_nothrow_constructible<typename std::decay<FunctionType>::type,
-                                  FunctionType>::value) {
-  return ScopeGuardImpl<typename std::decay<FunctionType>::type>(
-      std::forward<FunctionType>(fn));
-}
+template <typename F>
+using ScopeGuardImplDecay = ScopeGuardImpl<typename std::decay<F>::type>;
+
+} // namespace detail
 
 /**
- * This is largely unneeded if you just use auto for your guards.
+ * ScopeGuard is a general implementation of the "Initialization is
+ * Resource Acquisition" idiom.  Basically, it guarantees that a function
+ * is executed upon leaving the currrent scope unless otherwise told.
+ *
+ * The makeGuard() function is used to create a new ScopeGuard object.
+ * It can be instantiated with a lambda function, a std::function<void()>,
+ * a functor, or a void(*)() function pointer.
+ *
+ *
+ * Usage example: Add a friend to memory if and only if it is also added
+ * to the db.
+ *
+ * void User::addFriend(User& newFriend) {
+ *   // add the friend to memory
+ *   friends_.push_back(&newFriend);
+ *
+ *   // If the db insertion that follows fails, we should
+ *   // remove it from memory.
+ *   auto guard = makeGuard([&] { friends_.pop_back(); });
+ *
+ *   // this will throw an exception upon error, which
+ *   // makes the ScopeGuard execute UserCont::pop_back()
+ *   // once the Guard's destructor is called.
+ *   db_->addFriend(GetName(), newFriend.GetName());
+ *
+ *   // an exception was not thrown, so don't execute
+ *   // the Guard.
+ *   guard.dismiss();
+ * }
+ *
+ * Examine ScopeGuardTest.cpp for some more sample usage.
+ *
+ * Stolen from:
+ *   Andrei's and Petru Marginean's CUJ article:
+ *     http://drdobbs.com/184403758
+ *   and the loki library:
+ *     http://loki-lib.sourceforge.net/index.php?n=Idioms.ScopeGuardPointer
+ *   and triendl.kj article:
+ *     http://www.codeproject.com/KB/cpp/scope_guard.aspx
  */
-typedef ScopeGuardImplBase&& ScopeGuard;
+template <typename F>
+detail::ScopeGuardImplDecay<F> makeGuard(F&& f) noexcept(
+    noexcept(detail::ScopeGuardImplDecay<F>(static_cast<F&&>(f)))) {
+  return detail::ScopeGuardImplDecay<F>(static_cast<F&&>(f));
+}
 
 namespace detail {
 
@@ -184,27 +200,25 @@ namespace detail {
  * If the parameter is false, then the function is executed if no new uncaught
  * exceptions are present at the end of the scope.
  *
- * Used to implement SCOPE_FAIL and SCOPE_SUCCES below.
+ * Used to implement SCOPE_FAIL and SCOPE_SUCCESS below.
  */
-template <typename FunctionType, bool executeOnException>
+template <typename FunctionType, bool ExecuteOnException>
 class ScopeGuardForNewException {
  public:
-  explicit ScopeGuardForNewException(const FunctionType& fn)
-      : function_(fn) {
-  }
+  explicit ScopeGuardForNewException(const FunctionType& fn) : function_(fn) {}
 
   explicit ScopeGuardForNewException(FunctionType&& fn)
-      : function_(std::move(fn)) {
-  }
+      : function_(std::move(fn)) {}
 
-  ScopeGuardForNewException(ScopeGuardForNewException&& other)
-      : function_(std::move(other.function_))
-      , exceptionCounter_(std::move(other.exceptionCounter_)) {
-  }
+  ScopeGuardForNewException(ScopeGuardForNewException&& other) = default;
 
-  ~ScopeGuardForNewException() noexcept(executeOnException) {
-    if (executeOnException == exceptionCounter_.isNewUncaughtException()) {
-      function_();
+  ~ScopeGuardForNewException() noexcept(ExecuteOnException) {
+    if (ExecuteOnException == (exceptionCounter_ < uncaught_exceptions())) {
+      if (ExecuteOnException) {
+        ScopeGuardImplBase::runAndWarnAboutToCrashOnException(function_);
+      } else {
+        function_();
+      }
     }
   }
 
@@ -214,7 +228,7 @@ class ScopeGuardForNewException {
   void* operator new(std::size_t) = delete;
 
   FunctionType function_;
-  UncaughtExceptionCounter exceptionCounter_;
+  int exceptionCounter_{uncaught_exceptions()};
 };
 
 /**
@@ -258,7 +272,7 @@ operator+(detail::ScopeGuardOnExit, FunctionType&& fn) {
 }
 } // namespace detail
 
-} // folly
+} // namespace folly
 
 #define SCOPE_EXIT \
   auto FB_ANONYMOUS_VARIABLE(SCOPE_EXIT_STATE) \

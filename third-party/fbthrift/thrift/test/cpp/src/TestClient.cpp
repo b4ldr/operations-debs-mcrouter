@@ -19,16 +19,15 @@
 
 #define __STDC_FORMAT_MACROS
 #include <stdio.h>
-#include <unistd.h>
-#include <sys/time.h>
 #include <thrift/lib/cpp/protocol/TBinaryProtocol.h>
 #include <thrift/lib/cpp/protocol/THeaderProtocol.h>
-#include <thrift/lib/cpp/transport/TTransportUtils.h>
 #include <thrift/lib/cpp/transport/TSocket.h>
 #include <thrift/lib/cpp/transport/TSSLSocket.h>
 
 #include <memory>
 #include <thrift/test/gen-cpp/ThriftTest.h>
+
+#include <folly/portability/SysTime.h>
 
 #include <inttypes.h>
 

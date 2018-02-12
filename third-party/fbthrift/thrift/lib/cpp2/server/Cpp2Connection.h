@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2004-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,22 +17,22 @@
 #ifndef THRIFT_ASYNC_CPP2CONNECTION_H_
 #define THRIFT_ASYNC_CPP2CONNECTION_H_ 1
 
-#include <folly/io/async/HHWheelTimer.h>
-#include <thrift/lib/cpp/async/TEventConnection.h>
-#include <thrift/lib/cpp/concurrency/Util.h>
-#include <folly/Optional.h>
-#include <folly/SocketAddress.h>
-#include <thrift/lib/cpp/TApplicationException.h>
-#include <thrift/lib/cpp2/async/HeaderServerChannel.h>
-#include <thrift/lib/cpp2/async/SaslServer.h>
-#include <thrift/lib/cpp2/server/Cpp2ConnContext.h>
-#include <thrift/lib/cpp2/server/ThriftServer.h>
-#include <thrift/lib/cpp2/server/Cpp2Worker.h>
-#include <thrift/lib/cpp2/async/DuplexChannel.h>
 #include <memory>
 #include <unordered_set>
 
+#include <folly/Optional.h>
+#include <folly/SocketAddress.h>
+#include <folly/io/async/HHWheelTimer.h>
 #include <wangle/acceptor/ManagedConnection.h>
+
+#include <thrift/lib/cpp/TApplicationException.h>
+#include <thrift/lib/cpp/concurrency/Util.h>
+#include <thrift/lib/cpp2/async/DuplexChannel.h>
+#include <thrift/lib/cpp2/async/HeaderServerChannel.h>
+#include <thrift/lib/cpp2/async/SaslServer.h>
+#include <thrift/lib/cpp2/server/Cpp2ConnContext.h>
+#include <thrift/lib/cpp2/server/Cpp2Worker.h>
+#include <thrift/lib/cpp2/server/ThriftServer.h>
 
 namespace apache { namespace thrift {
 /**
@@ -43,6 +43,9 @@ class Cpp2Connection
     : public ResponseChannel::Callback
     , public wangle::ManagedConnection {
  public:
+
+  static bool isClientLocal(const folly::SocketAddress& clientAddr,
+                            const folly::SocketAddress& serverAddr);
 
   static const std::string loadHeader;
   /**
@@ -55,9 +58,9 @@ class Cpp2Connection
    *        should be nullptr in normal mode
    */
   Cpp2Connection(
-    const std::shared_ptr<apache::thrift::async::TAsyncSocket>& asyncSocket,
+      const std::shared_ptr<apache::thrift::async::TAsyncTransport>& transport,
       const folly::SocketAddress* address,
-      Cpp2Worker* worker,
+      std::shared_ptr<Cpp2Worker> worker,
       const std::shared_ptr<HeaderServerChannel>& serverChannel = nullptr);
 
   /// Destructor -- close down the connection.
@@ -82,7 +85,7 @@ class Cpp2Connection
   bool pending();
 
   // Managed Connection callbacks
-  void describe(std::ostream& os) const override{}
+  void describe(std::ostream&) const override {}
   bool isBusy() const override {
     return activeRequests_.empty();
   }
@@ -93,7 +96,7 @@ class Cpp2Connection
   void dropConnection() override {
     stop();
   }
-  void dumpConnectionState(uint8_t loglevel) override {}
+  void dumpConnectionState(uint8_t /* loglevel */) override {}
   void addConnection(std::shared_ptr<Cpp2Connection> conn) {
     this_ = conn;
   }
@@ -103,13 +106,13 @@ class Cpp2Connection
   std::unique_ptr<DuplexChannel> duplexChannel_;
   std::shared_ptr<apache::thrift::HeaderServerChannel> channel_;
 
-  Cpp2Worker* worker_;
+  std::shared_ptr<Cpp2Worker> worker_;
   Cpp2Worker* getWorker() {
-    return worker_;
+    return worker_.get();
   }
   Cpp2ConnContext context_;
 
-  std::shared_ptr<apache::thrift::async::TAsyncSocket> socket_;
+  std::shared_ptr<apache::thrift::async::TAsyncTransport> transport_;
   std::shared_ptr<apache::thrift::concurrency::ThreadManager> threadManager_;
 
   /**
@@ -152,7 +155,9 @@ class Cpp2Connection
         folly::exception_wrapper ew,
         std::string exCode,
         MessageChannel::SendCallback* notUsed = nullptr) override;
-    void sendTimeoutResponse();
+    void sendTimeoutResponse(
+      apache::thrift::HeaderServerChannel::HeaderRequest::TimeoutResponseType
+      responseType);
 
     ~Cpp2Request() override;
 
@@ -168,7 +173,7 @@ class Cpp2Connection
       return req_->getTimestamps();
     }
 
-    void setLoadHeader();
+    void setServerHeaders();
 
    private:
     MessageChannel::SendCallback* prepareSendCallback(
@@ -178,7 +183,6 @@ class Cpp2Connection
     std::unique_ptr<HeaderServerChannel::HeaderRequest> req_;
     std::shared_ptr<Cpp2Connection> connection_;
     Cpp2RequestContext reqContext_;
-    folly::Optional<std::string> loadHeader_;
     QueueTimeout queueTimeout_;
     TaskTimeout taskTimeout_;
 
@@ -215,6 +219,8 @@ class Cpp2Connection
                    const std::string& errorCode,
                    const char* comment);
   void disconnect(const char* comment) noexcept;
+
+  void setServerHeaders(HeaderServerChannel::HeaderRequest& request);
 
   friend class Cpp2Request;
 

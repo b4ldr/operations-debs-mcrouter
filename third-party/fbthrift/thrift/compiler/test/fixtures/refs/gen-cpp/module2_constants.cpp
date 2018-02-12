@@ -6,16 +6,12 @@
  */
 #include "thrift/compiler/test/fixtures/refs/gen-cpp/module2_constants.h"
 
+#include <folly/Indestructible.h>
 
 
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
-module2Constants::module2Constants() {
-}
 
-#pragma GCC diagnostic pop
 
 
 

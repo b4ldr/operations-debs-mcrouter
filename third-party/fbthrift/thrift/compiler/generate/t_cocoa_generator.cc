@@ -69,6 +69,9 @@ class t_cocoa_generator : public t_oop_generator {
     iter = parsed_options.find("nullability");
     nullability_ = (iter != parsed_options.end());
 
+    iter = parsed_options.find("simple_value_equality");
+    simple_value_equality_ = (iter != parsed_options.end());
+
     iter = parsed_options.find("import_path");
     if (iter == parsed_options.end()) {
       import_path_ = "";
@@ -101,8 +104,16 @@ class t_cocoa_generator : public t_oop_generator {
   void generate_xception(t_struct* txception) override;
   void generate_service(t_service* tservice) override;
 
-  void print_const_value(std::ofstream& out, std::string name, t_type* type, t_const_value* value, bool defval=false, bool is_property=false);
-  std::string render_const_value(ofstream& out, t_type* type, t_const_value* value, bool containerize_it=false);
+  void print_const_value(
+      std::ofstream& out,
+      std::string name,
+      t_type* type,
+      const t_const_value* value,
+      bool defval=false,
+      bool is_property=false);
+  std::string render_const_value(ofstream& out, t_type* type,
+                                 const t_const_value* value,
+                                 bool containerize_it=false);
 
   void generate_cocoa_struct(t_struct* tstruct, bool is_exception);
   void generate_cocoa_struct_interface(std::ofstream& out, t_struct* tstruct, bool is_xception=false);
@@ -115,6 +126,10 @@ class t_cocoa_generator : public t_oop_generator {
   void generate_cocoa_struct_encode_with_coder_method(ofstream &out,
                                                     t_struct* tstruct,
                                                     bool is_exception);
+  void generate_cocoa_struct_hash_method(ofstream& out);
+  void generate_cocoa_struct_is_equal_method(ofstream& out,
+                                             t_struct* tstruct,
+                                             bool is_exception);
   void generate_cocoa_struct_field_accessor_declarations(std::ofstream& out,
                                                          t_struct* tstruct,
                                                          bool is_declare_getter,
@@ -250,6 +265,7 @@ class t_cocoa_generator : public t_oop_generator {
   bool log_unexpected_;
   bool validate_required_;
   bool nullability_;
+  bool simple_value_equality_;
   string import_path_;
 };
 
@@ -260,7 +276,7 @@ class t_cocoa_generator : public t_oop_generator {
  */
 void t_cocoa_generator::init_generator() {
   // Make output directory
-  MKDIR(get_out_dir().c_str());
+  make_dir(get_out_dir().c_str());
   cocoa_prefix_ = program_->get_namespace("cocoa");
 
   // we have a .h header file...
@@ -332,11 +348,11 @@ string t_cocoa_generator::cocoa_thrift_imports() {
   };
 
   string result = "";
-  for (int i = 0; i < sizeof(systemImports) / sizeof(systemImports[0]); i++) {
+  for (const auto& systemImport : systemImports) {
     if (import_path_ == "") {
-      result += "#import \"" + systemImports[i] + ".h\"\n";
+      result += "#import \"" + systemImport + ".h\"\n";
     } else {
-      result += "#import <" + import_path_  + systemImports[i] + ".h>\n";
+      result += "#import <" + import_path_  + systemImport + ".h>\n";
     }
   }
 
@@ -813,6 +829,51 @@ void t_cocoa_generator::generate_cocoa_struct_encode_with_coder_method(ofstream 
   out << endl;
 }
 
+/**
+ * Generate the hash method for this struct
+ */
+void t_cocoa_generator::generate_cocoa_struct_hash_method(ofstream& out) {
+  indent(out) << "- (NSUInteger) hash" << endl;
+  scope_up(out);
+  out << indent() << "return 0;" << endl;
+  scope_down(out);
+  out << endl;
+}
+
+/**
+ * Generate the isEqual method for this struct
+ */
+void t_cocoa_generator::generate_cocoa_struct_is_equal_method(ofstream& out, t_struct* tstruct, bool is_exception) {
+  indent(out) << "- (BOOL) isEqual: (id) anObject" << endl;
+  scope_up(out);
+
+  indent(out) << "if (self == anObject) {" << endl;
+  indent_up();
+  indent(out) << "return YES;" << endl;
+  indent_down();
+  indent(out) << "}" << endl;
+
+  string class_name = cocoa_prefix_ + tstruct->get_name();
+
+  if (is_exception) {
+    indent(out) << "if (![super isEqual:anObject]) {" << endl;
+    indent_up();
+    indent(out) << "return NO;" << endl;
+    indent_down();
+    indent(out) << "}" << endl << endl;
+  }
+  else {
+    indent(out) << "if (![anObject isKindOfClass:[" << class_name << " class]]) {" << endl;
+    indent_up();
+    indent(out) << "return NO;" << endl;
+    indent_down();
+    indent(out) << "}" << endl;
+  }
+
+  out << indent() << "return [[self toDict] isEqual:[anObject toDict]];" << endl;
+  scope_down(out);
+  out << endl;
+}
 
 /**
  * Generate struct implementation.
@@ -899,6 +960,12 @@ void t_cocoa_generator::generate_cocoa_struct_implementation(ofstream &out,
   generate_cocoa_struct_init_with_coder_method(out, tstruct, is_exception);
   // encodeWithCoder for NSCoding
   generate_cocoa_struct_encode_with_coder_method(out, tstruct, is_exception);
+
+  // hash and isEqual for NSObject
+  if (simple_value_equality_) {
+    generate_cocoa_struct_hash_method(out);
+    generate_cocoa_struct_is_equal_method(out, tstruct, is_exception);
+  }
 
   // dealloc
   // if (!members.empty()) {
@@ -1306,7 +1373,9 @@ void t_cocoa_generator::generate_cocoa_struct_makeImmutable(std::ofstream& out, 
      t_field* field = (*f_iter);
      t_type* ttype = field->get_type();
      string field_name = kFieldPrefix + field->get_name();
-
+     if (ttype->is_typedef()) {
+       ttype = get_true_type(ttype);
+     }
      if (ttype->is_struct()) {
        out << indent() << "if (" << field_name << " && " << "![" << field_name << " isImmutable]" << ") {" << endl;
        indent_up();
@@ -1385,6 +1454,9 @@ void t_cocoa_generator::generate_cocoa_struct_toDict(ofstream& out,
      t_type* ttype = field->get_type();
      string field_name = kFieldPrefix + field->get_name();
      string ret_equals = "ret[@\"" + field->get_name() + "\"] = ";
+     if (ttype->is_typedef()) {
+       ttype = get_true_type(ttype);
+     }
 
      const bool check_for_null = ttype->is_struct() || ttype->is_string() || ttype->is_container();
 
@@ -1460,6 +1532,9 @@ void t_cocoa_generator::generate_cocoa_struct_mutableCopyWithZone(ofstream& out,
      t_field* field = (*f_iter);
      t_type* ttype = field->get_type();
      string field_name = kFieldPrefix + field->get_name();
+     if (ttype->is_typedef()) {
+       ttype = get_true_type(ttype);
+     }
 
      const bool check_for_null = ttype->is_struct() || ttype->is_string() || ttype->is_container();
 
@@ -2038,7 +2113,6 @@ void t_cocoa_generator::generate_deserialize_field(ofstream& out,
       case t_base_type::TYPE_VOID:
         throw "compiler error: cannot serialize void field in a struct: " +
           tfield->get_name();
-        break;
       case t_base_type::TYPE_STRING:
         if (((t_base_type*)type)->is_binary()) {
           out << "readBinary];";
@@ -2304,7 +2378,6 @@ void t_cocoa_generator::generate_serialize_field(ofstream& out,
       case t_base_type::TYPE_VOID:
         throw
           "compiler error: cannot serialize void field in a struct: " + fieldName;
-        break;
       case t_base_type::TYPE_STRING:
         if (((t_base_type*)type)->is_binary()) {
           out << "writeBinary: " << fieldName << "];";
@@ -2513,7 +2586,7 @@ void t_cocoa_generator::generate_serialize_list_element(ofstream& out,
  */
 string t_cocoa_generator::type_name(t_type* ttype, bool class_ref) {
   if (ttype->is_typedef()) {
-    t_program* program = ttype->get_program();
+    const t_program* program = ttype->get_program();
     return program ? (program->get_namespace("cocoa") + ttype->get_name()) : ttype->get_name();
   }
 
@@ -2530,7 +2603,7 @@ string t_cocoa_generator::type_name(t_type* ttype, bool class_ref) {
     result = "TBaseStructArray";
   } else {
     // Check for prefix
-    t_program* program = ttype->get_program();
+    const t_program* program = ttype->get_program();
     if (program != NULL) {
       result = program->get_namespace("cocoa") + ttype->get_name();
     } else {
@@ -2583,7 +2656,13 @@ string t_cocoa_generator::base_type_name(t_base_type* type) {
  * is NOT performed in this function as it is always run beforehand using the
  * validate_types method in main.cc
  */
-void t_cocoa_generator::print_const_value(std::ofstream& out, std::string name, t_type* type, t_const_value* value, bool defval, bool is_property) {
+void t_cocoa_generator::print_const_value(
+    std::ofstream& out,
+    std::string name,
+    t_type* type,
+    const t_const_value* value,
+    bool defval,
+    bool is_property) {
   type = get_true_type(type);
 
   indent(out);
@@ -2674,7 +2753,11 @@ void t_cocoa_generator::print_const_value(std::ofstream& out, std::string name, 
   }
 }
 
-string t_cocoa_generator::render_const_value(ofstream& out, t_type* type, t_const_value* value, bool containerize_it) {
+string t_cocoa_generator::render_const_value(
+    ofstream& out,
+    t_type* type,
+    const t_const_value* value,
+    bool containerize_it) {
   type = get_true_type(type);
   std::ostringstream render;
 
@@ -3037,4 +3120,3 @@ THRIFT_REGISTER_GENERATOR(cocoa, "Cocoa",
 "    validate_required:\n"
 "                     Throws exception if any required field is not set.\n"
 )
-

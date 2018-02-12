@@ -84,45 +84,35 @@ func (p *HTTPHeaderEchoServer) ServeHTTP(w http.ResponseWriter, req *http.Reques
 	}
 }
 
-func HttpClientSetupForTest(t *testing.T) (net.Listener, net.Addr) {
-	addr, err := FindAvailableTCPServerPort(40000)
+func HTTPClientSetupForTest(t *testing.T) net.Listener {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Fatalf("Unable to find available tcp port addr: %s", err)
-		return nil, addr
-	}
-	l, err := net.Listen(addr.Network(), addr.String())
-	if err != nil {
-		t.Fatalf("Unable to setup tcp listener on %s: %s", addr.String(), err)
-		return l, addr
+		t.Fatalf("Unable to setup tcp listener on local port: %s", err)
+		return l
 	}
 	go http.Serve(l, &HTTPEchoServer{})
-	return l, addr
+	return l
 }
 
-func HttpClientSetupForHeaderTest(t *testing.T) (net.Listener, net.Addr) {
-	addr, err := FindAvailableTCPServerPort(40000)
+func HTTPClientSetupForHeaderTest(t *testing.T) net.Listener {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Fatalf("Unable to find available tcp port addr: %s", err)
-		return nil, addr
-	}
-	l, err := net.Listen(addr.Network(), addr.String())
-	if err != nil {
-		t.Fatalf("Unable to setup tcp listener on %s: %s", addr.String(), err)
-		return l, addr
+		t.Fatalf("Unable to setup tcp listener on local port: %s", err)
+		return l
 	}
 	go http.Serve(l, &HTTPHeaderEchoServer{})
-	return l, addr
+	return l
 }
 
-func ReadWriteProtocolTest(t *testing.T, protocolFactory TProtocolFactory) {
+func ReadWriteProtocolTest(t *testing.T, protocolFactory ProtocolFactory) {
 	buf := bytes.NewBuffer(make([]byte, 0, 1024))
-	l, addr := HttpClientSetupForTest(t)
+	l := HTTPClientSetupForTest(t)
 	defer l.Close()
-	transports := []TTransportFactory{
-		NewTMemoryBufferTransportFactory(1024),
+	transports := []TransportFactory{
+		NewMemoryBufferTransportFactory(1024),
 		NewStreamTransportFactory(buf, buf, true),
-		NewTFramedTransportFactory(NewTMemoryBufferTransportFactory(1024)),
-		NewTHttpPostClientTransportFactory("http://" + addr.String()),
+		NewFramedTransportFactory(NewMemoryBufferTransportFactory(1024)),
+		NewHTTPPostClientTransportFactory("http://" + l.Addr().String()),
 	}
 	for _, tf := range transports {
 		trans := tf.GetTransport(nil)
@@ -190,8 +180,8 @@ func ReadWriteProtocolTest(t *testing.T, protocolFactory TProtocolFactory) {
 	}
 }
 
-func ReadWriteBool(t testing.TB, p TProtocol, trans TTransport) {
-	thetype := TType(BOOL)
+func ReadWriteBool(t testing.TB, p Protocol, trans Transport) {
+	thetype := Type(BOOL)
 	thelen := len(BOOL_VALUES)
 	err := p.WriteListBegin(thetype, thelen)
 	if err != nil {
@@ -200,34 +190,34 @@ func ReadWriteBool(t testing.TB, p TProtocol, trans TTransport) {
 	for k, v := range BOOL_VALUES {
 		err = p.WriteBool(v)
 		if err != nil {
-			t.Errorf("%s: %T %T %q Error writing bool in list at index %d: %q", "ReadWriteBool", p, trans, err, k, v)
+			t.Errorf("%s: %T %T %q Error writing bool in list at index %d: %t", "ReadWriteBool", p, trans, err, k, v)
 		}
 	}
 	p.WriteListEnd()
 	if err != nil {
-		t.Errorf("%s: %T %T %q Error writing list end: %q", "ReadWriteBool", p, trans, err, BOOL_VALUES)
+		t.Errorf("%s: %T %T %q Error writing list end: %v", "ReadWriteBool", p, trans, err, BOOL_VALUES)
 	}
 	p.Flush()
 	thetype2, thelen2, err := p.ReadListBegin()
 	if err != nil {
-		t.Errorf("%s: %T %T %q Error reading list: %q", "ReadWriteBool", p, trans, err, BOOL_VALUES)
+		t.Errorf("%s: %T %T %q Error reading list: %v", "ReadWriteBool", p, trans, err, BOOL_VALUES)
 	}
-	_, ok := p.(*TSimpleJSONProtocol)
+	_, ok := p.(*SimpleJSONProtocol)
 	if !ok {
 		if thetype != thetype2 {
 			t.Errorf("%s: %T %T type %s != type %s", "ReadWriteBool", p, trans, thetype, thetype2)
 		}
 		if thelen != thelen2 {
-			t.Errorf("%s: %T %T len %s != len %s", "ReadWriteBool", p, trans, thelen, thelen2)
+			t.Errorf("%s: %T %T len %d != len %d", "ReadWriteBool", p, trans, thelen, thelen2)
 		}
 	}
 	for k, v := range BOOL_VALUES {
 		value, err := p.ReadBool()
 		if err != nil {
-			t.Errorf("%s: %T %T %q Error reading bool at index %d: %q", "ReadWriteBool", p, trans, err, k, v)
+			t.Errorf("%s: %T %T %q Error reading bool at index %d: %t", "ReadWriteBool", p, trans, err, k, v)
 		}
 		if v != value {
-			t.Errorf("%s: index %d %q %q %q != %q", "ReadWriteBool", k, p, trans, v, value)
+			t.Errorf("%s: index %d %q %q %t != %t", "ReadWriteBool", k, p, trans, v, value)
 		}
 	}
 	err = p.ReadListEnd()
@@ -236,8 +226,8 @@ func ReadWriteBool(t testing.TB, p TProtocol, trans TTransport) {
 	}
 }
 
-func ReadWriteByte(t testing.TB, p TProtocol, trans TTransport) {
-	thetype := TType(BYTE)
+func ReadWriteByte(t testing.TB, p Protocol, trans Transport) {
+	thetype := Type(BYTE)
 	thelen := len(BYTE_VALUES)
 	err := p.WriteListBegin(thetype, thelen)
 	if err != nil {
@@ -261,13 +251,13 @@ func ReadWriteByte(t testing.TB, p TProtocol, trans TTransport) {
 	if err != nil {
 		t.Errorf("%s: %T %T %q Error reading list: %q", "ReadWriteByte", p, trans, err, BYTE_VALUES)
 	}
-	_, ok := p.(*TSimpleJSONProtocol)
+	_, ok := p.(*SimpleJSONProtocol)
 	if !ok {
 		if thetype != thetype2 {
 			t.Errorf("%s: %T %T type %s != type %s", "ReadWriteByte", p, trans, thetype, thetype2)
 		}
 		if thelen != thelen2 {
-			t.Errorf("%s: %T %T len %s != len %s", "ReadWriteByte", p, trans, thelen, thelen2)
+			t.Errorf("%s: %T %T len %d != len %d", "ReadWriteByte", p, trans, thelen, thelen2)
 		}
 	}
 	for k, v := range BYTE_VALUES {
@@ -285,8 +275,8 @@ func ReadWriteByte(t testing.TB, p TProtocol, trans TTransport) {
 	}
 }
 
-func ReadWriteI16(t testing.TB, p TProtocol, trans TTransport) {
-	thetype := TType(I16)
+func ReadWriteI16(t testing.TB, p Protocol, trans Transport) {
+	thetype := Type(I16)
 	thelen := len(INT16_VALUES)
 	p.WriteListBegin(thetype, thelen)
 	for _, v := range INT16_VALUES {
@@ -298,13 +288,13 @@ func ReadWriteI16(t testing.TB, p TProtocol, trans TTransport) {
 	if err != nil {
 		t.Errorf("%s: %T %T %q Error reading list: %q", "ReadWriteI16", p, trans, err, INT16_VALUES)
 	}
-	_, ok := p.(*TSimpleJSONProtocol)
+	_, ok := p.(*SimpleJSONProtocol)
 	if !ok {
 		if thetype != thetype2 {
 			t.Errorf("%s: %T %T type %s != type %s", "ReadWriteI16", p, trans, thetype, thetype2)
 		}
 		if thelen != thelen2 {
-			t.Errorf("%s: %T %T len %s != len %s", "ReadWriteI16", p, trans, thelen, thelen2)
+			t.Errorf("%s: %T %T len %d != len %d", "ReadWriteI16", p, trans, thelen, thelen2)
 		}
 	}
 	for k, v := range INT16_VALUES {
@@ -322,8 +312,8 @@ func ReadWriteI16(t testing.TB, p TProtocol, trans TTransport) {
 	}
 }
 
-func ReadWriteI32(t testing.TB, p TProtocol, trans TTransport) {
-	thetype := TType(I32)
+func ReadWriteI32(t testing.TB, p Protocol, trans Transport) {
+	thetype := Type(I32)
 	thelen := len(INT32_VALUES)
 	p.WriteListBegin(thetype, thelen)
 	for _, v := range INT32_VALUES {
@@ -335,13 +325,13 @@ func ReadWriteI32(t testing.TB, p TProtocol, trans TTransport) {
 	if err != nil {
 		t.Errorf("%s: %T %T %q Error reading list: %q", "ReadWriteI32", p, trans, err, INT32_VALUES)
 	}
-	_, ok := p.(*TSimpleJSONProtocol)
+	_, ok := p.(*SimpleJSONProtocol)
 	if !ok {
 		if thetype != thetype2 {
 			t.Errorf("%s: %T %T type %s != type %s", "ReadWriteI32", p, trans, thetype, thetype2)
 		}
 		if thelen != thelen2 {
-			t.Errorf("%s: %T %T len %s != len %s", "ReadWriteI32", p, trans, thelen, thelen2)
+			t.Errorf("%s: %T %T len %d != len %d", "ReadWriteI32", p, trans, thelen, thelen2)
 		}
 	}
 	for k, v := range INT32_VALUES {
@@ -358,8 +348,8 @@ func ReadWriteI32(t testing.TB, p TProtocol, trans TTransport) {
 	}
 }
 
-func ReadWriteI64(t testing.TB, p TProtocol, trans TTransport) {
-	thetype := TType(I64)
+func ReadWriteI64(t testing.TB, p Protocol, trans Transport) {
+	thetype := Type(I64)
 	thelen := len(INT64_VALUES)
 	p.WriteListBegin(thetype, thelen)
 	for _, v := range INT64_VALUES {
@@ -371,13 +361,13 @@ func ReadWriteI64(t testing.TB, p TProtocol, trans TTransport) {
 	if err != nil {
 		t.Errorf("%s: %T %T %q Error reading list: %q", "ReadWriteI64", p, trans, err, INT64_VALUES)
 	}
-	_, ok := p.(*TSimpleJSONProtocol)
+	_, ok := p.(*SimpleJSONProtocol)
 	if !ok {
 		if thetype != thetype2 {
 			t.Errorf("%s: %T %T type %s != type %s", "ReadWriteI64", p, trans, thetype, thetype2)
 		}
 		if thelen != thelen2 {
-			t.Errorf("%s: %T %T len %s != len %s", "ReadWriteI64", p, trans, thelen, thelen2)
+			t.Errorf("%s: %T %T len %d != len %d", "ReadWriteI64", p, trans, thelen, thelen2)
 		}
 	}
 	for k, v := range INT64_VALUES {
@@ -394,8 +384,8 @@ func ReadWriteI64(t testing.TB, p TProtocol, trans TTransport) {
 	}
 }
 
-func ReadWriteDouble(t testing.TB, p TProtocol, trans TTransport) {
-	thetype := TType(DOUBLE)
+func ReadWriteDouble(t testing.TB, p Protocol, trans Transport) {
+	thetype := Type(DOUBLE)
 	thelen := len(DOUBLE_VALUES)
 	p.WriteListBegin(thetype, thelen)
 	for _, v := range DOUBLE_VALUES {
@@ -405,25 +395,25 @@ func ReadWriteDouble(t testing.TB, p TProtocol, trans TTransport) {
 	p.Flush()
 	thetype2, thelen2, err := p.ReadListBegin()
 	if err != nil {
-		t.Errorf("%s: %T %T %q Error reading list: %q", "ReadWriteDouble", p, trans, err, DOUBLE_VALUES)
+		t.Errorf("%s: %T %T %q Error reading list: %v", "ReadWriteDouble", p, trans, err, DOUBLE_VALUES)
 	}
 	if thetype != thetype2 {
 		t.Errorf("%s: %T %T type %s != type %s", "ReadWriteDouble", p, trans, thetype, thetype2)
 	}
 	if thelen != thelen2 {
-		t.Errorf("%s: %T %T len %s != len %s", "ReadWriteDouble", p, trans, thelen, thelen2)
+		t.Errorf("%s: %T %T len %d != len %d", "ReadWriteDouble", p, trans, thelen, thelen2)
 	}
 	for k, v := range DOUBLE_VALUES {
 		value, err := p.ReadDouble()
 		if err != nil {
-			t.Errorf("%s: %T %T %q Error reading double at index %d: %q", "ReadWriteDouble", p, trans, err, k, v)
+			t.Errorf("%s: %T %T %q Error reading double at index %d: %f", "ReadWriteDouble", p, trans, err, k, v)
 		}
 		if math.IsNaN(v) {
 			if !math.IsNaN(value) {
-				t.Errorf("%s: %T %T math.IsNaN(%q) != math.IsNaN(%q)", "ReadWriteDouble", p, trans, v, value)
+				t.Errorf("%s: %T %T math.IsNaN(%f) != math.IsNaN(%f)", "ReadWriteDouble", p, trans, v, value)
 			}
 		} else if v != value {
-			t.Errorf("%s: %T %T %v != %q", "ReadWriteDouble", p, trans, v, value)
+			t.Errorf("%s: %T %T %f != %f", "ReadWriteDouble", p, trans, v, value)
 		}
 	}
 	err = p.ReadListEnd()
@@ -432,8 +422,8 @@ func ReadWriteDouble(t testing.TB, p TProtocol, trans TTransport) {
 	}
 }
 
-func ReadWriteFloat(t testing.TB, p TProtocol, trans TTransport) {
-	thetype := TType(FLOAT)
+func ReadWriteFloat(t testing.TB, p Protocol, trans Transport) {
+	thetype := Type(FLOAT)
 	thelen := len(FLOAT_VALUES)
 	p.WriteListBegin(thetype, thelen)
 	for _, v := range FLOAT_VALUES {
@@ -443,25 +433,25 @@ func ReadWriteFloat(t testing.TB, p TProtocol, trans TTransport) {
 	p.Flush()
 	thetype2, thelen2, err := p.ReadListBegin()
 	if err != nil {
-		t.Errorf("%s: %T %T %q Error reading list: %q", "ReadWriteFloat", p, trans, err, FLOAT_VALUES)
+		t.Errorf("%s: %T %T %q Error reading list: %v", "ReadWriteFloat", p, trans, err, FLOAT_VALUES)
 	}
 	if thetype != thetype2 {
 		t.Errorf("%s: %T %T type %s != type %s", "ReadWriteFloat", p, trans, thetype, thetype2)
 	}
 	if thelen != thelen2 {
-		t.Errorf("%s: %T %T len %s != len %s", "ReadWriteFloat", p, trans, thelen, thelen2)
+		t.Errorf("%s: %T %T len %d != len %d", "ReadWriteFloat", p, trans, thelen, thelen2)
 	}
 	for k, v := range FLOAT_VALUES {
 		value, err := p.ReadFloat()
 		if err != nil {
-			t.Errorf("%s: %T %T %q Error reading double at index %d: %q", "ReadWriteFloat", p, trans, err, k, v)
+			t.Errorf("%s: %T %T %q Error reading double at index %d: %f", "ReadWriteFloat", p, trans, err, k, v)
 		}
 		if math.IsNaN(float64(v)) {
 			if !math.IsNaN(float64(value)) {
-				t.Errorf("%s: %T %T math.IsNaN(%q) != math.IsNaN(%q)", "ReadWriteFloat", p, trans, v, value)
+				t.Errorf("%s: %T %T math.IsNaN(%f) != math.IsNaN(%f)", "ReadWriteFloat", p, trans, v, value)
 			}
 		} else if v != value {
-			t.Errorf("%s: %T %T %v != %q", "ReadWriteFloat", p, trans, v, value)
+			t.Errorf("%s: %T %T %f != %f", "ReadWriteFloat", p, trans, v, value)
 		}
 	}
 	err = p.ReadListEnd()
@@ -470,8 +460,8 @@ func ReadWriteFloat(t testing.TB, p TProtocol, trans TTransport) {
 	}
 }
 
-func ReadWriteString(t testing.TB, p TProtocol, trans TTransport) {
-	thetype := TType(STRING)
+func ReadWriteString(t testing.TB, p Protocol, trans Transport) {
+	thetype := Type(STRING)
 	thelen := len(STRING_VALUES)
 	p.WriteListBegin(thetype, thelen)
 	for _, v := range STRING_VALUES {
@@ -483,13 +473,13 @@ func ReadWriteString(t testing.TB, p TProtocol, trans TTransport) {
 	if err != nil {
 		t.Errorf("%s: %T %T %q Error reading list: %q", "ReadWriteString", p, trans, err, STRING_VALUES)
 	}
-	_, ok := p.(*TSimpleJSONProtocol)
+	_, ok := p.(*SimpleJSONProtocol)
 	if !ok {
 		if thetype != thetype2 {
 			t.Errorf("%s: %T %T type %s != type %s", "ReadWriteString", p, trans, thetype, thetype2)
 		}
 		if thelen != thelen2 {
-			t.Errorf("%s: %T %T len %s != len %s", "ReadWriteString", p, trans, thelen, thelen2)
+			t.Errorf("%s: %T %T len %d != len %d", "ReadWriteString", p, trans, thelen, thelen2)
 		}
 	}
 	for k, v := range STRING_VALUES {
@@ -498,7 +488,7 @@ func ReadWriteString(t testing.TB, p TProtocol, trans TTransport) {
 			t.Errorf("%s: %T %T %q Error reading string at index %d: %q", "ReadWriteString", p, trans, err, k, v)
 		}
 		if v != value {
-			t.Errorf("%s: %T %T %d != %d", "ReadWriteString", p, trans, v, value)
+			t.Errorf("%s: %T %T %s != %s", "ReadWriteString", p, trans, v, value)
 		}
 	}
 	if err != nil {
@@ -506,7 +496,7 @@ func ReadWriteString(t testing.TB, p TProtocol, trans TTransport) {
 	}
 }
 
-func ReadWriteBinary(t testing.TB, p TProtocol, trans TTransport) {
+func ReadWriteBinary(t testing.TB, p Protocol, trans Transport) {
 	v := protocol_bdata
 	p.WriteBinary(v)
 	p.Flush()

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2011-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@
 
 #include <thrift/lib/cpp/Thrift.h>
 #include <thrift/lib/cpp/protocol/TType.h>
+#include <thrift/lib/cpp2/TypeClass.h>
+#include <thrift/lib/cpp2/protocol/Cpp2Ops.h>
 
 #include <initializer_list>
 #include <utility>
@@ -30,6 +32,22 @@ namespace apache { namespace thrift {
 enum FragileConstructor {
   FRAGILE,
 };
+
+namespace detail { namespace st {
+
+/**
+ *  Like boost::totally_ordered, but does not cause boost functions always to
+ *  be included in overload resolution sets due to ADL.
+ */
+template <typename T>
+struct ComparisonOperators {
+  friend bool operator !=(const T& x, const T& y) { return !(x == y); }
+  friend bool operator > (const T& x, const T& y) { return y < x; }
+  friend bool operator <=(const T& x, const T& y) { return !(y < x); }
+  friend bool operator >=(const T& x, const T& y) { return !(x < y); }
+};
+
+}}
 
 namespace detail {
 
@@ -47,40 +65,6 @@ struct enum_equal_to {
 };
 
 }
-
-/**
- * Class template (specialized for each type in generated code) that allows
- * access to write / read / serializedSize / serializedSizeZC functions in
- * a generic way.
- *
- * For native Cpp2 structs, one could call the corresponding methods
- * directly, but structs generated in compatibility mode (ie. typedef'ed
- * to the Thrift1 version) don't have them; they are defined as free
- * functions named <type>_read, <type>_write, etc, so they can't be accessed
- * generically (because the type name is part of the function name).
- *
- * Cpp2Ops bridges to either struct methods (for native Cpp2 structs)
- * or the corresponding free functions (for structs in compatibility mode).
- */
-template <class T, class = void>
-class Cpp2Ops {
- public:
-  static void clear(T* );
-
-  template <class P>
-  static uint32_t write(P*, const T*);
-
-  template <class P>
-  static uint32_t read(P*, T*);
-
-  template <class P>
-  static uint32_t serializedSize(P*, const T*);
-
-  template <class P>
-  static uint32_t serializedSizeZC(P*, const T*);
-
-  static constexpr apache::thrift::protocol::TType thriftType();
-};
 
 namespace detail {
 
@@ -107,6 +91,24 @@ template <typename Class, typename... Args>
 using safe_overload_t = typename std::enable_if<
   detail::is_safe_overload<Class, Args...>::type::value
 >::type;
+
+// HACK: Disable the default merge() for cpp2-generated types.
+//
+// The default implementation is wrong - it just copies/moves the source
+// wholesale - and blindly upgrading from legacy cpp to cpp2 would change the
+// behavior of merge over generated types to the default implementation without
+// any warning.
+//
+// If there is code that needs to mimick the behavior of merge(), there is
+// another implementation called merge_into that may be used. It requires static
+// reflection metatypes. For more details, see: thrift/lib/cpp2/fatal/merge.h.
+//
+// If there is code that needs merge() available via ADL, an overload of merge()
+// should be made in the namespace of the argument types, and its implementation
+// may simply forward to merge_into.
+template <typename T>
+struct MergeTrait<T, typename std::enable_if<
+      std::is_base_of<detail::st::ComparisonOperators<T>, T>::value>::type>;
 
 }} // apache::thrift
 

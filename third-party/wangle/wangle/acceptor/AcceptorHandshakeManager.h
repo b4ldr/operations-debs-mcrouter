@@ -1,22 +1,33 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #pragma once
 
 #include <chrono>
+#include <folly/ExceptionWrapper.h>
+#include <folly/Optional.h>
 #include <folly/SocketAddress.h>
 #include <folly/io/async/AsyncSocket.h>
-#include <wangle/acceptor/Acceptor.h>
+#include <folly/io/async/AsyncSSLSocket.h>
 #include <wangle/acceptor/ManagedConnection.h>
+#include <wangle/acceptor/SecureTransportType.h>
 #include <wangle/acceptor/TransportInfo.h>
 
 namespace wangle {
+
+class Acceptor;
 
 class AcceptorHandshakeHelper : public folly::DelayedDestruction {
  public:
@@ -27,13 +38,26 @@ class AcceptorHandshakeHelper : public folly::DelayedDestruction {
    public:
     virtual ~Callback() = default;
 
+    /**
+     * Called after handshake has been completed successfully.
+     *
+     * If sslErr is set, Acceptor::updateSSLStats will be called.
+     */
     virtual void connectionReady(
         folly::AsyncTransportWrapper::UniquePtr transport,
         std::string nextProtocol,
-        SecureTransportType secureTransportType) noexcept = 0;
+        SecureTransportType secureTransportType,
+        folly::Optional<SSLErrorEnum> sslErr) noexcept = 0;
 
+    /**
+     * Called if an error was encountered while performing handshake.
+     *
+     * If sslErr is set, Acceptor::updateSSLStats will be called.
+     */
     virtual void connectionError(
-        folly::exception_wrapper ex) noexcept = 0;
+        folly::AsyncTransportWrapper* transport,
+        folly::exception_wrapper ex,
+        folly::Optional<SSLErrorEnum> sslErr) noexcept = 0;
   };
 
   virtual void start(
@@ -56,30 +80,28 @@ class AcceptorHandshakeManager : public ManagedConnection,
     acceptTime_(acceptTime),
     tinfo_(std::move(tinfo)) {}
 
-  virtual ~AcceptorHandshakeManager() = default;
+  ~AcceptorHandshakeManager() override = default;
 
-  virtual void start(
-      folly::AsyncSSLSocket::UniquePtr sock) noexcept {
-    acceptor_->getConnectionManager()->addConnection(this, true);
-    startHelper(std::move(sock));
-  }
+  virtual void start(folly::AsyncSSLSocket::UniquePtr sock) noexcept;
 
-  virtual void timeoutExpired() noexcept override {
+  void timeoutExpired() noexcept override {
     VLOG(4) << "SSL handshake timeout expired";
     dropConnection(SSLErrorEnum::TIMEOUT);
   }
 
-  virtual void describe(std::ostream& os) const override {
+  void describe(std::ostream& os) const override {
     os << "pending handshake on " << clientAddr_;
   }
 
-  virtual bool isBusy() const override { return true; }
+  bool isBusy() const override {
+    return true;
+  }
 
-  virtual void notifyPendingShutdown() override {}
+  void notifyPendingShutdown() override {}
 
-  virtual void closeWhenIdle() override {}
+  void closeWhenIdle() override {}
 
-  virtual void dropConnection() override {
+  void dropConnection() override {
     dropConnection(SSLErrorEnum::NO_ERROR);
   }
 
@@ -88,33 +110,27 @@ class AcceptorHandshakeManager : public ManagedConnection,
     helper_->dropConnection(reason);
   }
 
-  virtual void dumpConnectionState(uint8_t loglevel) override {}
+  void dumpConnectionState(uint8_t /* loglevel */) override {}
 
  protected:
-  virtual void connectionReady(
+  void connectionReady(
       folly::AsyncTransportWrapper::UniquePtr transport,
       std::string nextProtocol,
-      SecureTransportType secureTransportType) noexcept override {
-    acceptor_->getConnectionManager()->removeConnection(this);
-    // We pass TransportInfo by reference even though we're about to destroy it,
-    // so lets hope that anything saving it makes a copy!
-    acceptor_->sslConnectionReady(
-        std::move(transport),
-        std::move(clientAddr_),
-        std::move(nextProtocol),
-        secureTransportType,
-        tinfo_);
-    destroy();
-  }
+      SecureTransportType secureTransportType,
+      folly::Optional<SSLErrorEnum>
+          details) noexcept override;
 
-  virtual void connectionError(
-      folly::exception_wrapper ex) noexcept override {
-    acceptor_->getConnectionManager()->removeConnection(this);
-    acceptor_->sslConnectionError(std::move(ex));
-    destroy();
-  }
+  void connectionError(
+      folly::AsyncTransportWrapper* transport,
+      folly::exception_wrapper ex,
+      folly::Optional<SSLErrorEnum>
+          details) noexcept override;
+
+  std::chrono::milliseconds timeSinceAcceptMs() const;
 
   virtual void startHelper(folly::AsyncSSLSocket::UniquePtr sock) = 0;
+
+  void startHandshakeTimeout();
 
   Acceptor* acceptor_;
   folly::SocketAddress clientAddr_;

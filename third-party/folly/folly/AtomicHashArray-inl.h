@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2012-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,18 +20,24 @@
 
 #include <type_traits>
 
-#include <folly/Bits.h>
 #include <folly/detail/AtomicHashUtils.h>
+#include <folly/lang/Bits.h>
 
 namespace folly {
 
 // AtomicHashArray private constructor --
-template <class KeyT, class ValueT, class HashFcn, class EqualFcn,
-          class Allocator, class ProbeFcn, class KeyConvertFcn>
+template <
+    class KeyT,
+    class ValueT,
+    class HashFcn,
+    class EqualFcn,
+    class Allocator,
+    class ProbeFcn,
+    class KeyConvertFcn>
 AtomicHashArray<KeyT, ValueT, HashFcn, EqualFcn,
                 Allocator, ProbeFcn, KeyConvertFcn>::
 AtomicHashArray(size_t capacity, KeyT emptyKey, KeyT lockedKey,
-                KeyT erasedKey, double _maxLoadFactor, size_t cacheSize)
+                KeyT erasedKey, double _maxLoadFactor, uint32_t cacheSize)
     : capacity_(capacity),
       maxEntries_(size_t(_maxLoadFactor * capacity_ + 0.5)),
       kEmptyKey_(emptyKey), kLockedKey_(lockedKey), kErasedKey_(erasedKey),
@@ -46,8 +52,14 @@ AtomicHashArray(size_t capacity, KeyT emptyKey, KeyT lockedKey,
  *   of key and returns true, or if key does not exist returns false and
  *   ret.index is set to capacity_.
  */
-template <class KeyT, class ValueT, class HashFcn, class EqualFcn,
-          class Allocator, class ProbeFcn, class KeyConvertFcn>
+template <
+    class KeyT,
+    class ValueT,
+    class HashFcn,
+    class EqualFcn,
+    class Allocator,
+    class ProbeFcn,
+    class KeyConvertFcn>
 template <class LookupKeyT, class LookupHashFcn, class LookupEqualFcn>
 typename AtomicHashArray<KeyT, ValueT, HashFcn, EqualFcn,
                          Allocator, ProbeFcn, KeyConvertFcn>::SimpleRetT
@@ -88,13 +100,20 @@ findInternal(const LookupKeyT key_in) {
  *   this will be the previously inserted value, and if the map is full it is
  *   default.
  */
-template <class KeyT, class ValueT, class HashFcn, class EqualFcn,
-          class Allocator, class ProbeFcn, class KeyConvertFcn>
-template <typename LookupKeyT,
-          typename LookupHashFcn,
-          typename LookupEqualFcn,
-          typename LookupKeyToKeyFcn,
-          typename... ArgTs>
+template <
+    class KeyT,
+    class ValueT,
+    class HashFcn,
+    class EqualFcn,
+    class Allocator,
+    class ProbeFcn,
+    class KeyConvertFcn>
+template <
+    typename LookupKeyT,
+    typename LookupHashFcn,
+    typename LookupEqualFcn,
+    typename LookupKeyToKeyFcn,
+    typename... ArgTs>
 typename AtomicHashArray<KeyT, ValueT, HashFcn, EqualFcn,
                          Allocator, ProbeFcn, KeyConvertFcn>::SimpleRetT
 AtomicHashArray<KeyT, ValueT, HashFcn, EqualFcn,
@@ -152,7 +171,11 @@ insertInternal(LookupKeyT key_in, ArgTs&&... vCtorArgs) {
               checkLegalKeyIfKey(key_new);
             }
             DCHECK(relaxedLoadKey(*cell) == kLockedKey_);
-            new (&cell->second) ValueT(std::forward<ArgTs>(vCtorArgs)...);
+            // A const mapped_type is only constant once constructed, so cast
+            // away any const for the placement new here.
+            using mapped = typename std::remove_const<mapped_type>::type;
+            new (const_cast<mapped*>(&cell->second))
+                ValueT(std::forward<ArgTs>(vCtorArgs)...);
             unlockCell(cell, key_new); // Sets the new key
           } catch (...) {
             // Transition back to empty key---requires handling
@@ -218,8 +241,14 @@ insertInternal(LookupKeyT key_in, ArgTs&&... vCtorArgs) {
  *   erased key will never be reused. If there's an associated value, we won't
  *   touch it either.
  */
-template <class KeyT, class ValueT, class HashFcn, class EqualFcn,
-          class Allocator, class ProbeFcn, class KeyConvertFcn>
+template <
+    class KeyT,
+    class ValueT,
+    class HashFcn,
+    class EqualFcn,
+    class Allocator,
+    class ProbeFcn,
+    class KeyConvertFcn>
 size_t AtomicHashArray<KeyT, ValueT, HashFcn, EqualFcn,
                        Allocator, ProbeFcn, KeyConvertFcn>::
 erase(KeyT key_in) {
@@ -267,8 +296,14 @@ erase(KeyT key_in) {
   }
 }
 
-template <class KeyT, class ValueT, class HashFcn, class EqualFcn,
-         class Allocator, class ProbeFcn, class KeyConvertFcn>
+template <
+    class KeyT,
+    class ValueT,
+    class HashFcn,
+    class EqualFcn,
+    class Allocator,
+    class ProbeFcn,
+    class KeyConvertFcn>
 typename AtomicHashArray<KeyT, ValueT, HashFcn, EqualFcn,
                          Allocator, ProbeFcn, KeyConvertFcn>::SmartPtr
 AtomicHashArray<KeyT, ValueT, HashFcn, EqualFcn,
@@ -310,8 +345,14 @@ create(size_t maxSize, const Config& c) {
   return map;
 }
 
-template <class KeyT, class ValueT, class HashFcn, class EqualFcn,
-          class Allocator, class ProbeFcn, class KeyConvertFcn>
+template <
+    class KeyT,
+    class ValueT,
+    class HashFcn,
+    class EqualFcn,
+    class Allocator,
+    class ProbeFcn,
+    class KeyConvertFcn>
 void AtomicHashArray<KeyT, ValueT, HashFcn, EqualFcn,
                      Allocator, ProbeFcn, KeyConvertFcn>::
 destroy(AtomicHashArray* p) {
@@ -330,8 +371,14 @@ destroy(AtomicHashArray* p) {
 }
 
 // clear -- clears all keys and values in the map and resets all counters
-template <class KeyT, class ValueT, class HashFcn, class EqualFcn,
-          class Allocator, class ProbeFcn, class KeyConvertFcn>
+template <
+    class KeyT,
+    class ValueT,
+    class HashFcn,
+    class EqualFcn,
+    class Allocator,
+    class ProbeFcn,
+    class KeyConvertFcn>
 void AtomicHashArray<KeyT, ValueT, HashFcn, EqualFcn,
                      Allocator, ProbeFcn, KeyConvertFcn>::
 clear() {
@@ -351,8 +398,14 @@ clear() {
 
 // Iterator implementation
 
-template <class KeyT, class ValueT, class HashFcn, class EqualFcn,
-          class Allocator, class ProbeFcn, class KeyConvertFcn>
+template <
+    class KeyT,
+    class ValueT,
+    class HashFcn,
+    class EqualFcn,
+    class Allocator,
+    class ProbeFcn,
+    class KeyConvertFcn>
 template <class ContT, class IterVal>
 struct AtomicHashArray<KeyT, ValueT, HashFcn, EqualFcn,
                        Allocator, ProbeFcn, KeyConvertFcn>::
@@ -361,18 +414,17 @@ struct AtomicHashArray<KeyT, ValueT, HashFcn, EqualFcn,
                              IterVal,
                              boost::forward_traversal_tag>
 {
-  explicit aha_iterator() : aha_(0) {}
+  explicit aha_iterator() : aha_(nullptr) {}
 
   // Conversion ctor for interoperability between const_iterator and
   // iterator.  The enable_if<> magic keeps us well-behaved for
   // is_convertible<> (v. the iterator_facade documentation).
-  template<class OtherContT, class OtherVal>
-  aha_iterator(const aha_iterator<OtherContT,OtherVal>& o,
-               typename std::enable_if<
-               std::is_convertible<OtherVal*,IterVal*>::value >::type* = 0)
-      : aha_(o.aha_)
-      , offset_(o.offset_)
-  {}
+  template <class OtherContT, class OtherVal>
+  aha_iterator(
+      const aha_iterator<OtherContT, OtherVal>& o,
+      typename std::enable_if<
+          std::is_convertible<OtherVal*, IterVal*>::value>::type* = nullptr)
+      : aha_(o.aha_), offset_(o.offset_) {}
 
   explicit aha_iterator(ContT* array, size_t offset)
       : aha_(array)

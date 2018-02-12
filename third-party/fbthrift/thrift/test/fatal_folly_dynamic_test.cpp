@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2016-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,19 +15,16 @@
  */
 
 #include <thrift/lib/cpp2/fatal/folly_dynamic.h>
+#include <thrift/lib/cpp2/fatal/helpers.h>
+#include <thrift/lib/cpp2/fatal/internal/test_helpers.h>
 
 #include <thrift/lib/cpp2/fatal/debug.h>
 #include <thrift/lib/cpp2/fatal/pretty_print.h>
-#include <thrift/test/gen-cpp2/compat_fatal_enum.h>
-#include <thrift/test/gen-cpp2/compat_fatal_struct.h>
-#include <thrift/test/gen-cpp2/compat_fatal_union.h>
-#include <thrift/test/gen-cpp2/global_fatal_enum.h>
-#include <thrift/test/gen-cpp2/global_fatal_struct.h>
-#include <thrift/test/gen-cpp2/global_fatal_union.h>
-#include <thrift/test/gen-cpp2/reflection_fatal_enum.h>
-#include <thrift/test/gen-cpp2/reflection_fatal_struct.h>
-#include <thrift/test/gen-cpp2/reflection_fatal_union.h>
+#include <thrift/test/gen-cpp2/compat_fatal_types.h>
+#include <thrift/test/gen-cpp2/global_fatal_types.h>
+#include <thrift/test/gen-cpp2/reflection_fatal_types.h>
 
+#include <folly/String.h>
 #include <folly/json.h>
 
 #include <glog/logging.h>
@@ -209,44 +206,16 @@ void test_to_from(T const &pod, folly::dynamic const &json) {
 }
 
 template <typename T>
-void test_compat(T const &pod, folly::dynamic const &json) {
+void test_compat(T const &pod) {
   std::ostringstream log;
   try {
     log.str("to_dynamic(JSON_1)/readFromJson:\n");
-    T decoded;
     auto const prettyJson = folly::toPrettyJson(
       apache::thrift::to_dynamic(
         pod, apache::thrift::dynamic_format::JSON_1
       )
     );
-    decoded.readFromJson(prettyJson.data(), prettyJson.size());
-    if (pod != decoded) {
-      log << "to: " << prettyJson << std::endl;
-      apache::thrift::pretty_print(log << "readFromJson: ", decoded);
-      log << std::endl;
-      apache::thrift::pretty_print(log << "expected: ", pod);
-      log << std::endl;
-      LOG(ERROR) << log.str();
-    }
-    EXPECT_TRUE(
-      debug_equals(
-        pod,
-        decoded,
-        apache::thrift::make_debug_output_callback(LOG(ERROR))
-      )
-    );
-  } catch (std::exception const &e) {
-    LOG(ERROR) << log.str();
-    throw;
-  }
-  try {
-    log.str("to_dynamic(JSON_1,LENIENT)/readFromJson:\n");
     T decoded;
-    auto const prettyJson = folly::toPrettyJson(
-      apache::thrift::to_dynamic(
-        pod, apache::thrift::dynamic_format::JSON_1
-      )
-    );
     decoded.readFromJson(prettyJson.data(), prettyJson.size());
     if (pod != decoded) {
       log << "to: " << prettyJson << std::endl;
@@ -276,7 +245,7 @@ template <
   typename Enum1,
   typename Enum2
 >
-std::pair<Struct3, char const *> test_data_1() {
+std::pair<Struct3, std::string> test_data_1() {
   StructA a1;
   a1.__isset.a = true;
   a1.a = 99;
@@ -380,57 +349,58 @@ std::pair<Struct3, char const *> test_data_1() {
   pod.__isset.fieldR = true;
   pod.fieldR = {};
 
-  auto const json = "{\
-    \"fieldA\": 141,\
-    \"fieldB\": \"this is a test\",\
-    \"fieldC\": \"field0\",\
-    \"fieldD\": \"field1_2\",\
-    \"fieldE\": {\
-        \"ud\": 5.6\
-    },\
-    \"fieldF\": {\
-        \"us_2\": \"this is a variant\"\
-    },\
-    \"fieldG\": {\
-        \"field0\": 98,\
-        \"field1\": \"hello, world\",\
-        \"field2\": \"field2\",\
-        \"field3\": \"field0_2\",\
-        \"field4\": {\
-            \"ui\": 19937\
-        },\
-        \"field5\": {\
-            \"ue_2\": \"field1\"\
-        }\
-    },\
-    \"fieldH\": {},\
-    \"fieldI\": [3, 5, 7, 9],\
-    \"fieldJ\": [\"a\", \"b\", \"c\", \"d\"],\
-    \"fieldK\": [],\
-    \"fieldL\": [\
-      { \"a\": 99, \"b\": \"abc\" },\
-      { \"a\": 1001, \"b\": \"foo\" },\
-      { \"a\": 654, \"b\": \"bar\" },\
-      { \"a\": 9791, \"b\": \"baz\" },\
-      { \"a\": 111, \"b\": \"gaz\" }\
-    ],\
-    \"fieldM\": [2, 4, 6, 8],\
-    \"fieldN\": [\"w\", \"x\", \"y\", \"z\"],\
-    \"fieldO\": [],\
-    \"fieldP\": [\
-      { \"c\": 1.23, \"d\": true },\
-      { \"c\": 9.8, \"d\": false },\
-      { \"c\": 10.01, \"d\": true },\
-      { \"c\": 159.73, \"d\": false },\
-      { \"c\": 468.02, \"d\": true }\
-    ],\
-    \"fieldQ\": {\
-      \"a1\": { \"a\": 99, \"b\": \"abc\" },\
-      \"a2\": { \"a\": 1001, \"b\": \"foo\" },\
-      \"a3\": { \"a\": 654, \"b\": \"bar\" }\
-    },\
-    \"fieldR\": {}\
-  }";
+  auto const json = folly::stripLeftMargin(R"({
+    "fieldA": 141,
+    "fieldB": "this is a test",
+    "fieldC": "field0",
+    "fieldD": "field1_2",
+    "fieldE": {
+        "ud": 5.6
+    },
+    "fieldF": {
+        "us_2": "this is a variant"
+    },
+    "fieldG": {
+        "field0": 98,
+        "field1": "hello, world",
+        "field2": "field2",
+        "field3": "field0_2",
+        "field4": {
+            "ui": 19937
+        },
+        "field5": {
+            "ue_2": "field1"
+        }
+    },
+    "fieldH": {},
+    "fieldI": [3, 5, 7, 9],
+    "fieldJ": ["a", "b", "c", "d"],
+    "fieldK": [],
+    "fieldL": [
+      { "a": 99, "b": "abc" },
+      { "a": 1001, "b": "foo" },
+      { "a": 654, "b": "bar" },
+      { "a": 9791, "b": "baz" },
+      { "a": 111, "b": "gaz" }
+    ],
+    "fieldM": [2, 4, 6, 8],
+    "fieldN": ["w", "x", "y", "z"],
+    "fieldO": [],
+    "fieldP": [
+      { "c": 1.23, "d": true },
+      { "c": 9.8, "d": false },
+      { "c": 10.01, "d": true },
+      { "c": 159.73, "d": false },
+      { "c": 468.02, "d": true }
+    ],
+    "fieldQ": {
+      "a1": { "a": 99, "b": "abc" },
+      "a2": { "a": 1001, "b": "foo" },
+      "a3": { "a": 654, "b": "bar" }
+    },
+    "fieldR": {},
+    "fieldS": {}
+  })");
 
   return std::make_pair(pod, json);
 }
@@ -460,9 +430,9 @@ TEST(fatal_folly_dynamic, booleans) {
   expected.c = 1.3;
   expected.d = true;
 
-  EXPECT_EQ(expected, decode("{ \"c\": 1.3, \"d\": 1}"));
-  EXPECT_EQ(expected, decode("{ \"c\": 1.3, \"d\": 100}"));
-  EXPECT_EQ(expected, decode("{ \"c\": 1.3, \"d\": true}"));
+  EXPECT_EQ(expected, decode(R"({ "c": 1.3, "d": 1})"));
+  EXPECT_EQ(expected, decode(R"({ "c": 1.3, "d": 100})"));
+  EXPECT_EQ(expected, decode(R"({ "c": 1.3, "d": true})"));
 }
 
 TEST(fatal_folly_dynamic, to_from_dynamic_compat) {
@@ -477,7 +447,7 @@ TEST(fatal_folly_dynamic, to_from_dynamic_compat) {
   auto const json = folly::parseJson(data.second);
 
   test_to_from(pod, json);
-  test_compat(pod, json);
+  test_compat(pod);
 }
 
 TEST(fatal_folly_dynamic, to_from_dynamic_global) {
@@ -492,7 +462,28 @@ TEST(fatal_folly_dynamic, to_from_dynamic_global) {
   auto const json = folly::parseJson(data.second);
 
   test_to_from(pod, json);
-  test_compat(pod, json);
+  test_compat(pod);
+}
+
+TEST(fatal_folly_dynamic, to_from_dynamic_binary) {
+  folly::dynamic actl = folly::dynamic::object;
+  folly::dynamic expt = folly::dynamic::object;
+
+  // to
+  test_cpp2::cpp_reflection::struct_binary a;
+  a.bi = "123abc";
+
+  actl = to_dynamic(a, dynamic_format::PORTABLE);
+  expt = folly::dynamic::object
+      ("bi", "123abc");
+
+  EXPECT_EQ(expt, actl);
+
+  // from
+  auto obj = from_dynamic<test_cpp2::cpp_reflection::struct_binary>(
+      folly::dynamic::object("bi", "123abc"),
+      apache::thrift::dynamic_format::PORTABLE);
+  EXPECT_EQ("123abc", obj.bi);
 }
 
 }} // apache::thrift
@@ -509,4 +500,137 @@ TEST(fatal_folly_dynamic, optional_string) {
       apache::thrift::dynamic_format::PORTABLE);
   EXPECT_TRUE(obj.__isset.field1);
   EXPECT_EQ("asdf", obj.field1);
+}
+
+TEST(fatal_folly_dynamic, list_from_empty_object) {
+  // some dynamic languages (lua, php) conflate empty array and empty object;
+  // check that we do not throw in such cases
+  using type = global_structC;
+  using member_name = fatal::sequence<char, 'j', '3'>;
+  using member_meta =
+      apache::thrift::get_struct_member_by_name<type, member_name>;
+  EXPECT_SAME< // sanity check
+      member_meta::type_class,
+      apache::thrift::type_class::list<
+        apache::thrift::type_class::structure>>();
+  auto obj = apache::thrift::from_dynamic<type>(
+      folly::dynamic::object(
+        fatal::z_data<member_name>(), folly::dynamic::object),
+      apache::thrift::dynamic_format::PORTABLE);
+  EXPECT_TRUE(member_meta::is_set(obj));
+  EXPECT_EQ(0, member_meta::getter::ref(obj).size());
+}
+
+TEST(fatal_folly_dynamic, set_from_empty_object) {
+  // some dynamic languages (lua, php) conflate empty array and empty object;
+  // check that we do not throw in such cases
+  using type = global_structC;
+  using member_name = fatal::sequence<char, 'k', '3'>;
+  using member_meta =
+      apache::thrift::get_struct_member_by_name<type, member_name>;
+  EXPECT_SAME< // sanity check
+      member_meta::type_class,
+      apache::thrift::type_class::set<
+        apache::thrift::type_class::structure>>();
+  auto obj = apache::thrift::from_dynamic<type>(
+      folly::dynamic::object(
+        fatal::z_data<member_name>(), folly::dynamic::object),
+      apache::thrift::dynamic_format::PORTABLE);
+  EXPECT_TRUE(member_meta::is_set(obj));
+  EXPECT_EQ(0, member_meta::getter::ref(obj).size());
+}
+
+TEST(fatal_folly_dynamic, map_from_empty_array) {
+  // some dynamic languages (lua, php) conflate empty array and empty object;
+  // check that we do not throw in such cases
+  using type = global_structC;
+  using member_name = fatal::sequence<char, 'l', '3'>;
+  using member_meta =
+      apache::thrift::get_struct_member_by_name<type, member_name>;
+  EXPECT_SAME< // sanity check
+      member_meta::type_class,
+      apache::thrift::type_class::map<
+        apache::thrift::type_class::integral,
+        apache::thrift::type_class::structure>>();
+  auto obj = apache::thrift::from_dynamic<type>(
+      folly::dynamic::object(
+        fatal::z_data<member_name>(), folly::dynamic::array),
+      apache::thrift::dynamic_format::PORTABLE);
+  EXPECT_TRUE(member_meta::is_set(obj));
+  EXPECT_EQ(0, member_meta::getter::ref(obj).size());
+}
+
+namespace {
+
+class fatal_folly_dynamic_enum : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    EXPECT_SAME< // sanity check
+        member_meta::type_class,
+        apache::thrift::type_class::enumeration>();
+  }
+
+  using type = global_structC;
+  using member_name = fatal::sequence<char, 'e'>;
+  using member_meta =
+      apache::thrift::get_struct_member_by_name<type, member_name>;
+
+  std::string member_name_s = fatal::to_instance<std::string, member_name>();
+};
+}
+
+TEST_F(fatal_folly_dynamic_enum, from_string_strict) {
+  folly::dynamic dyn = folly::dynamic::object(member_name_s, "field0");
+  auto obj = apache::thrift::from_dynamic<type>(
+      dyn, apache::thrift::dynamic_format::PORTABLE);
+  EXPECT_TRUE(member_meta::is_set(obj));
+  EXPECT_EQ(global_enum1::field0, member_meta::getter::ref(obj));
+  EXPECT_THROW(
+      apache::thrift::from_dynamic<type>(
+          dyn, apache::thrift::dynamic_format::JSON_1),
+      folly::ConversionError);
+}
+
+TEST_F(fatal_folly_dynamic_enum, from_integer_strict) {
+  folly::dynamic dyn = folly::dynamic::object(member_name_s, 0);
+  auto obj = apache::thrift::from_dynamic<type>(
+      dyn, apache::thrift::dynamic_format::JSON_1);
+  EXPECT_TRUE(member_meta::is_set(obj));
+  EXPECT_EQ(global_enum1::field0, member_meta::getter::ref(obj));
+  EXPECT_THROW(
+      apache::thrift::from_dynamic<type>(
+          dyn, apache::thrift::dynamic_format::PORTABLE),
+      std::invalid_argument);
+}
+
+TEST_F(fatal_folly_dynamic_enum, from_string_lenient) {
+  folly::dynamic dyn = folly::dynamic::object(member_name_s, "field0");
+  auto obj1 = apache::thrift::from_dynamic<type>(
+      dyn,
+      apache::thrift::dynamic_format::PORTABLE,
+      apache::thrift::format_adherence::LENIENT);
+  EXPECT_TRUE(member_meta::is_set(obj1));
+  EXPECT_EQ(global_enum1::field0, member_meta::getter::ref(obj1));
+  auto obj2 = apache::thrift::from_dynamic<type>(
+      dyn,
+      apache::thrift::dynamic_format::JSON_1,
+      apache::thrift::format_adherence::LENIENT);
+  EXPECT_TRUE(member_meta::is_set(obj2));
+  EXPECT_EQ(global_enum1::field0, member_meta::getter::ref(obj2));
+}
+
+TEST_F(fatal_folly_dynamic_enum, from_integer_lenient) {
+  folly::dynamic dyn = folly::dynamic::object(member_name_s, 0);
+  auto obj1 = apache::thrift::from_dynamic<type>(
+      dyn,
+      apache::thrift::dynamic_format::PORTABLE,
+      apache::thrift::format_adherence::LENIENT);
+  EXPECT_TRUE(member_meta::is_set(obj1));
+  EXPECT_EQ(global_enum1::field0, member_meta::getter::ref(obj1));
+  auto obj2 = apache::thrift::from_dynamic<type>(
+      dyn,
+      apache::thrift::dynamic_format::JSON_1,
+      apache::thrift::format_adherence::LENIENT);
+  EXPECT_TRUE(member_meta::is_set(obj2));
+  EXPECT_EQ(global_enum1::field0, member_meta::getter::ref(obj2));
 }

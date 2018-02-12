@@ -25,10 +25,6 @@ import (
 	"testing"
 )
 
-type ProtocolFactory interface {
-	GetProtocol(t TTransport) TProtocol
-}
-
 func compareStructs(m, m1 MyTestStruct) (bool, error) {
 	switch {
 	case m.On != m1.On:
@@ -74,11 +70,11 @@ func compareStructs(m, m1 MyTestStruct) (bool, error) {
 }
 
 func ProtocolTest1(test *testing.T, pf ProtocolFactory) (bool, error) {
-	t := NewTSerializer()
+	t := NewSerializer()
 	t.Protocol = pf.GetProtocol(t.Transport)
 	var m = MyTestStruct{}
 	m.On = true
-	m.B = int8(0)
+	m.B = byte(0)
 	m.Int16 = 1
 	m.Int32 = 2
 	m.Int64 = 3
@@ -87,7 +83,7 @@ func ProtocolTest1(test *testing.T, pf ProtocolFactory) (bool, error) {
 	m.Bin = make([]byte, 10)
 	m.StringMap = make(map[string]string, 5)
 	m.StringList = make([]string, 5)
-	m.StringSet = make(map[string]struct{}, 5)
+	m.StringSet = make(map[string]bool, 5)
 	m.E = 2
 
 	s, err := t.WriteString(&m)
@@ -95,7 +91,7 @@ func ProtocolTest1(test *testing.T, pf ProtocolFactory) (bool, error) {
 		return false, errors.New(fmt.Sprintf("Unable to Serialize struct\n\t %s", err))
 	}
 
-	t1 := NewTDeserializer()
+	t1 := NewDeserializer()
 	t1.Protocol = pf.GetProtocol(t1.Transport)
 	var m1 = MyTestStruct{}
 	if err = t1.ReadString(&m1, s); err != nil {
@@ -108,11 +104,11 @@ func ProtocolTest1(test *testing.T, pf ProtocolFactory) (bool, error) {
 }
 
 func ProtocolTest2(test *testing.T, pf ProtocolFactory) (bool, error) {
-	t := NewTSerializer()
+	t := NewSerializer()
 	t.Protocol = pf.GetProtocol(t.Transport)
 	var m = MyTestStruct{}
 	m.On = false
-	m.B = int8(0)
+	m.B = byte(0)
 	m.Int16 = 1
 	m.Int32 = 2
 	m.Int64 = 3
@@ -121,7 +117,7 @@ func ProtocolTest2(test *testing.T, pf ProtocolFactory) (bool, error) {
 	m.Bin = make([]byte, 10)
 	m.StringMap = make(map[string]string, 5)
 	m.StringList = make([]string, 5)
-	m.StringSet = make(map[string]struct{}, 5)
+	m.StringSet = make(map[string]bool, 5)
 	m.E = 2
 
 	s, err := t.WriteString(&m)
@@ -130,7 +126,7 @@ func ProtocolTest2(test *testing.T, pf ProtocolFactory) (bool, error) {
 
 	}
 
-	t1 := NewTDeserializer()
+	t1 := NewDeserializer()
 	t1.Protocol = pf.GetProtocol(t1.Transport)
 	var m1 = MyTestStruct{}
 	if err = t1.ReadString(&m1, s); err != nil {
@@ -146,10 +142,10 @@ func TestSerializer(t *testing.T) {
 
 	var protocol_factories map[string]ProtocolFactory
 	protocol_factories = make(map[string]ProtocolFactory)
-	protocol_factories["Binary"] = NewTBinaryProtocolFactoryDefault()
-	protocol_factories["Compact"] = NewTCompactProtocolFactory()
-	//protocol_factories["SimpleJSON"] = NewTSimpleJSONProtocolFactory() - write only, can't be read back by design
-	protocol_factories["JSON"] = NewTJSONProtocolFactory()
+	protocol_factories["Binary"] = NewBinaryProtocolFactoryDefault()
+	protocol_factories["Compact"] = NewCompactProtocolFactory()
+	//protocol_factories["SimpleJSON"] = NewSimpleJSONProtocolFactory() - write only, can't be read back by design
+	protocol_factories["JSON"] = NewJSONProtocolFactory()
 
 	var tests map[string]func(*testing.T, ProtocolFactory) (bool, error)
 	tests = make(map[string]func(*testing.T, ProtocolFactory) (bool, error))

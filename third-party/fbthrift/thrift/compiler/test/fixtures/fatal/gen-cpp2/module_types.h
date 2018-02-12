@@ -11,12 +11,45 @@
 #include <thrift/lib/cpp/TApplicationException.h>
 #include <folly/io/IOBuf.h>
 #include <folly/io/Cursor.h>
-#include <boost/operators.hpp>
 
+#include "reflection_dep_B_types.h"
+#include "reflection_dep_C_types.h"
+#include <thrift/lib/cpp2/GeneratedHeaderHelper.h>
 
+#include "thrift/test/fatal_custom_types.h"
 
 
 namespace test_cpp2 { namespace cpp_reflection {
+
+struct apache_thrift_indirection_module_HasANumber {
+  template <typename T> static auto&& get(T&& x) {
+    return std::forward<T>(x).number;
+  }
+
+  template <typename T> static auto&& get(T const&& x) {
+    return std::forward<T>(x).number;
+  }
+};
+
+struct apache_thrift_indirection_module_HasAPhrase {
+  template <typename T> static auto&& get(T&& x) {
+    return std::forward<T>(x).phrase;
+  }
+
+  template <typename T> static auto&& get(T const&& x) {
+    return std::forward<T>(x).phrase;
+  }
+};
+
+struct apache_thrift_indirection_module_HasAResult {
+  template <typename T> static auto&& get(T&& x) {
+    return std::forward<T>(x).foo().result();
+  }
+
+  template <typename T> static auto&& get(T const&& x) {
+    return std::forward<T>(x).foo().result();
+  }
+};
 
 class union1;
 class union2;
@@ -28,6 +61,14 @@ class structC;
 class struct1;
 class struct2;
 class struct3;
+class struct4;
+class struct5;
+class struct_binary;
+class dep_A_struct;
+class annotated;
+class union_with_special_names;
+class struct_with_special_names;
+class struct_with_indirections;
 
 enum class enum1 {
   field0 = 0,
@@ -35,8 +76,9 @@ enum class enum1 {
   field2 = 2
 };
 
-extern const std::map<enum1, const char*> _enum1_VALUES_TO_NAMES;
-extern const std::map<const char*, enum1, apache::thrift::ltstr> _enum1_NAMES_TO_VALUES;
+using _enum1_EnumMapFactory = apache::thrift::detail::TEnumMapFactory<enum1, enum1>;
+extern const _enum1_EnumMapFactory::ValuesToNamesMapType _enum1_VALUES_TO_NAMES;
+extern const _enum1_EnumMapFactory::NamesToValuesMapType _enum1_NAMES_TO_VALUES;
 
 }} // test_cpp2::cpp_reflection
 namespace std {
@@ -47,14 +89,18 @@ template<> struct equal_to<typename  ::test_cpp2::cpp_reflection::enum1> : publi
 } // std
 namespace apache { namespace thrift {
 
-template <> const char* TEnumTraitsBase< ::test_cpp2::cpp_reflection::enum1>::findName( ::test_cpp2::cpp_reflection::enum1 value);
-template <> bool TEnumTraitsBase< ::test_cpp2::cpp_reflection::enum1>::findValue(const char* name,  ::test_cpp2::cpp_reflection::enum1* outValue);
+template <> struct TEnumDataStorage< ::test_cpp2::cpp_reflection::enum1>;
+template <> const std::size_t TEnumTraits< ::test_cpp2::cpp_reflection::enum1>::size;
+template <> const folly::Range<const  ::test_cpp2::cpp_reflection::enum1*> TEnumTraits< ::test_cpp2::cpp_reflection::enum1>::values;
+template <> const folly::Range<const folly::StringPiece*> TEnumTraits< ::test_cpp2::cpp_reflection::enum1>::names;
+template <> const char* TEnumTraits< ::test_cpp2::cpp_reflection::enum1>::findName( ::test_cpp2::cpp_reflection::enum1 value);
+template <> bool TEnumTraits< ::test_cpp2::cpp_reflection::enum1>::findValue(const char* name,  ::test_cpp2::cpp_reflection::enum1* outValue);
 
-template <> constexpr  ::test_cpp2::cpp_reflection::enum1 TEnumTraits< ::test_cpp2::cpp_reflection::enum1>::min() {
+template <> inline constexpr  ::test_cpp2::cpp_reflection::enum1 TEnumTraits< ::test_cpp2::cpp_reflection::enum1>::min() {
   return  ::test_cpp2::cpp_reflection::enum1::field0;
 }
 
-template <> constexpr  ::test_cpp2::cpp_reflection::enum1 TEnumTraits< ::test_cpp2::cpp_reflection::enum1>::max() {
+template <> inline constexpr  ::test_cpp2::cpp_reflection::enum1 TEnumTraits< ::test_cpp2::cpp_reflection::enum1>::max() {
   return  ::test_cpp2::cpp_reflection::enum1::field2;
 }
 
@@ -67,8 +113,9 @@ enum class enum2 {
   field2_2 = 2
 };
 
-extern const std::map<enum2, const char*> _enum2_VALUES_TO_NAMES;
-extern const std::map<const char*, enum2, apache::thrift::ltstr> _enum2_NAMES_TO_VALUES;
+using _enum2_EnumMapFactory = apache::thrift::detail::TEnumMapFactory<enum2, enum2>;
+extern const _enum2_EnumMapFactory::ValuesToNamesMapType _enum2_VALUES_TO_NAMES;
+extern const _enum2_EnumMapFactory::NamesToValuesMapType _enum2_NAMES_TO_VALUES;
 
 }} // test_cpp2::cpp_reflection
 namespace std {
@@ -79,14 +126,18 @@ template<> struct equal_to<typename  ::test_cpp2::cpp_reflection::enum2> : publi
 } // std
 namespace apache { namespace thrift {
 
-template <> const char* TEnumTraitsBase< ::test_cpp2::cpp_reflection::enum2>::findName( ::test_cpp2::cpp_reflection::enum2 value);
-template <> bool TEnumTraitsBase< ::test_cpp2::cpp_reflection::enum2>::findValue(const char* name,  ::test_cpp2::cpp_reflection::enum2* outValue);
+template <> struct TEnumDataStorage< ::test_cpp2::cpp_reflection::enum2>;
+template <> const std::size_t TEnumTraits< ::test_cpp2::cpp_reflection::enum2>::size;
+template <> const folly::Range<const  ::test_cpp2::cpp_reflection::enum2*> TEnumTraits< ::test_cpp2::cpp_reflection::enum2>::values;
+template <> const folly::Range<const folly::StringPiece*> TEnumTraits< ::test_cpp2::cpp_reflection::enum2>::names;
+template <> const char* TEnumTraits< ::test_cpp2::cpp_reflection::enum2>::findName( ::test_cpp2::cpp_reflection::enum2 value);
+template <> bool TEnumTraits< ::test_cpp2::cpp_reflection::enum2>::findValue(const char* name,  ::test_cpp2::cpp_reflection::enum2* outValue);
 
-template <> constexpr  ::test_cpp2::cpp_reflection::enum2 TEnumTraits< ::test_cpp2::cpp_reflection::enum2>::min() {
+template <> inline constexpr  ::test_cpp2::cpp_reflection::enum2 TEnumTraits< ::test_cpp2::cpp_reflection::enum2>::min() {
   return  ::test_cpp2::cpp_reflection::enum2::field0_2;
 }
 
-template <> constexpr  ::test_cpp2::cpp_reflection::enum2 TEnumTraits< ::test_cpp2::cpp_reflection::enum2>::max() {
+template <> inline constexpr  ::test_cpp2::cpp_reflection::enum2 TEnumTraits< ::test_cpp2::cpp_reflection::enum2>::max() {
   return  ::test_cpp2::cpp_reflection::enum2::field2_2;
 }
 
@@ -99,8 +150,9 @@ enum class enum3 {
   field2_3 = 2
 };
 
-extern const std::map<enum3, const char*> _enum3_VALUES_TO_NAMES;
-extern const std::map<const char*, enum3, apache::thrift::ltstr> _enum3_NAMES_TO_VALUES;
+using _enum3_EnumMapFactory = apache::thrift::detail::TEnumMapFactory<enum3, enum3>;
+extern const _enum3_EnumMapFactory::ValuesToNamesMapType _enum3_VALUES_TO_NAMES;
+extern const _enum3_EnumMapFactory::NamesToValuesMapType _enum3_NAMES_TO_VALUES;
 
 }} // test_cpp2::cpp_reflection
 namespace std {
@@ -111,21 +163,97 @@ template<> struct equal_to<typename  ::test_cpp2::cpp_reflection::enum3> : publi
 } // std
 namespace apache { namespace thrift {
 
-template <> const char* TEnumTraitsBase< ::test_cpp2::cpp_reflection::enum3>::findName( ::test_cpp2::cpp_reflection::enum3 value);
-template <> bool TEnumTraitsBase< ::test_cpp2::cpp_reflection::enum3>::findValue(const char* name,  ::test_cpp2::cpp_reflection::enum3* outValue);
+template <> struct TEnumDataStorage< ::test_cpp2::cpp_reflection::enum3>;
+template <> const std::size_t TEnumTraits< ::test_cpp2::cpp_reflection::enum3>::size;
+template <> const folly::Range<const  ::test_cpp2::cpp_reflection::enum3*> TEnumTraits< ::test_cpp2::cpp_reflection::enum3>::values;
+template <> const folly::Range<const folly::StringPiece*> TEnumTraits< ::test_cpp2::cpp_reflection::enum3>::names;
+template <> const char* TEnumTraits< ::test_cpp2::cpp_reflection::enum3>::findName( ::test_cpp2::cpp_reflection::enum3 value);
+template <> bool TEnumTraits< ::test_cpp2::cpp_reflection::enum3>::findValue(const char* name,  ::test_cpp2::cpp_reflection::enum3* outValue);
 
-template <> constexpr  ::test_cpp2::cpp_reflection::enum3 TEnumTraits< ::test_cpp2::cpp_reflection::enum3>::min() {
+template <> inline constexpr  ::test_cpp2::cpp_reflection::enum3 TEnumTraits< ::test_cpp2::cpp_reflection::enum3>::min() {
   return  ::test_cpp2::cpp_reflection::enum3::field0_3;
 }
 
-template <> constexpr  ::test_cpp2::cpp_reflection::enum3 TEnumTraits< ::test_cpp2::cpp_reflection::enum3>::max() {
+template <> inline constexpr  ::test_cpp2::cpp_reflection::enum3 TEnumTraits< ::test_cpp2::cpp_reflection::enum3>::max() {
   return  ::test_cpp2::cpp_reflection::enum3::field2_3;
 }
 
 }} // apache::thrift
 namespace test_cpp2 { namespace cpp_reflection {
 
-class union1 : private boost::totally_ordered<union1> {
+enum class enum_with_special_names {
+  get = 0,
+  getter = 1,
+  lists = 2,
+  maps = 3,
+  name = 4,
+  name_to_value = 5,
+  names = 6,
+  prefix_tree = 7,
+  sets = 8,
+  setter = 9,
+  str = 10,
+  strings = 11,
+  type = 12,
+  value = 13,
+  value_to_name = 14,
+  values = 15,
+  id = 16,
+  ids = 17,
+  descriptor = 18,
+  descriptors = 19,
+  key = 20,
+  keys = 21,
+  annotation = 22,
+  annotations = 23,
+  member = 24,
+  members = 25,
+  field = 26,
+  fields = 27
+};
+
+using _enum_with_special_names_EnumMapFactory = apache::thrift::detail::TEnumMapFactory<enum_with_special_names, enum_with_special_names>;
+extern const _enum_with_special_names_EnumMapFactory::ValuesToNamesMapType _enum_with_special_names_VALUES_TO_NAMES;
+extern const _enum_with_special_names_EnumMapFactory::NamesToValuesMapType _enum_with_special_names_NAMES_TO_VALUES;
+
+}} // test_cpp2::cpp_reflection
+namespace std {
+
+template<> struct hash<typename  ::test_cpp2::cpp_reflection::enum_with_special_names> : public apache::thrift::detail::enum_hash<typename  ::test_cpp2::cpp_reflection::enum_with_special_names> {};
+template<> struct equal_to<typename  ::test_cpp2::cpp_reflection::enum_with_special_names> : public apache::thrift::detail::enum_equal_to<typename  ::test_cpp2::cpp_reflection::enum_with_special_names> {};
+
+} // std
+namespace apache { namespace thrift {
+
+template <> struct TEnumDataStorage< ::test_cpp2::cpp_reflection::enum_with_special_names>;
+template <> const std::size_t TEnumTraits< ::test_cpp2::cpp_reflection::enum_with_special_names>::size;
+template <> const folly::Range<const  ::test_cpp2::cpp_reflection::enum_with_special_names*> TEnumTraits< ::test_cpp2::cpp_reflection::enum_with_special_names>::values;
+template <> const folly::Range<const folly::StringPiece*> TEnumTraits< ::test_cpp2::cpp_reflection::enum_with_special_names>::names;
+template <> const char* TEnumTraits< ::test_cpp2::cpp_reflection::enum_with_special_names>::findName( ::test_cpp2::cpp_reflection::enum_with_special_names value);
+template <> bool TEnumTraits< ::test_cpp2::cpp_reflection::enum_with_special_names>::findValue(const char* name,  ::test_cpp2::cpp_reflection::enum_with_special_names* outValue);
+
+template <> inline constexpr  ::test_cpp2::cpp_reflection::enum_with_special_names TEnumTraits< ::test_cpp2::cpp_reflection::enum_with_special_names>::min() {
+  return  ::test_cpp2::cpp_reflection::enum_with_special_names::get;
+}
+
+template <> inline constexpr  ::test_cpp2::cpp_reflection::enum_with_special_names TEnumTraits< ::test_cpp2::cpp_reflection::enum_with_special_names>::max() {
+  return  ::test_cpp2::cpp_reflection::enum_with_special_names::fields;
+}
+
+}} // apache::thrift
+namespace test_cpp2 { namespace cpp_reflection {
+
+typedef test_cpp_reflection::custom_structA my_structA;
+
+typedef CppFakeI32 FakeI32;
+
+typedef CppHasANumber HasANumber;
+
+typedef CppHasAResult HasAResult;
+
+typedef CppHasAPhrase HasAPhrase;
+
+class union1 final : private apache::thrift::detail::st::ComparisonOperators<union1> {
  public:
   enum Type {
     __EMPTY__ = 0,
@@ -299,10 +427,9 @@ class union1 : private boost::totally_ordered<union1> {
   }
   void __clear();
 
-  virtual ~union1() throw() {
+  ~union1() {
     __clear();
   }
-
   union storage_type {
     int32_t ui;
     double ud;
@@ -320,27 +447,22 @@ class union1 : private boost::totally_ordered<union1> {
       case Type::ui:
       {
         return value_.ui < rhs.value_.ui;
-        break;
       }
       case Type::ud:
       {
         return value_.ud < rhs.value_.ud;
-        break;
       }
       case Type::us:
       {
         return value_.us < rhs.value_.us;
-        break;
       }
       case Type::ue:
       {
         return value_.ue < rhs.value_.ue;
-        break;
       }
       default:
       {
         return false;
-        break;
       }
     }
   }
@@ -452,9 +574,9 @@ class union1 : private boost::totally_ordered<union1> {
   template <class Protocol_>
   uint32_t read(Protocol_* iprot);
   template <class Protocol_>
-  uint32_t serializedSize(Protocol_* prot_) const;
+  uint32_t serializedSize(Protocol_ const* prot_) const;
   template <class Protocol_>
-  uint32_t serializedSizeZC(Protocol_* prot_) const;
+  uint32_t serializedSizeZC(Protocol_ const* prot_) const;
   template <class Protocol_>
   uint32_t write(Protocol_* prot_) const;
  protected:
@@ -465,9 +587,20 @@ class union1 : private boost::totally_ordered<union1> {
 
   Type type_;
   storage_type value_;
+
+ private:
+  static void translateFieldName(FOLLY_MAYBE_UNUSED folly::StringPiece _fname, FOLLY_MAYBE_UNUSED int16_t& fid, FOLLY_MAYBE_UNUSED apache::thrift::protocol::TType& _ftype);
 };
 
 void swap(union1& a, union1& b);
+extern template uint32_t union1::read<>(apache::thrift::BinaryProtocolReader*);
+extern template uint32_t union1::write<>(apache::thrift::BinaryProtocolWriter*) const;
+extern template uint32_t union1::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t union1::serializedSizeZC<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t union1::read<>(apache::thrift::CompactProtocolReader*);
+extern template uint32_t union1::write<>(apache::thrift::CompactProtocolWriter*) const;
+extern template uint32_t union1::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
+extern template uint32_t union1::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
 
 }} // test_cpp2::cpp_reflection
 namespace apache { namespace thrift {
@@ -480,26 +613,26 @@ template <> inline constexpr apache::thrift::protocol::TType Cpp2Ops< ::test_cpp
   return apache::thrift::protocol::T_STRUCT;
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union1>::write(Protocol* proto, const  ::test_cpp2::cpp_reflection::union1* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union1>::write(Protocol* proto,  ::test_cpp2::cpp_reflection::union1 const* obj) {
   return obj->write(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union1>::read(Protocol* proto,   ::test_cpp2::cpp_reflection::union1* obj) {
-  return obj->read(proto);
+template <> template <class Protocol> void Cpp2Ops< ::test_cpp2::cpp_reflection::union1>::read(Protocol* proto,  ::test_cpp2::cpp_reflection::union1* obj) {
+  obj->read(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union1>::serializedSize(Protocol* proto, const  ::test_cpp2::cpp_reflection::union1* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union1>::serializedSize(Protocol const* proto,  ::test_cpp2::cpp_reflection::union1 const* obj) {
   return obj->serializedSize(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union1>::serializedSizeZC(Protocol* proto, const  ::test_cpp2::cpp_reflection::union1* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union1>::serializedSizeZC(Protocol const* proto,  ::test_cpp2::cpp_reflection::union1 const* obj) {
   return obj->serializedSizeZC(proto);
 }
 
 }} // apache::thrift
 namespace test_cpp2 { namespace cpp_reflection {
 
-class union2 : private boost::totally_ordered<union2> {
+class union2 final : private apache::thrift::detail::st::ComparisonOperators<union2> {
  public:
   enum Type {
     __EMPTY__ = 0,
@@ -673,10 +806,9 @@ class union2 : private boost::totally_ordered<union2> {
   }
   void __clear();
 
-  virtual ~union2() throw() {
+  ~union2() {
     __clear();
   }
-
   union storage_type {
     int32_t ui_2;
     double ud_2;
@@ -694,27 +826,22 @@ class union2 : private boost::totally_ordered<union2> {
       case Type::ui_2:
       {
         return value_.ui_2 < rhs.value_.ui_2;
-        break;
       }
       case Type::ud_2:
       {
         return value_.ud_2 < rhs.value_.ud_2;
-        break;
       }
       case Type::us_2:
       {
         return value_.us_2 < rhs.value_.us_2;
-        break;
       }
       case Type::ue_2:
       {
         return value_.ue_2 < rhs.value_.ue_2;
-        break;
       }
       default:
       {
         return false;
-        break;
       }
     }
   }
@@ -826,9 +953,9 @@ class union2 : private boost::totally_ordered<union2> {
   template <class Protocol_>
   uint32_t read(Protocol_* iprot);
   template <class Protocol_>
-  uint32_t serializedSize(Protocol_* prot_) const;
+  uint32_t serializedSize(Protocol_ const* prot_) const;
   template <class Protocol_>
-  uint32_t serializedSizeZC(Protocol_* prot_) const;
+  uint32_t serializedSizeZC(Protocol_ const* prot_) const;
   template <class Protocol_>
   uint32_t write(Protocol_* prot_) const;
  protected:
@@ -839,9 +966,20 @@ class union2 : private boost::totally_ordered<union2> {
 
   Type type_;
   storage_type value_;
+
+ private:
+  static void translateFieldName(FOLLY_MAYBE_UNUSED folly::StringPiece _fname, FOLLY_MAYBE_UNUSED int16_t& fid, FOLLY_MAYBE_UNUSED apache::thrift::protocol::TType& _ftype);
 };
 
 void swap(union2& a, union2& b);
+extern template uint32_t union2::read<>(apache::thrift::BinaryProtocolReader*);
+extern template uint32_t union2::write<>(apache::thrift::BinaryProtocolWriter*) const;
+extern template uint32_t union2::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t union2::serializedSizeZC<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t union2::read<>(apache::thrift::CompactProtocolReader*);
+extern template uint32_t union2::write<>(apache::thrift::CompactProtocolWriter*) const;
+extern template uint32_t union2::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
+extern template uint32_t union2::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
 
 }} // test_cpp2::cpp_reflection
 namespace apache { namespace thrift {
@@ -854,26 +992,26 @@ template <> inline constexpr apache::thrift::protocol::TType Cpp2Ops< ::test_cpp
   return apache::thrift::protocol::T_STRUCT;
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union2>::write(Protocol* proto, const  ::test_cpp2::cpp_reflection::union2* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union2>::write(Protocol* proto,  ::test_cpp2::cpp_reflection::union2 const* obj) {
   return obj->write(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union2>::read(Protocol* proto,   ::test_cpp2::cpp_reflection::union2* obj) {
-  return obj->read(proto);
+template <> template <class Protocol> void Cpp2Ops< ::test_cpp2::cpp_reflection::union2>::read(Protocol* proto,  ::test_cpp2::cpp_reflection::union2* obj) {
+  obj->read(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union2>::serializedSize(Protocol* proto, const  ::test_cpp2::cpp_reflection::union2* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union2>::serializedSize(Protocol const* proto,  ::test_cpp2::cpp_reflection::union2 const* obj) {
   return obj->serializedSize(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union2>::serializedSizeZC(Protocol* proto, const  ::test_cpp2::cpp_reflection::union2* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union2>::serializedSizeZC(Protocol const* proto,  ::test_cpp2::cpp_reflection::union2 const* obj) {
   return obj->serializedSizeZC(proto);
 }
 
 }} // apache::thrift
 namespace test_cpp2 { namespace cpp_reflection {
 
-class union3 : private boost::totally_ordered<union3> {
+class union3 final : private apache::thrift::detail::st::ComparisonOperators<union3> {
  public:
   enum Type {
     __EMPTY__ = 0,
@@ -1047,10 +1185,9 @@ class union3 : private boost::totally_ordered<union3> {
   }
   void __clear();
 
-  virtual ~union3() throw() {
+  ~union3() {
     __clear();
   }
-
   union storage_type {
     int32_t ui_3;
     double ud_3;
@@ -1068,27 +1205,22 @@ class union3 : private boost::totally_ordered<union3> {
       case Type::ui_3:
       {
         return value_.ui_3 < rhs.value_.ui_3;
-        break;
       }
       case Type::ud_3:
       {
         return value_.ud_3 < rhs.value_.ud_3;
-        break;
       }
       case Type::us_3:
       {
         return value_.us_3 < rhs.value_.us_3;
-        break;
       }
       case Type::ue_3:
       {
         return value_.ue_3 < rhs.value_.ue_3;
-        break;
       }
       default:
       {
         return false;
-        break;
       }
     }
   }
@@ -1200,9 +1332,9 @@ class union3 : private boost::totally_ordered<union3> {
   template <class Protocol_>
   uint32_t read(Protocol_* iprot);
   template <class Protocol_>
-  uint32_t serializedSize(Protocol_* prot_) const;
+  uint32_t serializedSize(Protocol_ const* prot_) const;
   template <class Protocol_>
-  uint32_t serializedSizeZC(Protocol_* prot_) const;
+  uint32_t serializedSizeZC(Protocol_ const* prot_) const;
   template <class Protocol_>
   uint32_t write(Protocol_* prot_) const;
  protected:
@@ -1213,9 +1345,20 @@ class union3 : private boost::totally_ordered<union3> {
 
   Type type_;
   storage_type value_;
+
+ private:
+  static void translateFieldName(FOLLY_MAYBE_UNUSED folly::StringPiece _fname, FOLLY_MAYBE_UNUSED int16_t& fid, FOLLY_MAYBE_UNUSED apache::thrift::protocol::TType& _ftype);
 };
 
 void swap(union3& a, union3& b);
+extern template uint32_t union3::read<>(apache::thrift::BinaryProtocolReader*);
+extern template uint32_t union3::write<>(apache::thrift::BinaryProtocolWriter*) const;
+extern template uint32_t union3::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t union3::serializedSizeZC<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t union3::read<>(apache::thrift::CompactProtocolReader*);
+extern template uint32_t union3::write<>(apache::thrift::CompactProtocolWriter*) const;
+extern template uint32_t union3::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
+extern template uint32_t union3::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
 
 }} // test_cpp2::cpp_reflection
 namespace apache { namespace thrift {
@@ -1228,38 +1371,32 @@ template <> inline constexpr apache::thrift::protocol::TType Cpp2Ops< ::test_cpp
   return apache::thrift::protocol::T_STRUCT;
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union3>::write(Protocol* proto, const  ::test_cpp2::cpp_reflection::union3* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union3>::write(Protocol* proto,  ::test_cpp2::cpp_reflection::union3 const* obj) {
   return obj->write(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union3>::read(Protocol* proto,   ::test_cpp2::cpp_reflection::union3* obj) {
-  return obj->read(proto);
+template <> template <class Protocol> void Cpp2Ops< ::test_cpp2::cpp_reflection::union3>::read(Protocol* proto,  ::test_cpp2::cpp_reflection::union3* obj) {
+  obj->read(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union3>::serializedSize(Protocol* proto, const  ::test_cpp2::cpp_reflection::union3* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union3>::serializedSize(Protocol const* proto,  ::test_cpp2::cpp_reflection::union3 const* obj) {
   return obj->serializedSize(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union3>::serializedSizeZC(Protocol* proto, const  ::test_cpp2::cpp_reflection::union3* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union3>::serializedSizeZC(Protocol const* proto,  ::test_cpp2::cpp_reflection::union3 const* obj) {
   return obj->serializedSizeZC(proto);
 }
 
 }} // apache::thrift
 namespace test_cpp2 { namespace cpp_reflection {
 
-class structA : private boost::totally_ordered<structA> {
+class structA final : private apache::thrift::detail::st::ComparisonOperators<structA> {
  public:
 
   structA() :
       a(0) {}
   // FragileConstructor for use in initialization lists only
-
-  structA(apache::thrift::FragileConstructor, int32_t a__arg, std::string b__arg) :
-      a(std::move(a__arg)),
-      b(std::move(b__arg)) {
-    __isset.a = true;
-    __isset.b = true;
-  }
+  structA(apache::thrift::FragileConstructor, int32_t a__arg, std::string b__arg);
   template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
   structA(::apache::thrift::detail::argument_wrapper<1, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
     structA(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
@@ -1283,21 +1420,14 @@ class structA : private boost::totally_ordered<structA> {
 
   structA& operator=(const structA&) = default;
   void __clear();
-
-  virtual ~structA() throw() {}
-
   int32_t a;
   std::string b;
 
   struct __isset {
-    void __clear() {
-      a = false;
-      b = false;
-    }
 
-    bool a = false;
-    bool b = false;
-  } __isset;
+    bool a;
+    bool b;
+  } __isset = {};
   bool operator==(const structA& rhs) const;
 
   bool operator < (const structA& rhs) const {
@@ -1307,6 +1437,7 @@ class structA : private boost::totally_ordered<structA> {
     if (!(b == rhs.b)) {
       return b < rhs.b;
     }
+    (void)rhs;
     return false;
   }
 
@@ -1338,14 +1469,25 @@ class structA : private boost::totally_ordered<structA> {
   template <class Protocol_>
   uint32_t read(Protocol_* iprot);
   template <class Protocol_>
-  uint32_t serializedSize(Protocol_* prot_) const;
+  uint32_t serializedSize(Protocol_ const* prot_) const;
   template <class Protocol_>
-  uint32_t serializedSizeZC(Protocol_* prot_) const;
+  uint32_t serializedSizeZC(Protocol_ const* prot_) const;
   template <class Protocol_>
   uint32_t write(Protocol_* prot_) const;
+
+ private:
+  static void translateFieldName(FOLLY_MAYBE_UNUSED folly::StringPiece _fname, FOLLY_MAYBE_UNUSED int16_t& fid, FOLLY_MAYBE_UNUSED apache::thrift::protocol::TType& _ftype);
 };
 
 void swap(structA& a, structA& b);
+extern template uint32_t structA::read<>(apache::thrift::BinaryProtocolReader*);
+extern template uint32_t structA::write<>(apache::thrift::BinaryProtocolWriter*) const;
+extern template uint32_t structA::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t structA::serializedSizeZC<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t structA::read<>(apache::thrift::CompactProtocolReader*);
+extern template uint32_t structA::write<>(apache::thrift::CompactProtocolWriter*) const;
+extern template uint32_t structA::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
+extern template uint32_t structA::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
 
 }} // test_cpp2::cpp_reflection
 namespace apache { namespace thrift {
@@ -1358,26 +1500,26 @@ template <> inline constexpr apache::thrift::protocol::TType Cpp2Ops< ::test_cpp
   return apache::thrift::protocol::T_STRUCT;
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structA>::write(Protocol* proto, const  ::test_cpp2::cpp_reflection::structA* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structA>::write(Protocol* proto,  ::test_cpp2::cpp_reflection::structA const* obj) {
   return obj->write(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structA>::read(Protocol* proto,   ::test_cpp2::cpp_reflection::structA* obj) {
-  return obj->read(proto);
+template <> template <class Protocol> void Cpp2Ops< ::test_cpp2::cpp_reflection::structA>::read(Protocol* proto,  ::test_cpp2::cpp_reflection::structA* obj) {
+  obj->read(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structA>::serializedSize(Protocol* proto, const  ::test_cpp2::cpp_reflection::structA* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structA>::serializedSize(Protocol const* proto,  ::test_cpp2::cpp_reflection::structA const* obj) {
   return obj->serializedSize(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structA>::serializedSizeZC(Protocol* proto, const  ::test_cpp2::cpp_reflection::structA* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structA>::serializedSizeZC(Protocol const* proto,  ::test_cpp2::cpp_reflection::structA const* obj) {
   return obj->serializedSizeZC(proto);
 }
 
 }} // apache::thrift
 namespace test_cpp2 { namespace cpp_reflection {
 
-class unionA : private boost::totally_ordered<unionA> {
+class unionA final : private apache::thrift::detail::st::ComparisonOperators<unionA> {
  public:
   enum Type {
     __EMPTY__ = 0,
@@ -1578,10 +1720,9 @@ class unionA : private boost::totally_ordered<unionA> {
   }
   void __clear();
 
-  virtual ~unionA() throw() {
+  ~unionA() {
     __clear();
   }
-
   union storage_type {
     int32_t i;
     double d;
@@ -1600,32 +1741,26 @@ class unionA : private boost::totally_ordered<unionA> {
       case Type::i:
       {
         return value_.i < rhs.value_.i;
-        break;
       }
       case Type::d:
       {
         return value_.d < rhs.value_.d;
-        break;
       }
       case Type::s:
       {
         return value_.s < rhs.value_.s;
-        break;
       }
       case Type::e:
       {
         return value_.e < rhs.value_.e;
-        break;
       }
       case Type::a:
       {
         return value_.a < rhs.value_.a;
-        break;
       }
       default:
       {
         return false;
-        break;
       }
     }
   }
@@ -1773,9 +1908,9 @@ class unionA : private boost::totally_ordered<unionA> {
   template <class Protocol_>
   uint32_t read(Protocol_* iprot);
   template <class Protocol_>
-  uint32_t serializedSize(Protocol_* prot_) const;
+  uint32_t serializedSize(Protocol_ const* prot_) const;
   template <class Protocol_>
-  uint32_t serializedSizeZC(Protocol_* prot_) const;
+  uint32_t serializedSizeZC(Protocol_ const* prot_) const;
   template <class Protocol_>
   uint32_t write(Protocol_* prot_) const;
  protected:
@@ -1786,9 +1921,20 @@ class unionA : private boost::totally_ordered<unionA> {
 
   Type type_;
   storage_type value_;
+
+ private:
+  static void translateFieldName(FOLLY_MAYBE_UNUSED folly::StringPiece _fname, FOLLY_MAYBE_UNUSED int16_t& fid, FOLLY_MAYBE_UNUSED apache::thrift::protocol::TType& _ftype);
 };
 
 void swap(unionA& a, unionA& b);
+extern template uint32_t unionA::read<>(apache::thrift::BinaryProtocolReader*);
+extern template uint32_t unionA::write<>(apache::thrift::BinaryProtocolWriter*) const;
+extern template uint32_t unionA::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t unionA::serializedSizeZC<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t unionA::read<>(apache::thrift::CompactProtocolReader*);
+extern template uint32_t unionA::write<>(apache::thrift::CompactProtocolWriter*) const;
+extern template uint32_t unionA::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
+extern template uint32_t unionA::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
 
 }} // test_cpp2::cpp_reflection
 namespace apache { namespace thrift {
@@ -1801,39 +1947,33 @@ template <> inline constexpr apache::thrift::protocol::TType Cpp2Ops< ::test_cpp
   return apache::thrift::protocol::T_STRUCT;
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::unionA>::write(Protocol* proto, const  ::test_cpp2::cpp_reflection::unionA* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::unionA>::write(Protocol* proto,  ::test_cpp2::cpp_reflection::unionA const* obj) {
   return obj->write(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::unionA>::read(Protocol* proto,   ::test_cpp2::cpp_reflection::unionA* obj) {
-  return obj->read(proto);
+template <> template <class Protocol> void Cpp2Ops< ::test_cpp2::cpp_reflection::unionA>::read(Protocol* proto,  ::test_cpp2::cpp_reflection::unionA* obj) {
+  obj->read(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::unionA>::serializedSize(Protocol* proto, const  ::test_cpp2::cpp_reflection::unionA* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::unionA>::serializedSize(Protocol const* proto,  ::test_cpp2::cpp_reflection::unionA const* obj) {
   return obj->serializedSize(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::unionA>::serializedSizeZC(Protocol* proto, const  ::test_cpp2::cpp_reflection::unionA* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::unionA>::serializedSizeZC(Protocol const* proto,  ::test_cpp2::cpp_reflection::unionA const* obj) {
   return obj->serializedSizeZC(proto);
 }
 
 }} // apache::thrift
 namespace test_cpp2 { namespace cpp_reflection {
 
-class structB : private boost::totally_ordered<structB> {
+class structB final : private apache::thrift::detail::st::ComparisonOperators<structB> {
  public:
 
   structB() :
       c(0),
       d(0) {}
   // FragileConstructor for use in initialization lists only
-
-  structB(apache::thrift::FragileConstructor, double c__arg, bool d__arg) :
-      c(std::move(c__arg)),
-      d(std::move(d__arg)) {
-    __isset.c = true;
-    __isset.d = true;
-  }
+  structB(apache::thrift::FragileConstructor, double c__arg, bool d__arg);
   template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
   structB(::apache::thrift::detail::argument_wrapper<1, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
     structB(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
@@ -1857,21 +1997,14 @@ class structB : private boost::totally_ordered<structB> {
 
   structB& operator=(const structB&) = default;
   void __clear();
-
-  virtual ~structB() throw() {}
-
   double c;
   bool d;
 
   struct __isset {
-    void __clear() {
-      c = false;
-      d = false;
-    }
 
-    bool c = false;
-    bool d = false;
-  } __isset;
+    bool c;
+    bool d;
+  } __isset = {};
   bool operator==(const structB& rhs) const;
 
   bool operator < (const structB& rhs) const {
@@ -1881,6 +2014,7 @@ class structB : private boost::totally_ordered<structB> {
     if (!(d == rhs.d)) {
       return d < rhs.d;
     }
+    (void)rhs;
     return false;
   }
 
@@ -1907,14 +2041,25 @@ class structB : private boost::totally_ordered<structB> {
   template <class Protocol_>
   uint32_t read(Protocol_* iprot);
   template <class Protocol_>
-  uint32_t serializedSize(Protocol_* prot_) const;
+  uint32_t serializedSize(Protocol_ const* prot_) const;
   template <class Protocol_>
-  uint32_t serializedSizeZC(Protocol_* prot_) const;
+  uint32_t serializedSizeZC(Protocol_ const* prot_) const;
   template <class Protocol_>
   uint32_t write(Protocol_* prot_) const;
+
+ private:
+  static void translateFieldName(FOLLY_MAYBE_UNUSED folly::StringPiece _fname, FOLLY_MAYBE_UNUSED int16_t& fid, FOLLY_MAYBE_UNUSED apache::thrift::protocol::TType& _ftype);
 };
 
 void swap(structB& a, structB& b);
+extern template uint32_t structB::read<>(apache::thrift::BinaryProtocolReader*);
+extern template uint32_t structB::write<>(apache::thrift::BinaryProtocolWriter*) const;
+extern template uint32_t structB::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t structB::serializedSizeZC<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t structB::read<>(apache::thrift::CompactProtocolReader*);
+extern template uint32_t structB::write<>(apache::thrift::CompactProtocolWriter*) const;
+extern template uint32_t structB::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
+extern template uint32_t structB::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
 
 }} // test_cpp2::cpp_reflection
 namespace apache { namespace thrift {
@@ -1927,98 +2072,31 @@ template <> inline constexpr apache::thrift::protocol::TType Cpp2Ops< ::test_cpp
   return apache::thrift::protocol::T_STRUCT;
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structB>::write(Protocol* proto, const  ::test_cpp2::cpp_reflection::structB* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structB>::write(Protocol* proto,  ::test_cpp2::cpp_reflection::structB const* obj) {
   return obj->write(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structB>::read(Protocol* proto,   ::test_cpp2::cpp_reflection::structB* obj) {
-  return obj->read(proto);
+template <> template <class Protocol> void Cpp2Ops< ::test_cpp2::cpp_reflection::structB>::read(Protocol* proto,  ::test_cpp2::cpp_reflection::structB* obj) {
+  obj->read(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structB>::serializedSize(Protocol* proto, const  ::test_cpp2::cpp_reflection::structB* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structB>::serializedSize(Protocol const* proto,  ::test_cpp2::cpp_reflection::structB const* obj) {
   return obj->serializedSize(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structB>::serializedSizeZC(Protocol* proto, const  ::test_cpp2::cpp_reflection::structB* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structB>::serializedSizeZC(Protocol const* proto,  ::test_cpp2::cpp_reflection::structB const* obj) {
   return obj->serializedSizeZC(proto);
 }
 
 }} // apache::thrift
 namespace test_cpp2 { namespace cpp_reflection {
 
-class structC : private boost::totally_ordered<structC> {
+class structC final : private apache::thrift::detail::st::ComparisonOperators<structC> {
  public:
 
-  structC() :
-      a(0),
-      c(0),
-      d(0),
-      e( ::test_cpp2::cpp_reflection::enum1()),
-      f( ::test_cpp2::cpp_reflection::enum2()) {}
+  structC();
   // FragileConstructor for use in initialization lists only
-
-  structC(apache::thrift::FragileConstructor, int32_t a__arg, std::string b__arg, double c__arg, bool d__arg,  ::test_cpp2::cpp_reflection::enum1 e__arg,  ::test_cpp2::cpp_reflection::enum2 f__arg,  ::test_cpp2::cpp_reflection::union1 g__arg,  ::test_cpp2::cpp_reflection::unionA h__arg,  ::test_cpp2::cpp_reflection::unionA i__arg, std::vector<int32_t> j__arg, std::vector<int32_t> j1__arg, std::vector< ::test_cpp2::cpp_reflection::enum1> j2__arg, std::vector< ::test_cpp2::cpp_reflection::structA> j3__arg, std::set<int32_t> k__arg, std::set<int32_t> k1__arg, std::set< ::test_cpp2::cpp_reflection::enum2> k2__arg, std::set< ::test_cpp2::cpp_reflection::structB> k3__arg, std::map<int32_t, int32_t> l__arg, std::map<int32_t, int32_t> l1__arg, std::map<int32_t,  ::test_cpp2::cpp_reflection::enum1> l2__arg, std::map<int32_t,  ::test_cpp2::cpp_reflection::structB> l3__arg, std::map< ::test_cpp2::cpp_reflection::enum1, int32_t> m1__arg, std::map< ::test_cpp2::cpp_reflection::enum1,  ::test_cpp2::cpp_reflection::enum2> m2__arg, std::map< ::test_cpp2::cpp_reflection::enum1,  ::test_cpp2::cpp_reflection::structB> m3__arg, std::map<std::string, int32_t> n1__arg, std::map<std::string,  ::test_cpp2::cpp_reflection::enum1> n2__arg, std::map<std::string,  ::test_cpp2::cpp_reflection::structB> n3__arg, std::map< ::test_cpp2::cpp_reflection::structA, int32_t> o1__arg, std::map< ::test_cpp2::cpp_reflection::structA,  ::test_cpp2::cpp_reflection::enum1> o2__arg, std::map< ::test_cpp2::cpp_reflection::structA,  ::test_cpp2::cpp_reflection::structB> o3__arg) :
-      a(std::move(a__arg)),
-      b(std::move(b__arg)),
-      c(std::move(c__arg)),
-      d(std::move(d__arg)),
-      e(std::move(e__arg)),
-      f(std::move(f__arg)),
-      g(std::move(g__arg)),
-      h(std::move(h__arg)),
-      i(std::move(i__arg)),
-      j(std::move(j__arg)),
-      j1(std::move(j1__arg)),
-      j2(std::move(j2__arg)),
-      j3(std::move(j3__arg)),
-      k(std::move(k__arg)),
-      k1(std::move(k1__arg)),
-      k2(std::move(k2__arg)),
-      k3(std::move(k3__arg)),
-      l(std::move(l__arg)),
-      l1(std::move(l1__arg)),
-      l2(std::move(l2__arg)),
-      l3(std::move(l3__arg)),
-      m1(std::move(m1__arg)),
-      m2(std::move(m2__arg)),
-      m3(std::move(m3__arg)),
-      n1(std::move(n1__arg)),
-      n2(std::move(n2__arg)),
-      n3(std::move(n3__arg)),
-      o1(std::move(o1__arg)),
-      o2(std::move(o2__arg)),
-      o3(std::move(o3__arg)) {
-    __isset.a = true;
-    __isset.b = true;
-    __isset.c = true;
-    __isset.d = true;
-    __isset.e = true;
-    __isset.f = true;
-    __isset.g = true;
-    __isset.h = true;
-    __isset.i = true;
-    __isset.j = true;
-    __isset.j1 = true;
-    __isset.j2 = true;
-    __isset.j3 = true;
-    __isset.k = true;
-    __isset.k1 = true;
-    __isset.k2 = true;
-    __isset.k3 = true;
-    __isset.l = true;
-    __isset.l1 = true;
-    __isset.l2 = true;
-    __isset.l3 = true;
-    __isset.m1 = true;
-    __isset.m2 = true;
-    __isset.m3 = true;
-    __isset.n1 = true;
-    __isset.n2 = true;
-    __isset.n3 = true;
-    __isset.o1 = true;
-    __isset.o2 = true;
-    __isset.o3 = true;
-  }
+  structC(apache::thrift::FragileConstructor, int32_t a__arg, std::string b__arg, double c__arg, bool d__arg,  ::test_cpp2::cpp_reflection::enum1 e__arg,  ::test_cpp2::cpp_reflection::enum2 f__arg,  ::test_cpp2::cpp_reflection::union1 g__arg,  ::test_cpp2::cpp_reflection::unionA h__arg,  ::test_cpp2::cpp_reflection::unionA i__arg, std::vector<int32_t> j__arg, std::vector<int32_t> j1__arg, std::vector< ::test_cpp2::cpp_reflection::enum1> j2__arg, std::vector< ::test_cpp2::cpp_reflection::structA> j3__arg, std::set<int32_t> k__arg, std::set<int32_t> k1__arg, std::set< ::test_cpp2::cpp_reflection::enum2> k2__arg, std::set< ::test_cpp2::cpp_reflection::structB> k3__arg, std::map<int32_t, int32_t> l__arg, std::map<int32_t, int32_t> l1__arg, std::map<int32_t,  ::test_cpp2::cpp_reflection::enum1> l2__arg, std::map<int32_t,  ::test_cpp2::cpp_reflection::structB> l3__arg, std::map< ::test_cpp2::cpp_reflection::enum1, int32_t> m1__arg, std::map< ::test_cpp2::cpp_reflection::enum1,  ::test_cpp2::cpp_reflection::enum2> m2__arg, std::map< ::test_cpp2::cpp_reflection::enum1,  ::test_cpp2::cpp_reflection::structB> m3__arg, std::map<std::string, int32_t> n1__arg, std::map<std::string,  ::test_cpp2::cpp_reflection::enum1> n2__arg, std::map<std::string,  ::test_cpp2::cpp_reflection::structB> n3__arg, std::map< ::test_cpp2::cpp_reflection::structA, int32_t> o1__arg, std::map< ::test_cpp2::cpp_reflection::structA,  ::test_cpp2::cpp_reflection::enum1> o2__arg, std::map< ::test_cpp2::cpp_reflection::structA,  ::test_cpp2::cpp_reflection::structB> o3__arg);
   template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
   structC(::apache::thrift::detail::argument_wrapper<1, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
     structC(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
@@ -2238,8 +2316,7 @@ class structC : private boost::totally_ordered<structC> {
 
   structC& operator=(const structC&) = default;
   void __clear();
-
-  virtual ~structC() throw() {}
+   ~structC();
 
   int32_t a;
   std::string b;
@@ -2273,70 +2350,38 @@ class structC : private boost::totally_ordered<structC> {
   std::map< ::test_cpp2::cpp_reflection::structA,  ::test_cpp2::cpp_reflection::structB> o3;
 
   struct __isset {
-    void __clear() {
-      a = false;
-      b = false;
-      c = false;
-      d = false;
-      e = false;
-      f = false;
-      g = false;
-      h = false;
-      i = false;
-      j = false;
-      j1 = false;
-      j2 = false;
-      j3 = false;
-      k = false;
-      k1 = false;
-      k2 = false;
-      k3 = false;
-      l = false;
-      l1 = false;
-      l2 = false;
-      l3 = false;
-      m1 = false;
-      m2 = false;
-      m3 = false;
-      n1 = false;
-      n2 = false;
-      n3 = false;
-      o1 = false;
-      o2 = false;
-      o3 = false;
-    }
 
-    bool a = false;
-    bool b = false;
-    bool c = false;
-    bool d = false;
-    bool e = false;
-    bool f = false;
-    bool g = false;
-    bool h = false;
-    bool i = false;
-    bool j = false;
-    bool j1 = false;
-    bool j2 = false;
-    bool j3 = false;
-    bool k = false;
-    bool k1 = false;
-    bool k2 = false;
-    bool k3 = false;
-    bool l = false;
-    bool l1 = false;
-    bool l2 = false;
-    bool l3 = false;
-    bool m1 = false;
-    bool m2 = false;
-    bool m3 = false;
-    bool n1 = false;
-    bool n2 = false;
-    bool n3 = false;
-    bool o1 = false;
-    bool o2 = false;
-    bool o3 = false;
-  } __isset;
+    bool a;
+    bool b;
+    bool c;
+    bool d;
+    bool e;
+    bool f;
+    bool g;
+    bool h;
+    bool i;
+    bool j;
+    bool j1;
+    bool j2;
+    bool j3;
+    bool k;
+    bool k1;
+    bool k2;
+    bool k3;
+    bool l;
+    bool l1;
+    bool l2;
+    bool l3;
+    bool m1;
+    bool m2;
+    bool m3;
+    bool n1;
+    bool n2;
+    bool n3;
+    bool o1;
+    bool o2;
+    bool o3;
+  } __isset = {};
   bool operator==(const structC& rhs) const;
 
   bool operator < (const structC& rhs) const {
@@ -2430,6 +2475,7 @@ class structC : private boost::totally_ordered<structC> {
     if (!(o3 == rhs.o3)) {
       return o3 < rhs.o3;
     }
+    (void)rhs;
     return false;
   }
 
@@ -2499,112 +2545,243 @@ class structC : private boost::totally_ordered<structC> {
   }
   const  ::test_cpp2::cpp_reflection::union1& get_g() const&;
    ::test_cpp2::cpp_reflection::union1 get_g() &&;
+
   template <typename T_structC_g_struct_setter>
-   ::test_cpp2::cpp_reflection::union1& set_g(T_structC_g_struct_setter&& g_);
+   ::test_cpp2::cpp_reflection::union1& set_g(T_structC_g_struct_setter&& g_) {
+    g = std::forward<T_structC_g_struct_setter>(g_);
+    __isset.g = true;
+    return g;
+  }
   const  ::test_cpp2::cpp_reflection::unionA& get_h() const&;
    ::test_cpp2::cpp_reflection::unionA get_h() &&;
+
   template <typename T_structC_h_struct_setter>
-   ::test_cpp2::cpp_reflection::unionA& set_h(T_structC_h_struct_setter&& h_);
+   ::test_cpp2::cpp_reflection::unionA& set_h(T_structC_h_struct_setter&& h_) {
+    h = std::forward<T_structC_h_struct_setter>(h_);
+    __isset.h = true;
+    return h;
+  }
   const  ::test_cpp2::cpp_reflection::unionA& get_i() const&;
    ::test_cpp2::cpp_reflection::unionA get_i() &&;
+
   template <typename T_structC_i_struct_setter>
-   ::test_cpp2::cpp_reflection::unionA& set_i(T_structC_i_struct_setter&& i_);
+   ::test_cpp2::cpp_reflection::unionA& set_i(T_structC_i_struct_setter&& i_) {
+    i = std::forward<T_structC_i_struct_setter>(i_);
+    __isset.i = true;
+    return i;
+  }
   const std::vector<int32_t>& get_j() const&;
   std::vector<int32_t> get_j() &&;
+
   template <typename T_structC_j_struct_setter>
-  std::vector<int32_t>& set_j(T_structC_j_struct_setter&& j_);
+  std::vector<int32_t>& set_j(T_structC_j_struct_setter&& j_) {
+    j = std::forward<T_structC_j_struct_setter>(j_);
+    __isset.j = true;
+    return j;
+  }
   const std::vector<int32_t>& get_j1() const&;
   std::vector<int32_t> get_j1() &&;
+
   template <typename T_structC_j1_struct_setter>
-  std::vector<int32_t>& set_j1(T_structC_j1_struct_setter&& j1_);
+  std::vector<int32_t>& set_j1(T_structC_j1_struct_setter&& j1_) {
+    j1 = std::forward<T_structC_j1_struct_setter>(j1_);
+    __isset.j1 = true;
+    return j1;
+  }
   const std::vector< ::test_cpp2::cpp_reflection::enum1>& get_j2() const&;
   std::vector< ::test_cpp2::cpp_reflection::enum1> get_j2() &&;
+
   template <typename T_structC_j2_struct_setter>
-  std::vector< ::test_cpp2::cpp_reflection::enum1>& set_j2(T_structC_j2_struct_setter&& j2_);
+  std::vector< ::test_cpp2::cpp_reflection::enum1>& set_j2(T_structC_j2_struct_setter&& j2_) {
+    j2 = std::forward<T_structC_j2_struct_setter>(j2_);
+    __isset.j2 = true;
+    return j2;
+  }
   const std::vector< ::test_cpp2::cpp_reflection::structA>& get_j3() const&;
   std::vector< ::test_cpp2::cpp_reflection::structA> get_j3() &&;
+
   template <typename T_structC_j3_struct_setter>
-  std::vector< ::test_cpp2::cpp_reflection::structA>& set_j3(T_structC_j3_struct_setter&& j3_);
+  std::vector< ::test_cpp2::cpp_reflection::structA>& set_j3(T_structC_j3_struct_setter&& j3_) {
+    j3 = std::forward<T_structC_j3_struct_setter>(j3_);
+    __isset.j3 = true;
+    return j3;
+  }
   const std::set<int32_t>& get_k() const&;
   std::set<int32_t> get_k() &&;
+
   template <typename T_structC_k_struct_setter>
-  std::set<int32_t>& set_k(T_structC_k_struct_setter&& k_);
+  std::set<int32_t>& set_k(T_structC_k_struct_setter&& k_) {
+    k = std::forward<T_structC_k_struct_setter>(k_);
+    __isset.k = true;
+    return k;
+  }
   const std::set<int32_t>& get_k1() const&;
   std::set<int32_t> get_k1() &&;
+
   template <typename T_structC_k1_struct_setter>
-  std::set<int32_t>& set_k1(T_structC_k1_struct_setter&& k1_);
+  std::set<int32_t>& set_k1(T_structC_k1_struct_setter&& k1_) {
+    k1 = std::forward<T_structC_k1_struct_setter>(k1_);
+    __isset.k1 = true;
+    return k1;
+  }
   const std::set< ::test_cpp2::cpp_reflection::enum2>& get_k2() const&;
   std::set< ::test_cpp2::cpp_reflection::enum2> get_k2() &&;
+
   template <typename T_structC_k2_struct_setter>
-  std::set< ::test_cpp2::cpp_reflection::enum2>& set_k2(T_structC_k2_struct_setter&& k2_);
+  std::set< ::test_cpp2::cpp_reflection::enum2>& set_k2(T_structC_k2_struct_setter&& k2_) {
+    k2 = std::forward<T_structC_k2_struct_setter>(k2_);
+    __isset.k2 = true;
+    return k2;
+  }
   const std::set< ::test_cpp2::cpp_reflection::structB>& get_k3() const&;
   std::set< ::test_cpp2::cpp_reflection::structB> get_k3() &&;
+
   template <typename T_structC_k3_struct_setter>
-  std::set< ::test_cpp2::cpp_reflection::structB>& set_k3(T_structC_k3_struct_setter&& k3_);
+  std::set< ::test_cpp2::cpp_reflection::structB>& set_k3(T_structC_k3_struct_setter&& k3_) {
+    k3 = std::forward<T_structC_k3_struct_setter>(k3_);
+    __isset.k3 = true;
+    return k3;
+  }
   const std::map<int32_t, int32_t>& get_l() const&;
   std::map<int32_t, int32_t> get_l() &&;
+
   template <typename T_structC_l_struct_setter>
-  std::map<int32_t, int32_t>& set_l(T_structC_l_struct_setter&& l_);
+  std::map<int32_t, int32_t>& set_l(T_structC_l_struct_setter&& l_) {
+    l = std::forward<T_structC_l_struct_setter>(l_);
+    __isset.l = true;
+    return l;
+  }
   const std::map<int32_t, int32_t>& get_l1() const&;
   std::map<int32_t, int32_t> get_l1() &&;
+
   template <typename T_structC_l1_struct_setter>
-  std::map<int32_t, int32_t>& set_l1(T_structC_l1_struct_setter&& l1_);
+  std::map<int32_t, int32_t>& set_l1(T_structC_l1_struct_setter&& l1_) {
+    l1 = std::forward<T_structC_l1_struct_setter>(l1_);
+    __isset.l1 = true;
+    return l1;
+  }
   const std::map<int32_t,  ::test_cpp2::cpp_reflection::enum1>& get_l2() const&;
   std::map<int32_t,  ::test_cpp2::cpp_reflection::enum1> get_l2() &&;
+
   template <typename T_structC_l2_struct_setter>
-  std::map<int32_t,  ::test_cpp2::cpp_reflection::enum1>& set_l2(T_structC_l2_struct_setter&& l2_);
+  std::map<int32_t,  ::test_cpp2::cpp_reflection::enum1>& set_l2(T_structC_l2_struct_setter&& l2_) {
+    l2 = std::forward<T_structC_l2_struct_setter>(l2_);
+    __isset.l2 = true;
+    return l2;
+  }
   const std::map<int32_t,  ::test_cpp2::cpp_reflection::structB>& get_l3() const&;
   std::map<int32_t,  ::test_cpp2::cpp_reflection::structB> get_l3() &&;
+
   template <typename T_structC_l3_struct_setter>
-  std::map<int32_t,  ::test_cpp2::cpp_reflection::structB>& set_l3(T_structC_l3_struct_setter&& l3_);
+  std::map<int32_t,  ::test_cpp2::cpp_reflection::structB>& set_l3(T_structC_l3_struct_setter&& l3_) {
+    l3 = std::forward<T_structC_l3_struct_setter>(l3_);
+    __isset.l3 = true;
+    return l3;
+  }
   const std::map< ::test_cpp2::cpp_reflection::enum1, int32_t>& get_m1() const&;
   std::map< ::test_cpp2::cpp_reflection::enum1, int32_t> get_m1() &&;
+
   template <typename T_structC_m1_struct_setter>
-  std::map< ::test_cpp2::cpp_reflection::enum1, int32_t>& set_m1(T_structC_m1_struct_setter&& m1_);
+  std::map< ::test_cpp2::cpp_reflection::enum1, int32_t>& set_m1(T_structC_m1_struct_setter&& m1_) {
+    m1 = std::forward<T_structC_m1_struct_setter>(m1_);
+    __isset.m1 = true;
+    return m1;
+  }
   const std::map< ::test_cpp2::cpp_reflection::enum1,  ::test_cpp2::cpp_reflection::enum2>& get_m2() const&;
   std::map< ::test_cpp2::cpp_reflection::enum1,  ::test_cpp2::cpp_reflection::enum2> get_m2() &&;
+
   template <typename T_structC_m2_struct_setter>
-  std::map< ::test_cpp2::cpp_reflection::enum1,  ::test_cpp2::cpp_reflection::enum2>& set_m2(T_structC_m2_struct_setter&& m2_);
+  std::map< ::test_cpp2::cpp_reflection::enum1,  ::test_cpp2::cpp_reflection::enum2>& set_m2(T_structC_m2_struct_setter&& m2_) {
+    m2 = std::forward<T_structC_m2_struct_setter>(m2_);
+    __isset.m2 = true;
+    return m2;
+  }
   const std::map< ::test_cpp2::cpp_reflection::enum1,  ::test_cpp2::cpp_reflection::structB>& get_m3() const&;
   std::map< ::test_cpp2::cpp_reflection::enum1,  ::test_cpp2::cpp_reflection::structB> get_m3() &&;
+
   template <typename T_structC_m3_struct_setter>
-  std::map< ::test_cpp2::cpp_reflection::enum1,  ::test_cpp2::cpp_reflection::structB>& set_m3(T_structC_m3_struct_setter&& m3_);
+  std::map< ::test_cpp2::cpp_reflection::enum1,  ::test_cpp2::cpp_reflection::structB>& set_m3(T_structC_m3_struct_setter&& m3_) {
+    m3 = std::forward<T_structC_m3_struct_setter>(m3_);
+    __isset.m3 = true;
+    return m3;
+  }
   const std::map<std::string, int32_t>& get_n1() const&;
   std::map<std::string, int32_t> get_n1() &&;
+
   template <typename T_structC_n1_struct_setter>
-  std::map<std::string, int32_t>& set_n1(T_structC_n1_struct_setter&& n1_);
+  std::map<std::string, int32_t>& set_n1(T_structC_n1_struct_setter&& n1_) {
+    n1 = std::forward<T_structC_n1_struct_setter>(n1_);
+    __isset.n1 = true;
+    return n1;
+  }
   const std::map<std::string,  ::test_cpp2::cpp_reflection::enum1>& get_n2() const&;
   std::map<std::string,  ::test_cpp2::cpp_reflection::enum1> get_n2() &&;
+
   template <typename T_structC_n2_struct_setter>
-  std::map<std::string,  ::test_cpp2::cpp_reflection::enum1>& set_n2(T_structC_n2_struct_setter&& n2_);
+  std::map<std::string,  ::test_cpp2::cpp_reflection::enum1>& set_n2(T_structC_n2_struct_setter&& n2_) {
+    n2 = std::forward<T_structC_n2_struct_setter>(n2_);
+    __isset.n2 = true;
+    return n2;
+  }
   const std::map<std::string,  ::test_cpp2::cpp_reflection::structB>& get_n3() const&;
   std::map<std::string,  ::test_cpp2::cpp_reflection::structB> get_n3() &&;
+
   template <typename T_structC_n3_struct_setter>
-  std::map<std::string,  ::test_cpp2::cpp_reflection::structB>& set_n3(T_structC_n3_struct_setter&& n3_);
+  std::map<std::string,  ::test_cpp2::cpp_reflection::structB>& set_n3(T_structC_n3_struct_setter&& n3_) {
+    n3 = std::forward<T_structC_n3_struct_setter>(n3_);
+    __isset.n3 = true;
+    return n3;
+  }
   const std::map< ::test_cpp2::cpp_reflection::structA, int32_t>& get_o1() const&;
   std::map< ::test_cpp2::cpp_reflection::structA, int32_t> get_o1() &&;
+
   template <typename T_structC_o1_struct_setter>
-  std::map< ::test_cpp2::cpp_reflection::structA, int32_t>& set_o1(T_structC_o1_struct_setter&& o1_);
+  std::map< ::test_cpp2::cpp_reflection::structA, int32_t>& set_o1(T_structC_o1_struct_setter&& o1_) {
+    o1 = std::forward<T_structC_o1_struct_setter>(o1_);
+    __isset.o1 = true;
+    return o1;
+  }
   const std::map< ::test_cpp2::cpp_reflection::structA,  ::test_cpp2::cpp_reflection::enum1>& get_o2() const&;
   std::map< ::test_cpp2::cpp_reflection::structA,  ::test_cpp2::cpp_reflection::enum1> get_o2() &&;
+
   template <typename T_structC_o2_struct_setter>
-  std::map< ::test_cpp2::cpp_reflection::structA,  ::test_cpp2::cpp_reflection::enum1>& set_o2(T_structC_o2_struct_setter&& o2_);
+  std::map< ::test_cpp2::cpp_reflection::structA,  ::test_cpp2::cpp_reflection::enum1>& set_o2(T_structC_o2_struct_setter&& o2_) {
+    o2 = std::forward<T_structC_o2_struct_setter>(o2_);
+    __isset.o2 = true;
+    return o2;
+  }
   const std::map< ::test_cpp2::cpp_reflection::structA,  ::test_cpp2::cpp_reflection::structB>& get_o3() const&;
   std::map< ::test_cpp2::cpp_reflection::structA,  ::test_cpp2::cpp_reflection::structB> get_o3() &&;
+
   template <typename T_structC_o3_struct_setter>
-  std::map< ::test_cpp2::cpp_reflection::structA,  ::test_cpp2::cpp_reflection::structB>& set_o3(T_structC_o3_struct_setter&& o3_);
+  std::map< ::test_cpp2::cpp_reflection::structA,  ::test_cpp2::cpp_reflection::structB>& set_o3(T_structC_o3_struct_setter&& o3_) {
+    o3 = std::forward<T_structC_o3_struct_setter>(o3_);
+    __isset.o3 = true;
+    return o3;
+  }
 
   template <class Protocol_>
   uint32_t read(Protocol_* iprot);
   template <class Protocol_>
-  uint32_t serializedSize(Protocol_* prot_) const;
+  uint32_t serializedSize(Protocol_ const* prot_) const;
   template <class Protocol_>
-  uint32_t serializedSizeZC(Protocol_* prot_) const;
+  uint32_t serializedSizeZC(Protocol_ const* prot_) const;
   template <class Protocol_>
   uint32_t write(Protocol_* prot_) const;
+
+ private:
+  static void translateFieldName(FOLLY_MAYBE_UNUSED folly::StringPiece _fname, FOLLY_MAYBE_UNUSED int16_t& fid, FOLLY_MAYBE_UNUSED apache::thrift::protocol::TType& _ftype);
 };
 
 void swap(structC& a, structC& b);
+extern template uint32_t structC::read<>(apache::thrift::BinaryProtocolReader*);
+extern template uint32_t structC::write<>(apache::thrift::BinaryProtocolWriter*) const;
+extern template uint32_t structC::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t structC::serializedSizeZC<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t structC::read<>(apache::thrift::CompactProtocolReader*);
+extern template uint32_t structC::write<>(apache::thrift::CompactProtocolWriter*) const;
+extern template uint32_t structC::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
+extern template uint32_t structC::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
 
 }} // test_cpp2::cpp_reflection
 namespace apache { namespace thrift {
@@ -2617,46 +2794,31 @@ template <> inline constexpr apache::thrift::protocol::TType Cpp2Ops< ::test_cpp
   return apache::thrift::protocol::T_STRUCT;
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structC>::write(Protocol* proto, const  ::test_cpp2::cpp_reflection::structC* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structC>::write(Protocol* proto,  ::test_cpp2::cpp_reflection::structC const* obj) {
   return obj->write(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structC>::read(Protocol* proto,   ::test_cpp2::cpp_reflection::structC* obj) {
-  return obj->read(proto);
+template <> template <class Protocol> void Cpp2Ops< ::test_cpp2::cpp_reflection::structC>::read(Protocol* proto,  ::test_cpp2::cpp_reflection::structC* obj) {
+  obj->read(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structC>::serializedSize(Protocol* proto, const  ::test_cpp2::cpp_reflection::structC* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structC>::serializedSize(Protocol const* proto,  ::test_cpp2::cpp_reflection::structC const* obj) {
   return obj->serializedSize(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structC>::serializedSizeZC(Protocol* proto, const  ::test_cpp2::cpp_reflection::structC* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::structC>::serializedSizeZC(Protocol const* proto,  ::test_cpp2::cpp_reflection::structC const* obj) {
   return obj->serializedSizeZC(proto);
 }
 
 }} // apache::thrift
 namespace test_cpp2 { namespace cpp_reflection {
 
-class struct1 : private boost::totally_ordered<struct1> {
+class struct1 final : private apache::thrift::detail::st::ComparisonOperators<struct1> {
  public:
 
-  struct1() :
-      field0(0),
-      field2( ::test_cpp2::cpp_reflection::enum1()),
-      field3( ::test_cpp2::cpp_reflection::enum2()) {}
+  struct1();
   // FragileConstructor for use in initialization lists only
-
-  struct1(apache::thrift::FragileConstructor, int32_t field0__arg, std::string field1__arg,  ::test_cpp2::cpp_reflection::enum1 field2__arg,  ::test_cpp2::cpp_reflection::enum2 field3__arg,  ::test_cpp2::cpp_reflection::union1 field4__arg,  ::test_cpp2::cpp_reflection::union2 field5__arg) :
-      field0(std::move(field0__arg)),
-      field1(std::move(field1__arg)),
-      field2(std::move(field2__arg)),
-      field3(std::move(field3__arg)),
-      field4(std::move(field4__arg)),
-      field5(std::move(field5__arg)) {
-    __isset.field1 = true;
-    __isset.field2 = true;
-    __isset.field4 = true;
-    __isset.field5 = true;
-  }
+  struct1(apache::thrift::FragileConstructor, int32_t field0__arg, std::string field1__arg,  ::test_cpp2::cpp_reflection::enum1 field2__arg,  ::test_cpp2::cpp_reflection::enum2 field3__arg,  ::test_cpp2::cpp_reflection::union1 field4__arg,  ::test_cpp2::cpp_reflection::union2 field5__arg);
   template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
   struct1(::apache::thrift::detail::argument_wrapper<1, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
     struct1(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
@@ -2706,8 +2868,7 @@ class struct1 : private boost::totally_ordered<struct1> {
 
   struct1& operator=(const struct1&) = default;
   void __clear();
-
-  virtual ~struct1() throw() {}
+   ~struct1();
 
   int32_t field0;
   std::string field1;
@@ -2717,18 +2878,12 @@ class struct1 : private boost::totally_ordered<struct1> {
    ::test_cpp2::cpp_reflection::union2 field5;
 
   struct __isset {
-    void __clear() {
-      field1 = false;
-      field2 = false;
-      field4 = false;
-      field5 = false;
-    }
 
-    bool field1 = false;
-    bool field2 = false;
-    bool field4 = false;
-    bool field5 = false;
-  } __isset;
+    bool field1;
+    bool field2;
+    bool field4;
+    bool field5;
+  } __isset = {};
   bool operator==(const struct1& rhs) const;
   bool operator < (const struct1& rhs) const;
 
@@ -2778,24 +2933,45 @@ class struct1 : private boost::totally_ordered<struct1> {
   const  ::test_cpp2::cpp_reflection::union1* get_field4() const&;
    ::test_cpp2::cpp_reflection::union1* get_field4() &;
    ::test_cpp2::cpp_reflection::union1* get_field4() && = delete;
+
   template <typename T_struct1_field4_struct_setter>
-   ::test_cpp2::cpp_reflection::union1& set_field4(T_struct1_field4_struct_setter&& field4_);
+   ::test_cpp2::cpp_reflection::union1& set_field4(T_struct1_field4_struct_setter&& field4_) {
+    field4 = std::forward<T_struct1_field4_struct_setter>(field4_);
+    __isset.field4 = true;
+    return field4;
+  }
   const  ::test_cpp2::cpp_reflection::union2& get_field5() const&;
    ::test_cpp2::cpp_reflection::union2 get_field5() &&;
+
   template <typename T_struct1_field5_struct_setter>
-   ::test_cpp2::cpp_reflection::union2& set_field5(T_struct1_field5_struct_setter&& field5_);
+   ::test_cpp2::cpp_reflection::union2& set_field5(T_struct1_field5_struct_setter&& field5_) {
+    field5 = std::forward<T_struct1_field5_struct_setter>(field5_);
+    __isset.field5 = true;
+    return field5;
+  }
 
   template <class Protocol_>
   uint32_t read(Protocol_* iprot);
   template <class Protocol_>
-  uint32_t serializedSize(Protocol_* prot_) const;
+  uint32_t serializedSize(Protocol_ const* prot_) const;
   template <class Protocol_>
-  uint32_t serializedSizeZC(Protocol_* prot_) const;
+  uint32_t serializedSizeZC(Protocol_ const* prot_) const;
   template <class Protocol_>
   uint32_t write(Protocol_* prot_) const;
+
+ private:
+  static void translateFieldName(FOLLY_MAYBE_UNUSED folly::StringPiece _fname, FOLLY_MAYBE_UNUSED int16_t& fid, FOLLY_MAYBE_UNUSED apache::thrift::protocol::TType& _ftype);
 };
 
 void swap(struct1& a, struct1& b);
+extern template uint32_t struct1::read<>(apache::thrift::BinaryProtocolReader*);
+extern template uint32_t struct1::write<>(apache::thrift::BinaryProtocolWriter*) const;
+extern template uint32_t struct1::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t struct1::serializedSizeZC<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t struct1::read<>(apache::thrift::CompactProtocolReader*);
+extern template uint32_t struct1::write<>(apache::thrift::CompactProtocolWriter*) const;
+extern template uint32_t struct1::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
+extern template uint32_t struct1::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
 
 }} // test_cpp2::cpp_reflection
 namespace apache { namespace thrift {
@@ -2808,50 +2984,31 @@ template <> inline constexpr apache::thrift::protocol::TType Cpp2Ops< ::test_cpp
   return apache::thrift::protocol::T_STRUCT;
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct1>::write(Protocol* proto, const  ::test_cpp2::cpp_reflection::struct1* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct1>::write(Protocol* proto,  ::test_cpp2::cpp_reflection::struct1 const* obj) {
   return obj->write(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct1>::read(Protocol* proto,   ::test_cpp2::cpp_reflection::struct1* obj) {
-  return obj->read(proto);
+template <> template <class Protocol> void Cpp2Ops< ::test_cpp2::cpp_reflection::struct1>::read(Protocol* proto,  ::test_cpp2::cpp_reflection::struct1* obj) {
+  obj->read(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct1>::serializedSize(Protocol* proto, const  ::test_cpp2::cpp_reflection::struct1* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct1>::serializedSize(Protocol const* proto,  ::test_cpp2::cpp_reflection::struct1 const* obj) {
   return obj->serializedSize(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct1>::serializedSizeZC(Protocol* proto, const  ::test_cpp2::cpp_reflection::struct1* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct1>::serializedSizeZC(Protocol const* proto,  ::test_cpp2::cpp_reflection::struct1 const* obj) {
   return obj->serializedSizeZC(proto);
 }
 
 }} // apache::thrift
 namespace test_cpp2 { namespace cpp_reflection {
 
-class struct2 : private boost::totally_ordered<struct2> {
+class struct2 final : private apache::thrift::detail::st::ComparisonOperators<struct2> {
  public:
 
-  struct2() :
-      fieldA(0),
-      fieldC( ::test_cpp2::cpp_reflection::enum1()),
-      fieldD( ::test_cpp2::cpp_reflection::enum2()) {}
+  struct2();
   // FragileConstructor for use in initialization lists only
-
-  struct2(apache::thrift::FragileConstructor, int32_t fieldA__arg, std::string fieldB__arg,  ::test_cpp2::cpp_reflection::enum1 fieldC__arg,  ::test_cpp2::cpp_reflection::enum2 fieldD__arg,  ::test_cpp2::cpp_reflection::union1 fieldE__arg,  ::test_cpp2::cpp_reflection::union2 fieldF__arg,  ::test_cpp2::cpp_reflection::struct1 fieldG__arg) :
-      fieldA(std::move(fieldA__arg)),
-      fieldB(std::move(fieldB__arg)),
-      fieldC(std::move(fieldC__arg)),
-      fieldD(std::move(fieldD__arg)),
-      fieldE(std::move(fieldE__arg)),
-      fieldF(std::move(fieldF__arg)),
-      fieldG(std::move(fieldG__arg)) {
-    __isset.fieldA = true;
-    __isset.fieldB = true;
-    __isset.fieldC = true;
-    __isset.fieldD = true;
-    __isset.fieldE = true;
-    __isset.fieldF = true;
-    __isset.fieldG = true;
-  }
+  struct2(apache::thrift::FragileConstructor, int32_t fieldA__arg, std::string fieldB__arg,  ::test_cpp2::cpp_reflection::enum1 fieldC__arg,  ::test_cpp2::cpp_reflection::enum2 fieldD__arg,  ::test_cpp2::cpp_reflection::union1 fieldE__arg,  ::test_cpp2::cpp_reflection::union2 fieldF__arg,  ::test_cpp2::cpp_reflection::struct1 fieldG__arg);
   template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
   struct2(::apache::thrift::detail::argument_wrapper<1, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
     struct2(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
@@ -2910,8 +3067,7 @@ class struct2 : private boost::totally_ordered<struct2> {
 
   struct2& operator=(const struct2&) = default;
   void __clear();
-
-  virtual ~struct2() throw() {}
+   ~struct2();
 
   int32_t fieldA;
   std::string fieldB;
@@ -2922,24 +3078,15 @@ class struct2 : private boost::totally_ordered<struct2> {
    ::test_cpp2::cpp_reflection::struct1 fieldG;
 
   struct __isset {
-    void __clear() {
-      fieldA = false;
-      fieldB = false;
-      fieldC = false;
-      fieldD = false;
-      fieldE = false;
-      fieldF = false;
-      fieldG = false;
-    }
 
-    bool fieldA = false;
-    bool fieldB = false;
-    bool fieldC = false;
-    bool fieldD = false;
-    bool fieldE = false;
-    bool fieldF = false;
-    bool fieldG = false;
-  } __isset;
+    bool fieldA;
+    bool fieldB;
+    bool fieldC;
+    bool fieldD;
+    bool fieldE;
+    bool fieldF;
+    bool fieldG;
+  } __isset = {};
   bool operator==(const struct2& rhs) const;
   bool operator < (const struct2& rhs) const;
 
@@ -2989,28 +3136,54 @@ class struct2 : private boost::totally_ordered<struct2> {
   }
   const  ::test_cpp2::cpp_reflection::union1& get_fieldE() const&;
    ::test_cpp2::cpp_reflection::union1 get_fieldE() &&;
+
   template <typename T_struct2_fieldE_struct_setter>
-   ::test_cpp2::cpp_reflection::union1& set_fieldE(T_struct2_fieldE_struct_setter&& fieldE_);
+   ::test_cpp2::cpp_reflection::union1& set_fieldE(T_struct2_fieldE_struct_setter&& fieldE_) {
+    fieldE = std::forward<T_struct2_fieldE_struct_setter>(fieldE_);
+    __isset.fieldE = true;
+    return fieldE;
+  }
   const  ::test_cpp2::cpp_reflection::union2& get_fieldF() const&;
    ::test_cpp2::cpp_reflection::union2 get_fieldF() &&;
+
   template <typename T_struct2_fieldF_struct_setter>
-   ::test_cpp2::cpp_reflection::union2& set_fieldF(T_struct2_fieldF_struct_setter&& fieldF_);
+   ::test_cpp2::cpp_reflection::union2& set_fieldF(T_struct2_fieldF_struct_setter&& fieldF_) {
+    fieldF = std::forward<T_struct2_fieldF_struct_setter>(fieldF_);
+    __isset.fieldF = true;
+    return fieldF;
+  }
   const  ::test_cpp2::cpp_reflection::struct1& get_fieldG() const&;
    ::test_cpp2::cpp_reflection::struct1 get_fieldG() &&;
+
   template <typename T_struct2_fieldG_struct_setter>
-   ::test_cpp2::cpp_reflection::struct1& set_fieldG(T_struct2_fieldG_struct_setter&& fieldG_);
+   ::test_cpp2::cpp_reflection::struct1& set_fieldG(T_struct2_fieldG_struct_setter&& fieldG_) {
+    fieldG = std::forward<T_struct2_fieldG_struct_setter>(fieldG_);
+    __isset.fieldG = true;
+    return fieldG;
+  }
 
   template <class Protocol_>
   uint32_t read(Protocol_* iprot);
   template <class Protocol_>
-  uint32_t serializedSize(Protocol_* prot_) const;
+  uint32_t serializedSize(Protocol_ const* prot_) const;
   template <class Protocol_>
-  uint32_t serializedSizeZC(Protocol_* prot_) const;
+  uint32_t serializedSizeZC(Protocol_ const* prot_) const;
   template <class Protocol_>
   uint32_t write(Protocol_* prot_) const;
+
+ private:
+  static void translateFieldName(FOLLY_MAYBE_UNUSED folly::StringPiece _fname, FOLLY_MAYBE_UNUSED int16_t& fid, FOLLY_MAYBE_UNUSED apache::thrift::protocol::TType& _ftype);
 };
 
 void swap(struct2& a, struct2& b);
+extern template uint32_t struct2::read<>(apache::thrift::BinaryProtocolReader*);
+extern template uint32_t struct2::write<>(apache::thrift::BinaryProtocolWriter*) const;
+extern template uint32_t struct2::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t struct2::serializedSizeZC<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t struct2::read<>(apache::thrift::CompactProtocolReader*);
+extern template uint32_t struct2::write<>(apache::thrift::CompactProtocolWriter*) const;
+extern template uint32_t struct2::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
+extern template uint32_t struct2::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
 
 }} // test_cpp2::cpp_reflection
 namespace apache { namespace thrift {
@@ -3023,72 +3196,31 @@ template <> inline constexpr apache::thrift::protocol::TType Cpp2Ops< ::test_cpp
   return apache::thrift::protocol::T_STRUCT;
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct2>::write(Protocol* proto, const  ::test_cpp2::cpp_reflection::struct2* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct2>::write(Protocol* proto,  ::test_cpp2::cpp_reflection::struct2 const* obj) {
   return obj->write(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct2>::read(Protocol* proto,   ::test_cpp2::cpp_reflection::struct2* obj) {
-  return obj->read(proto);
+template <> template <class Protocol> void Cpp2Ops< ::test_cpp2::cpp_reflection::struct2>::read(Protocol* proto,  ::test_cpp2::cpp_reflection::struct2* obj) {
+  obj->read(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct2>::serializedSize(Protocol* proto, const  ::test_cpp2::cpp_reflection::struct2* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct2>::serializedSize(Protocol const* proto,  ::test_cpp2::cpp_reflection::struct2 const* obj) {
   return obj->serializedSize(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct2>::serializedSizeZC(Protocol* proto, const  ::test_cpp2::cpp_reflection::struct2* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct2>::serializedSizeZC(Protocol const* proto,  ::test_cpp2::cpp_reflection::struct2 const* obj) {
   return obj->serializedSizeZC(proto);
 }
 
 }} // apache::thrift
 namespace test_cpp2 { namespace cpp_reflection {
 
-class struct3 : private boost::totally_ordered<struct3> {
+class struct3 final : private apache::thrift::detail::st::ComparisonOperators<struct3> {
  public:
 
-  struct3() :
-      fieldA(0),
-      fieldC( ::test_cpp2::cpp_reflection::enum1()),
-      fieldD( ::test_cpp2::cpp_reflection::enum2()) {}
+  struct3();
   // FragileConstructor for use in initialization lists only
-
-  struct3(apache::thrift::FragileConstructor, int32_t fieldA__arg, std::string fieldB__arg,  ::test_cpp2::cpp_reflection::enum1 fieldC__arg,  ::test_cpp2::cpp_reflection::enum2 fieldD__arg,  ::test_cpp2::cpp_reflection::union1 fieldE__arg,  ::test_cpp2::cpp_reflection::union2 fieldF__arg,  ::test_cpp2::cpp_reflection::struct1 fieldG__arg,  ::test_cpp2::cpp_reflection::union2 fieldH__arg, std::vector<int32_t> fieldI__arg, std::vector<std::string> fieldJ__arg, std::vector<std::string> fieldK__arg, std::vector< ::test_cpp2::cpp_reflection::structA> fieldL__arg, std::set<int32_t> fieldM__arg, std::set<std::string> fieldN__arg, std::set<std::string> fieldO__arg, std::set< ::test_cpp2::cpp_reflection::structB> fieldP__arg, std::map<std::string,  ::test_cpp2::cpp_reflection::structA> fieldQ__arg, std::map<std::string,  ::test_cpp2::cpp_reflection::structB> fieldR__arg) :
-      fieldA(std::move(fieldA__arg)),
-      fieldB(std::move(fieldB__arg)),
-      fieldC(std::move(fieldC__arg)),
-      fieldD(std::move(fieldD__arg)),
-      fieldE(std::move(fieldE__arg)),
-      fieldF(std::move(fieldF__arg)),
-      fieldG(std::move(fieldG__arg)),
-      fieldH(std::move(fieldH__arg)),
-      fieldI(std::move(fieldI__arg)),
-      fieldJ(std::move(fieldJ__arg)),
-      fieldK(std::move(fieldK__arg)),
-      fieldL(std::move(fieldL__arg)),
-      fieldM(std::move(fieldM__arg)),
-      fieldN(std::move(fieldN__arg)),
-      fieldO(std::move(fieldO__arg)),
-      fieldP(std::move(fieldP__arg)),
-      fieldQ(std::move(fieldQ__arg)),
-      fieldR(std::move(fieldR__arg)) {
-    __isset.fieldA = true;
-    __isset.fieldB = true;
-    __isset.fieldC = true;
-    __isset.fieldD = true;
-    __isset.fieldE = true;
-    __isset.fieldF = true;
-    __isset.fieldG = true;
-    __isset.fieldH = true;
-    __isset.fieldI = true;
-    __isset.fieldJ = true;
-    __isset.fieldK = true;
-    __isset.fieldL = true;
-    __isset.fieldM = true;
-    __isset.fieldN = true;
-    __isset.fieldO = true;
-    __isset.fieldP = true;
-    __isset.fieldQ = true;
-    __isset.fieldR = true;
-  }
+  struct3(apache::thrift::FragileConstructor, int32_t fieldA__arg, std::string fieldB__arg,  ::test_cpp2::cpp_reflection::enum1 fieldC__arg,  ::test_cpp2::cpp_reflection::enum2 fieldD__arg,  ::test_cpp2::cpp_reflection::union1 fieldE__arg,  ::test_cpp2::cpp_reflection::union2 fieldF__arg,  ::test_cpp2::cpp_reflection::struct1 fieldG__arg,  ::test_cpp2::cpp_reflection::union2 fieldH__arg, std::vector<int32_t> fieldI__arg, std::vector<std::string> fieldJ__arg, std::vector<std::string> fieldK__arg, std::vector< ::test_cpp2::cpp_reflection::structA> fieldL__arg, std::set<int32_t> fieldM__arg, std::set<std::string> fieldN__arg, std::set<std::string> fieldO__arg, std::set< ::test_cpp2::cpp_reflection::structB> fieldP__arg, std::map<std::string,  ::test_cpp2::cpp_reflection::structA> fieldQ__arg, std::map<std::string,  ::test_cpp2::cpp_reflection::structB> fieldR__arg);
   template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
   struct3(::apache::thrift::detail::argument_wrapper<1, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
     struct3(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
@@ -3224,8 +3356,7 @@ class struct3 : private boost::totally_ordered<struct3> {
 
   struct3& operator=(const struct3&) = default;
   void __clear();
-
-  virtual ~struct3() throw() {}
+   ~struct3();
 
   int32_t fieldA;
   std::string fieldB;
@@ -3247,46 +3378,26 @@ class struct3 : private boost::totally_ordered<struct3> {
   std::map<std::string,  ::test_cpp2::cpp_reflection::structB> fieldR;
 
   struct __isset {
-    void __clear() {
-      fieldA = false;
-      fieldB = false;
-      fieldC = false;
-      fieldD = false;
-      fieldE = false;
-      fieldF = false;
-      fieldG = false;
-      fieldH = false;
-      fieldI = false;
-      fieldJ = false;
-      fieldK = false;
-      fieldL = false;
-      fieldM = false;
-      fieldN = false;
-      fieldO = false;
-      fieldP = false;
-      fieldQ = false;
-      fieldR = false;
-    }
 
-    bool fieldA = false;
-    bool fieldB = false;
-    bool fieldC = false;
-    bool fieldD = false;
-    bool fieldE = false;
-    bool fieldF = false;
-    bool fieldG = false;
-    bool fieldH = false;
-    bool fieldI = false;
-    bool fieldJ = false;
-    bool fieldK = false;
-    bool fieldL = false;
-    bool fieldM = false;
-    bool fieldN = false;
-    bool fieldO = false;
-    bool fieldP = false;
-    bool fieldQ = false;
-    bool fieldR = false;
-  } __isset;
+    bool fieldA;
+    bool fieldB;
+    bool fieldC;
+    bool fieldD;
+    bool fieldE;
+    bool fieldF;
+    bool fieldG;
+    bool fieldH;
+    bool fieldI;
+    bool fieldJ;
+    bool fieldK;
+    bool fieldL;
+    bool fieldM;
+    bool fieldN;
+    bool fieldO;
+    bool fieldP;
+    bool fieldQ;
+    bool fieldR;
+  } __isset = {};
   bool operator==(const struct3& rhs) const;
   bool operator < (const struct3& rhs) const;
 
@@ -3336,72 +3447,153 @@ class struct3 : private boost::totally_ordered<struct3> {
   }
   const  ::test_cpp2::cpp_reflection::union1& get_fieldE() const&;
    ::test_cpp2::cpp_reflection::union1 get_fieldE() &&;
+
   template <typename T_struct3_fieldE_struct_setter>
-   ::test_cpp2::cpp_reflection::union1& set_fieldE(T_struct3_fieldE_struct_setter&& fieldE_);
+   ::test_cpp2::cpp_reflection::union1& set_fieldE(T_struct3_fieldE_struct_setter&& fieldE_) {
+    fieldE = std::forward<T_struct3_fieldE_struct_setter>(fieldE_);
+    __isset.fieldE = true;
+    return fieldE;
+  }
   const  ::test_cpp2::cpp_reflection::union2& get_fieldF() const&;
    ::test_cpp2::cpp_reflection::union2 get_fieldF() &&;
+
   template <typename T_struct3_fieldF_struct_setter>
-   ::test_cpp2::cpp_reflection::union2& set_fieldF(T_struct3_fieldF_struct_setter&& fieldF_);
+   ::test_cpp2::cpp_reflection::union2& set_fieldF(T_struct3_fieldF_struct_setter&& fieldF_) {
+    fieldF = std::forward<T_struct3_fieldF_struct_setter>(fieldF_);
+    __isset.fieldF = true;
+    return fieldF;
+  }
   const  ::test_cpp2::cpp_reflection::struct1& get_fieldG() const&;
    ::test_cpp2::cpp_reflection::struct1 get_fieldG() &&;
+
   template <typename T_struct3_fieldG_struct_setter>
-   ::test_cpp2::cpp_reflection::struct1& set_fieldG(T_struct3_fieldG_struct_setter&& fieldG_);
+   ::test_cpp2::cpp_reflection::struct1& set_fieldG(T_struct3_fieldG_struct_setter&& fieldG_) {
+    fieldG = std::forward<T_struct3_fieldG_struct_setter>(fieldG_);
+    __isset.fieldG = true;
+    return fieldG;
+  }
   const  ::test_cpp2::cpp_reflection::union2& get_fieldH() const&;
    ::test_cpp2::cpp_reflection::union2 get_fieldH() &&;
+
   template <typename T_struct3_fieldH_struct_setter>
-   ::test_cpp2::cpp_reflection::union2& set_fieldH(T_struct3_fieldH_struct_setter&& fieldH_);
+   ::test_cpp2::cpp_reflection::union2& set_fieldH(T_struct3_fieldH_struct_setter&& fieldH_) {
+    fieldH = std::forward<T_struct3_fieldH_struct_setter>(fieldH_);
+    __isset.fieldH = true;
+    return fieldH;
+  }
   const std::vector<int32_t>& get_fieldI() const&;
   std::vector<int32_t> get_fieldI() &&;
+
   template <typename T_struct3_fieldI_struct_setter>
-  std::vector<int32_t>& set_fieldI(T_struct3_fieldI_struct_setter&& fieldI_);
+  std::vector<int32_t>& set_fieldI(T_struct3_fieldI_struct_setter&& fieldI_) {
+    fieldI = std::forward<T_struct3_fieldI_struct_setter>(fieldI_);
+    __isset.fieldI = true;
+    return fieldI;
+  }
   const std::vector<std::string>& get_fieldJ() const&;
   std::vector<std::string> get_fieldJ() &&;
+
   template <typename T_struct3_fieldJ_struct_setter>
-  std::vector<std::string>& set_fieldJ(T_struct3_fieldJ_struct_setter&& fieldJ_);
+  std::vector<std::string>& set_fieldJ(T_struct3_fieldJ_struct_setter&& fieldJ_) {
+    fieldJ = std::forward<T_struct3_fieldJ_struct_setter>(fieldJ_);
+    __isset.fieldJ = true;
+    return fieldJ;
+  }
   const std::vector<std::string>& get_fieldK() const&;
   std::vector<std::string> get_fieldK() &&;
+
   template <typename T_struct3_fieldK_struct_setter>
-  std::vector<std::string>& set_fieldK(T_struct3_fieldK_struct_setter&& fieldK_);
+  std::vector<std::string>& set_fieldK(T_struct3_fieldK_struct_setter&& fieldK_) {
+    fieldK = std::forward<T_struct3_fieldK_struct_setter>(fieldK_);
+    __isset.fieldK = true;
+    return fieldK;
+  }
   const std::vector< ::test_cpp2::cpp_reflection::structA>& get_fieldL() const&;
   std::vector< ::test_cpp2::cpp_reflection::structA> get_fieldL() &&;
+
   template <typename T_struct3_fieldL_struct_setter>
-  std::vector< ::test_cpp2::cpp_reflection::structA>& set_fieldL(T_struct3_fieldL_struct_setter&& fieldL_);
+  std::vector< ::test_cpp2::cpp_reflection::structA>& set_fieldL(T_struct3_fieldL_struct_setter&& fieldL_) {
+    fieldL = std::forward<T_struct3_fieldL_struct_setter>(fieldL_);
+    __isset.fieldL = true;
+    return fieldL;
+  }
   const std::set<int32_t>& get_fieldM() const&;
   std::set<int32_t> get_fieldM() &&;
+
   template <typename T_struct3_fieldM_struct_setter>
-  std::set<int32_t>& set_fieldM(T_struct3_fieldM_struct_setter&& fieldM_);
+  std::set<int32_t>& set_fieldM(T_struct3_fieldM_struct_setter&& fieldM_) {
+    fieldM = std::forward<T_struct3_fieldM_struct_setter>(fieldM_);
+    __isset.fieldM = true;
+    return fieldM;
+  }
   const std::set<std::string>& get_fieldN() const&;
   std::set<std::string> get_fieldN() &&;
+
   template <typename T_struct3_fieldN_struct_setter>
-  std::set<std::string>& set_fieldN(T_struct3_fieldN_struct_setter&& fieldN_);
+  std::set<std::string>& set_fieldN(T_struct3_fieldN_struct_setter&& fieldN_) {
+    fieldN = std::forward<T_struct3_fieldN_struct_setter>(fieldN_);
+    __isset.fieldN = true;
+    return fieldN;
+  }
   const std::set<std::string>& get_fieldO() const&;
   std::set<std::string> get_fieldO() &&;
+
   template <typename T_struct3_fieldO_struct_setter>
-  std::set<std::string>& set_fieldO(T_struct3_fieldO_struct_setter&& fieldO_);
+  std::set<std::string>& set_fieldO(T_struct3_fieldO_struct_setter&& fieldO_) {
+    fieldO = std::forward<T_struct3_fieldO_struct_setter>(fieldO_);
+    __isset.fieldO = true;
+    return fieldO;
+  }
   const std::set< ::test_cpp2::cpp_reflection::structB>& get_fieldP() const&;
   std::set< ::test_cpp2::cpp_reflection::structB> get_fieldP() &&;
+
   template <typename T_struct3_fieldP_struct_setter>
-  std::set< ::test_cpp2::cpp_reflection::structB>& set_fieldP(T_struct3_fieldP_struct_setter&& fieldP_);
+  std::set< ::test_cpp2::cpp_reflection::structB>& set_fieldP(T_struct3_fieldP_struct_setter&& fieldP_) {
+    fieldP = std::forward<T_struct3_fieldP_struct_setter>(fieldP_);
+    __isset.fieldP = true;
+    return fieldP;
+  }
   const std::map<std::string,  ::test_cpp2::cpp_reflection::structA>& get_fieldQ() const&;
   std::map<std::string,  ::test_cpp2::cpp_reflection::structA> get_fieldQ() &&;
+
   template <typename T_struct3_fieldQ_struct_setter>
-  std::map<std::string,  ::test_cpp2::cpp_reflection::structA>& set_fieldQ(T_struct3_fieldQ_struct_setter&& fieldQ_);
+  std::map<std::string,  ::test_cpp2::cpp_reflection::structA>& set_fieldQ(T_struct3_fieldQ_struct_setter&& fieldQ_) {
+    fieldQ = std::forward<T_struct3_fieldQ_struct_setter>(fieldQ_);
+    __isset.fieldQ = true;
+    return fieldQ;
+  }
   const std::map<std::string,  ::test_cpp2::cpp_reflection::structB>& get_fieldR() const&;
   std::map<std::string,  ::test_cpp2::cpp_reflection::structB> get_fieldR() &&;
+
   template <typename T_struct3_fieldR_struct_setter>
-  std::map<std::string,  ::test_cpp2::cpp_reflection::structB>& set_fieldR(T_struct3_fieldR_struct_setter&& fieldR_);
+  std::map<std::string,  ::test_cpp2::cpp_reflection::structB>& set_fieldR(T_struct3_fieldR_struct_setter&& fieldR_) {
+    fieldR = std::forward<T_struct3_fieldR_struct_setter>(fieldR_);
+    __isset.fieldR = true;
+    return fieldR;
+  }
 
   template <class Protocol_>
   uint32_t read(Protocol_* iprot);
   template <class Protocol_>
-  uint32_t serializedSize(Protocol_* prot_) const;
+  uint32_t serializedSize(Protocol_ const* prot_) const;
   template <class Protocol_>
-  uint32_t serializedSizeZC(Protocol_* prot_) const;
+  uint32_t serializedSizeZC(Protocol_ const* prot_) const;
   template <class Protocol_>
   uint32_t write(Protocol_* prot_) const;
+
+ private:
+  static void translateFieldName(FOLLY_MAYBE_UNUSED folly::StringPiece _fname, FOLLY_MAYBE_UNUSED int16_t& fid, FOLLY_MAYBE_UNUSED apache::thrift::protocol::TType& _ftype);
 };
 
 void swap(struct3& a, struct3& b);
+extern template uint32_t struct3::read<>(apache::thrift::BinaryProtocolReader*);
+extern template uint32_t struct3::write<>(apache::thrift::BinaryProtocolWriter*) const;
+extern template uint32_t struct3::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t struct3::serializedSizeZC<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t struct3::read<>(apache::thrift::CompactProtocolReader*);
+extern template uint32_t struct3::write<>(apache::thrift::CompactProtocolWriter*) const;
+extern template uint32_t struct3::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
+extern template uint32_t struct3::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
 
 }} // test_cpp2::cpp_reflection
 namespace apache { namespace thrift {
@@ -3414,19 +3606,3247 @@ template <> inline constexpr apache::thrift::protocol::TType Cpp2Ops< ::test_cpp
   return apache::thrift::protocol::T_STRUCT;
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct3>::write(Protocol* proto, const  ::test_cpp2::cpp_reflection::struct3* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct3>::write(Protocol* proto,  ::test_cpp2::cpp_reflection::struct3 const* obj) {
   return obj->write(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct3>::read(Protocol* proto,   ::test_cpp2::cpp_reflection::struct3* obj) {
-  return obj->read(proto);
+template <> template <class Protocol> void Cpp2Ops< ::test_cpp2::cpp_reflection::struct3>::read(Protocol* proto,  ::test_cpp2::cpp_reflection::struct3* obj) {
+  obj->read(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct3>::serializedSize(Protocol* proto, const  ::test_cpp2::cpp_reflection::struct3* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct3>::serializedSize(Protocol const* proto,  ::test_cpp2::cpp_reflection::struct3 const* obj) {
   return obj->serializedSize(proto);
 }
 
-template <> template <class Protocol> inline uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct3>::serializedSizeZC(Protocol* proto, const  ::test_cpp2::cpp_reflection::struct3* obj) {
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct3>::serializedSizeZC(Protocol const* proto,  ::test_cpp2::cpp_reflection::struct3 const* obj) {
+  return obj->serializedSizeZC(proto);
+}
+
+}} // apache::thrift
+namespace test_cpp2 { namespace cpp_reflection {
+
+class struct4 final : private apache::thrift::detail::st::ComparisonOperators<struct4> {
+ public:
+
+  struct4() :
+      field0(0),
+      field2( ::test_cpp2::cpp_reflection::enum1::field0) {}
+  // FragileConstructor for use in initialization lists only
+  struct4(apache::thrift::FragileConstructor, int32_t field0__arg, std::string field1__arg,  ::test_cpp2::cpp_reflection::enum1 field2__arg, std::unique_ptr< ::test_cpp2::cpp_reflection::structA> field3__arg);
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct4(::apache::thrift::detail::argument_wrapper<1, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct4(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    field0 = arg.move();
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct4(::apache::thrift::detail::argument_wrapper<2, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct4(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    field1 = arg.move();
+    __isset.field1 = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct4(::apache::thrift::detail::argument_wrapper<3, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct4(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    field2 = arg.move();
+    __isset.field2 = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct4(::apache::thrift::detail::argument_wrapper<6, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct4(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    field3 = std::make_unique<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+
+  struct4(struct4&&) = default;
+  struct4(const struct4& src);
+
+  struct4& operator=(struct4&&) = default;
+  struct4& operator=(const struct4& src);
+  void __clear();
+  int32_t field0;
+  std::string field1;
+   ::test_cpp2::cpp_reflection::enum1 field2;
+  std::unique_ptr< ::test_cpp2::cpp_reflection::structA> field3;
+
+  struct __isset {
+
+    bool field1;
+    bool field2;
+  } __isset = {};
+  bool operator==(const struct4& rhs) const;
+  bool operator < (const struct4& rhs) const;
+
+  int32_t get_field0() const {
+    return field0;
+  }
+
+  int32_t& set_field0(int32_t field0_) {
+    field0 = field0_;
+    return field0;
+  }
+
+  const std::string* get_field1() const& {
+    return __isset.field1 ? std::addressof(field1) : nullptr;
+  }
+
+  std::string* get_field1() & {
+    return __isset.field1 ? std::addressof(field1) : nullptr;
+  }
+  std::string* get_field1() && = delete;
+
+  template <typename T_struct4_field1_struct_setter>
+  std::string& set_field1(T_struct4_field1_struct_setter&& field1_) {
+    field1 = std::forward<T_struct4_field1_struct_setter>(field1_);
+    __isset.field1 = true;
+    return field1;
+  }
+
+   ::test_cpp2::cpp_reflection::enum1 get_field2() const {
+    return field2;
+  }
+
+   ::test_cpp2::cpp_reflection::enum1& set_field2( ::test_cpp2::cpp_reflection::enum1 field2_) {
+    field2 = field2_;
+    __isset.field2 = true;
+    return field2;
+  }
+
+  template <class Protocol_>
+  uint32_t read(Protocol_* iprot);
+  template <class Protocol_>
+  uint32_t serializedSize(Protocol_ const* prot_) const;
+  template <class Protocol_>
+  uint32_t serializedSizeZC(Protocol_ const* prot_) const;
+  template <class Protocol_>
+  uint32_t write(Protocol_* prot_) const;
+
+ private:
+  static void translateFieldName(FOLLY_MAYBE_UNUSED folly::StringPiece _fname, FOLLY_MAYBE_UNUSED int16_t& fid, FOLLY_MAYBE_UNUSED apache::thrift::protocol::TType& _ftype);
+};
+
+void swap(struct4& a, struct4& b);
+extern template uint32_t struct4::read<>(apache::thrift::BinaryProtocolReader*);
+extern template uint32_t struct4::write<>(apache::thrift::BinaryProtocolWriter*) const;
+extern template uint32_t struct4::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t struct4::serializedSizeZC<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t struct4::read<>(apache::thrift::CompactProtocolReader*);
+extern template uint32_t struct4::write<>(apache::thrift::CompactProtocolWriter*) const;
+extern template uint32_t struct4::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
+extern template uint32_t struct4::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+
+}} // test_cpp2::cpp_reflection
+namespace apache { namespace thrift {
+
+template <> inline void Cpp2Ops< ::test_cpp2::cpp_reflection::struct4>::clear( ::test_cpp2::cpp_reflection::struct4* obj) {
+  return obj->__clear();
+}
+
+template <> inline constexpr apache::thrift::protocol::TType Cpp2Ops< ::test_cpp2::cpp_reflection::struct4>::thriftType() {
+  return apache::thrift::protocol::T_STRUCT;
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct4>::write(Protocol* proto,  ::test_cpp2::cpp_reflection::struct4 const* obj) {
+  return obj->write(proto);
+}
+
+template <> template <class Protocol> void Cpp2Ops< ::test_cpp2::cpp_reflection::struct4>::read(Protocol* proto,  ::test_cpp2::cpp_reflection::struct4* obj) {
+  obj->read(proto);
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct4>::serializedSize(Protocol const* proto,  ::test_cpp2::cpp_reflection::struct4 const* obj) {
+  return obj->serializedSize(proto);
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct4>::serializedSizeZC(Protocol const* proto,  ::test_cpp2::cpp_reflection::struct4 const* obj) {
+  return obj->serializedSizeZC(proto);
+}
+
+}} // apache::thrift
+namespace test_cpp2 { namespace cpp_reflection {
+
+class struct5 final : private apache::thrift::detail::st::ComparisonOperators<struct5> {
+ public:
+
+  struct5();
+  // FragileConstructor for use in initialization lists only
+  struct5(apache::thrift::FragileConstructor, int32_t field0__arg, std::string field1__arg,  ::test_cpp2::cpp_reflection::enum1 field2__arg,  ::test_cpp2::cpp_reflection::structA field3__arg,  ::test_cpp2::cpp_reflection::structB field4__arg);
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct5(::apache::thrift::detail::argument_wrapper<1, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct5(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    field0 = arg.move();
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct5(::apache::thrift::detail::argument_wrapper<2, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct5(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    field1 = arg.move();
+    __isset.field1 = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct5(::apache::thrift::detail::argument_wrapper<3, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct5(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    field2 = arg.move();
+    __isset.field2 = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct5(::apache::thrift::detail::argument_wrapper<4, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct5(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    field3 = arg.move();
+    __isset.field3 = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct5(::apache::thrift::detail::argument_wrapper<5, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct5(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    field4 = arg.move();
+    __isset.field4 = true;
+  }
+
+  struct5(struct5&&) = default;
+
+  struct5(const struct5&) = default;
+
+  struct5& operator=(struct5&&) = default;
+
+  struct5& operator=(const struct5&) = default;
+  void __clear();
+   ~struct5();
+
+  int32_t field0;
+  std::string field1;
+   ::test_cpp2::cpp_reflection::enum1 field2;
+   ::test_cpp2::cpp_reflection::structA field3;
+   ::test_cpp2::cpp_reflection::structB field4;
+
+  struct __isset {
+
+    bool field1;
+    bool field2;
+    bool field3;
+    bool field4;
+  } __isset = {};
+  bool operator==(const struct5& rhs) const;
+  bool operator < (const struct5& rhs) const;
+
+  int32_t get_field0() const {
+    return field0;
+  }
+
+  int32_t& set_field0(int32_t field0_) {
+    field0 = field0_;
+    return field0;
+  }
+
+  const std::string* get_field1() const& {
+    return __isset.field1 ? std::addressof(field1) : nullptr;
+  }
+
+  std::string* get_field1() & {
+    return __isset.field1 ? std::addressof(field1) : nullptr;
+  }
+  std::string* get_field1() && = delete;
+
+  template <typename T_struct5_field1_struct_setter>
+  std::string& set_field1(T_struct5_field1_struct_setter&& field1_) {
+    field1 = std::forward<T_struct5_field1_struct_setter>(field1_);
+    __isset.field1 = true;
+    return field1;
+  }
+
+   ::test_cpp2::cpp_reflection::enum1 get_field2() const {
+    return field2;
+  }
+
+   ::test_cpp2::cpp_reflection::enum1& set_field2( ::test_cpp2::cpp_reflection::enum1 field2_) {
+    field2 = field2_;
+    __isset.field2 = true;
+    return field2;
+  }
+  const  ::test_cpp2::cpp_reflection::structA& get_field3() const&;
+   ::test_cpp2::cpp_reflection::structA get_field3() &&;
+
+  template <typename T_struct5_field3_struct_setter>
+   ::test_cpp2::cpp_reflection::structA& set_field3(T_struct5_field3_struct_setter&& field3_) {
+    field3 = std::forward<T_struct5_field3_struct_setter>(field3_);
+    __isset.field3 = true;
+    return field3;
+  }
+  const  ::test_cpp2::cpp_reflection::structB& get_field4() const&;
+   ::test_cpp2::cpp_reflection::structB get_field4() &&;
+
+  template <typename T_struct5_field4_struct_setter>
+   ::test_cpp2::cpp_reflection::structB& set_field4(T_struct5_field4_struct_setter&& field4_) {
+    field4 = std::forward<T_struct5_field4_struct_setter>(field4_);
+    __isset.field4 = true;
+    return field4;
+  }
+
+  template <class Protocol_>
+  uint32_t read(Protocol_* iprot);
+  template <class Protocol_>
+  uint32_t serializedSize(Protocol_ const* prot_) const;
+  template <class Protocol_>
+  uint32_t serializedSizeZC(Protocol_ const* prot_) const;
+  template <class Protocol_>
+  uint32_t write(Protocol_* prot_) const;
+
+ private:
+  static void translateFieldName(FOLLY_MAYBE_UNUSED folly::StringPiece _fname, FOLLY_MAYBE_UNUSED int16_t& fid, FOLLY_MAYBE_UNUSED apache::thrift::protocol::TType& _ftype);
+};
+
+void swap(struct5& a, struct5& b);
+extern template uint32_t struct5::read<>(apache::thrift::BinaryProtocolReader*);
+extern template uint32_t struct5::write<>(apache::thrift::BinaryProtocolWriter*) const;
+extern template uint32_t struct5::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t struct5::serializedSizeZC<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t struct5::read<>(apache::thrift::CompactProtocolReader*);
+extern template uint32_t struct5::write<>(apache::thrift::CompactProtocolWriter*) const;
+extern template uint32_t struct5::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
+extern template uint32_t struct5::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+
+}} // test_cpp2::cpp_reflection
+namespace apache { namespace thrift {
+
+template <> inline void Cpp2Ops< ::test_cpp2::cpp_reflection::struct5>::clear( ::test_cpp2::cpp_reflection::struct5* obj) {
+  return obj->__clear();
+}
+
+template <> inline constexpr apache::thrift::protocol::TType Cpp2Ops< ::test_cpp2::cpp_reflection::struct5>::thriftType() {
+  return apache::thrift::protocol::T_STRUCT;
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct5>::write(Protocol* proto,  ::test_cpp2::cpp_reflection::struct5 const* obj) {
+  return obj->write(proto);
+}
+
+template <> template <class Protocol> void Cpp2Ops< ::test_cpp2::cpp_reflection::struct5>::read(Protocol* proto,  ::test_cpp2::cpp_reflection::struct5* obj) {
+  obj->read(proto);
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct5>::serializedSize(Protocol const* proto,  ::test_cpp2::cpp_reflection::struct5 const* obj) {
+  return obj->serializedSize(proto);
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct5>::serializedSizeZC(Protocol const* proto,  ::test_cpp2::cpp_reflection::struct5 const* obj) {
+  return obj->serializedSizeZC(proto);
+}
+
+}} // apache::thrift
+namespace test_cpp2 { namespace cpp_reflection {
+
+class struct_binary final : private apache::thrift::detail::st::ComparisonOperators<struct_binary> {
+ public:
+
+  struct_binary() {}
+  // FragileConstructor for use in initialization lists only
+  struct_binary(apache::thrift::FragileConstructor, std::string bi__arg);
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_binary(::apache::thrift::detail::argument_wrapper<1, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_binary(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    bi = arg.move();
+    __isset.bi = true;
+  }
+
+  struct_binary(struct_binary&&) = default;
+
+  struct_binary(const struct_binary&) = default;
+
+  struct_binary& operator=(struct_binary&&) = default;
+
+  struct_binary& operator=(const struct_binary&) = default;
+  void __clear();
+  std::string bi;
+
+  struct __isset {
+
+    bool bi;
+  } __isset = {};
+  bool operator==(const struct_binary& rhs) const;
+
+  bool operator < (const struct_binary& rhs) const {
+    if (!(bi == rhs.bi)) {
+      return bi < rhs.bi;
+    }
+    (void)rhs;
+    return false;
+  }
+
+  const std::string& get_bi() const& {
+    return bi;
+  }
+
+  std::string get_bi() && {
+    return std::move(bi);
+  }
+
+  template <typename T_struct_binary_bi_struct_setter>
+  std::string& set_bi(T_struct_binary_bi_struct_setter&& bi_) {
+    bi = std::forward<T_struct_binary_bi_struct_setter>(bi_);
+    __isset.bi = true;
+    return bi;
+  }
+
+  template <class Protocol_>
+  uint32_t read(Protocol_* iprot);
+  template <class Protocol_>
+  uint32_t serializedSize(Protocol_ const* prot_) const;
+  template <class Protocol_>
+  uint32_t serializedSizeZC(Protocol_ const* prot_) const;
+  template <class Protocol_>
+  uint32_t write(Protocol_* prot_) const;
+
+ private:
+  static void translateFieldName(FOLLY_MAYBE_UNUSED folly::StringPiece _fname, FOLLY_MAYBE_UNUSED int16_t& fid, FOLLY_MAYBE_UNUSED apache::thrift::protocol::TType& _ftype);
+};
+
+void swap(struct_binary& a, struct_binary& b);
+extern template uint32_t struct_binary::read<>(apache::thrift::BinaryProtocolReader*);
+extern template uint32_t struct_binary::write<>(apache::thrift::BinaryProtocolWriter*) const;
+extern template uint32_t struct_binary::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t struct_binary::serializedSizeZC<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t struct_binary::read<>(apache::thrift::CompactProtocolReader*);
+extern template uint32_t struct_binary::write<>(apache::thrift::CompactProtocolWriter*) const;
+extern template uint32_t struct_binary::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
+extern template uint32_t struct_binary::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+
+}} // test_cpp2::cpp_reflection
+namespace apache { namespace thrift {
+
+template <> inline void Cpp2Ops< ::test_cpp2::cpp_reflection::struct_binary>::clear( ::test_cpp2::cpp_reflection::struct_binary* obj) {
+  return obj->__clear();
+}
+
+template <> inline constexpr apache::thrift::protocol::TType Cpp2Ops< ::test_cpp2::cpp_reflection::struct_binary>::thriftType() {
+  return apache::thrift::protocol::T_STRUCT;
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct_binary>::write(Protocol* proto,  ::test_cpp2::cpp_reflection::struct_binary const* obj) {
+  return obj->write(proto);
+}
+
+template <> template <class Protocol> void Cpp2Ops< ::test_cpp2::cpp_reflection::struct_binary>::read(Protocol* proto,  ::test_cpp2::cpp_reflection::struct_binary* obj) {
+  obj->read(proto);
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct_binary>::serializedSize(Protocol const* proto,  ::test_cpp2::cpp_reflection::struct_binary const* obj) {
+  return obj->serializedSize(proto);
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct_binary>::serializedSizeZC(Protocol const* proto,  ::test_cpp2::cpp_reflection::struct_binary const* obj) {
+  return obj->serializedSizeZC(proto);
+}
+
+}} // apache::thrift
+namespace test_cpp2 { namespace cpp_reflection {
+
+class dep_A_struct final : private apache::thrift::detail::st::ComparisonOperators<dep_A_struct> {
+ public:
+
+  dep_A_struct() :
+      i_a(0) {}
+  // FragileConstructor for use in initialization lists only
+  dep_A_struct(apache::thrift::FragileConstructor,  ::test_cpp2::cpp_reflection::dep_B_struct b__arg,  ::test_cpp2::cpp_reflection::dep_C_struct c__arg, int32_t i_a__arg);
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  dep_A_struct(::apache::thrift::detail::argument_wrapper<1, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    dep_A_struct(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    b = arg.move();
+    __isset.b = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  dep_A_struct(::apache::thrift::detail::argument_wrapper<2, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    dep_A_struct(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    c = arg.move();
+    __isset.c = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  dep_A_struct(::apache::thrift::detail::argument_wrapper<3, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    dep_A_struct(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    i_a = arg.move();
+    __isset.i_a = true;
+  }
+
+  dep_A_struct(dep_A_struct&&) = default;
+
+  dep_A_struct(const dep_A_struct&) = default;
+
+  dep_A_struct& operator=(dep_A_struct&&) = default;
+
+  dep_A_struct& operator=(const dep_A_struct&) = default;
+  void __clear();
+   ::test_cpp2::cpp_reflection::dep_B_struct b;
+   ::test_cpp2::cpp_reflection::dep_C_struct c;
+  int32_t i_a;
+
+  struct __isset {
+
+    bool b;
+    bool c;
+    bool i_a;
+  } __isset = {};
+  bool operator==(const dep_A_struct& rhs) const;
+
+  bool operator < (const dep_A_struct& rhs) const {
+    if (!(b == rhs.b)) {
+      return b < rhs.b;
+    }
+    if (!(c == rhs.c)) {
+      return c < rhs.c;
+    }
+    if (!(i_a == rhs.i_a)) {
+      return i_a < rhs.i_a;
+    }
+    (void)rhs;
+    return false;
+  }
+  const  ::test_cpp2::cpp_reflection::dep_B_struct& get_b() const&;
+   ::test_cpp2::cpp_reflection::dep_B_struct get_b() &&;
+
+  template <typename T_dep_A_struct_b_struct_setter>
+   ::test_cpp2::cpp_reflection::dep_B_struct& set_b(T_dep_A_struct_b_struct_setter&& b_) {
+    b = std::forward<T_dep_A_struct_b_struct_setter>(b_);
+    __isset.b = true;
+    return b;
+  }
+  const  ::test_cpp2::cpp_reflection::dep_C_struct& get_c() const&;
+   ::test_cpp2::cpp_reflection::dep_C_struct get_c() &&;
+
+  template <typename T_dep_A_struct_c_struct_setter>
+   ::test_cpp2::cpp_reflection::dep_C_struct& set_c(T_dep_A_struct_c_struct_setter&& c_) {
+    c = std::forward<T_dep_A_struct_c_struct_setter>(c_);
+    __isset.c = true;
+    return c;
+  }
+
+  int32_t get_i_a() const {
+    return i_a;
+  }
+
+  int32_t& set_i_a(int32_t i_a_) {
+    i_a = i_a_;
+    __isset.i_a = true;
+    return i_a;
+  }
+
+  template <class Protocol_>
+  uint32_t read(Protocol_* iprot);
+  template <class Protocol_>
+  uint32_t serializedSize(Protocol_ const* prot_) const;
+  template <class Protocol_>
+  uint32_t serializedSizeZC(Protocol_ const* prot_) const;
+  template <class Protocol_>
+  uint32_t write(Protocol_* prot_) const;
+
+ private:
+  static void translateFieldName(FOLLY_MAYBE_UNUSED folly::StringPiece _fname, FOLLY_MAYBE_UNUSED int16_t& fid, FOLLY_MAYBE_UNUSED apache::thrift::protocol::TType& _ftype);
+};
+
+void swap(dep_A_struct& a, dep_A_struct& b);
+extern template uint32_t dep_A_struct::read<>(apache::thrift::BinaryProtocolReader*);
+extern template uint32_t dep_A_struct::write<>(apache::thrift::BinaryProtocolWriter*) const;
+extern template uint32_t dep_A_struct::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t dep_A_struct::serializedSizeZC<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t dep_A_struct::read<>(apache::thrift::CompactProtocolReader*);
+extern template uint32_t dep_A_struct::write<>(apache::thrift::CompactProtocolWriter*) const;
+extern template uint32_t dep_A_struct::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
+extern template uint32_t dep_A_struct::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+
+}} // test_cpp2::cpp_reflection
+namespace apache { namespace thrift {
+
+template <> inline void Cpp2Ops< ::test_cpp2::cpp_reflection::dep_A_struct>::clear( ::test_cpp2::cpp_reflection::dep_A_struct* obj) {
+  return obj->__clear();
+}
+
+template <> inline constexpr apache::thrift::protocol::TType Cpp2Ops< ::test_cpp2::cpp_reflection::dep_A_struct>::thriftType() {
+  return apache::thrift::protocol::T_STRUCT;
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::dep_A_struct>::write(Protocol* proto,  ::test_cpp2::cpp_reflection::dep_A_struct const* obj) {
+  return obj->write(proto);
+}
+
+template <> template <class Protocol> void Cpp2Ops< ::test_cpp2::cpp_reflection::dep_A_struct>::read(Protocol* proto,  ::test_cpp2::cpp_reflection::dep_A_struct* obj) {
+  obj->read(proto);
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::dep_A_struct>::serializedSize(Protocol const* proto,  ::test_cpp2::cpp_reflection::dep_A_struct const* obj) {
+  return obj->serializedSize(proto);
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::dep_A_struct>::serializedSizeZC(Protocol const* proto,  ::test_cpp2::cpp_reflection::dep_A_struct const* obj) {
+  return obj->serializedSizeZC(proto);
+}
+
+}} // apache::thrift
+namespace test_cpp2 { namespace cpp_reflection {
+
+class annotated final : private apache::thrift::detail::st::ComparisonOperators<annotated> {
+ public:
+
+  annotated() :
+      a(0) {}
+  // FragileConstructor for use in initialization lists only
+  annotated(apache::thrift::FragileConstructor, int32_t a__arg);
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  annotated(::apache::thrift::detail::argument_wrapper<1, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    annotated(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    a = arg.move();
+    __isset.a = true;
+  }
+
+  annotated(annotated&&) = default;
+
+  annotated(const annotated&) = default;
+
+  annotated& operator=(annotated&&) = default;
+
+  annotated& operator=(const annotated&) = default;
+  void __clear();
+  int32_t a;
+
+  struct __isset {
+
+    bool a;
+  } __isset = {};
+  bool operator==(const annotated& rhs) const;
+
+  bool operator < (const annotated& rhs) const {
+    if (!(a == rhs.a)) {
+      return a < rhs.a;
+    }
+    (void)rhs;
+    return false;
+  }
+
+  int32_t get_a() const {
+    return a;
+  }
+
+  int32_t& set_a(int32_t a_) {
+    a = a_;
+    __isset.a = true;
+    return a;
+  }
+
+  template <class Protocol_>
+  uint32_t read(Protocol_* iprot);
+  template <class Protocol_>
+  uint32_t serializedSize(Protocol_ const* prot_) const;
+  template <class Protocol_>
+  uint32_t serializedSizeZC(Protocol_ const* prot_) const;
+  template <class Protocol_>
+  uint32_t write(Protocol_* prot_) const;
+
+ private:
+  static void translateFieldName(FOLLY_MAYBE_UNUSED folly::StringPiece _fname, FOLLY_MAYBE_UNUSED int16_t& fid, FOLLY_MAYBE_UNUSED apache::thrift::protocol::TType& _ftype);
+};
+
+void swap(annotated& a, annotated& b);
+extern template uint32_t annotated::read<>(apache::thrift::BinaryProtocolReader*);
+extern template uint32_t annotated::write<>(apache::thrift::BinaryProtocolWriter*) const;
+extern template uint32_t annotated::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t annotated::serializedSizeZC<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t annotated::read<>(apache::thrift::CompactProtocolReader*);
+extern template uint32_t annotated::write<>(apache::thrift::CompactProtocolWriter*) const;
+extern template uint32_t annotated::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
+extern template uint32_t annotated::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+
+}} // test_cpp2::cpp_reflection
+namespace apache { namespace thrift {
+
+template <> inline void Cpp2Ops< ::test_cpp2::cpp_reflection::annotated>::clear( ::test_cpp2::cpp_reflection::annotated* obj) {
+  return obj->__clear();
+}
+
+template <> inline constexpr apache::thrift::protocol::TType Cpp2Ops< ::test_cpp2::cpp_reflection::annotated>::thriftType() {
+  return apache::thrift::protocol::T_STRUCT;
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::annotated>::write(Protocol* proto,  ::test_cpp2::cpp_reflection::annotated const* obj) {
+  return obj->write(proto);
+}
+
+template <> template <class Protocol> void Cpp2Ops< ::test_cpp2::cpp_reflection::annotated>::read(Protocol* proto,  ::test_cpp2::cpp_reflection::annotated* obj) {
+  obj->read(proto);
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::annotated>::serializedSize(Protocol const* proto,  ::test_cpp2::cpp_reflection::annotated const* obj) {
+  return obj->serializedSize(proto);
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::annotated>::serializedSizeZC(Protocol const* proto,  ::test_cpp2::cpp_reflection::annotated const* obj) {
+  return obj->serializedSizeZC(proto);
+}
+
+}} // apache::thrift
+namespace test_cpp2 { namespace cpp_reflection {
+
+class union_with_special_names final : private apache::thrift::detail::st::ComparisonOperators<union_with_special_names> {
+ public:
+  enum Type {
+    __EMPTY__ = 0,
+    get = 1,
+    getter = 2,
+    lists = 3,
+    maps = 4,
+    name = 5,
+    name_to_value = 6,
+    names = 7,
+    prefix_tree = 8,
+    sets = 9,
+    setter = 10,
+    str = 11,
+    strings = 12,
+    type = 13,
+    value = 14,
+    value_to_name = 15,
+    values = 16,
+    id = 17,
+    ids = 18,
+    descriptor = 19,
+    descriptors = 20,
+    key = 21,
+    keys = 22,
+    annotation = 23,
+    annotations = 24,
+    member = 25,
+    members = 26,
+    field = 27,
+    fields = 28,
+  } ;
+
+  union_with_special_names() :
+      type_(Type::__EMPTY__) {}
+
+  union_with_special_names(union_with_special_names&& rhs) :
+      type_(Type::__EMPTY__) {
+    if (this == &rhs) {return; }
+    if (rhs.type_ == Type::__EMPTY__) { return; }
+    switch(rhs.type_) {
+      case Type::get:
+      {
+        set_get(std::move(rhs.value_.get));
+        break;
+      }
+      case Type::getter:
+      {
+        set_getter(std::move(rhs.value_.getter));
+        break;
+      }
+      case Type::lists:
+      {
+        set_lists(std::move(rhs.value_.lists));
+        break;
+      }
+      case Type::maps:
+      {
+        set_maps(std::move(rhs.value_.maps));
+        break;
+      }
+      case Type::name:
+      {
+        set_name(std::move(rhs.value_.name));
+        break;
+      }
+      case Type::name_to_value:
+      {
+        set_name_to_value(std::move(rhs.value_.name_to_value));
+        break;
+      }
+      case Type::names:
+      {
+        set_names(std::move(rhs.value_.names));
+        break;
+      }
+      case Type::prefix_tree:
+      {
+        set_prefix_tree(std::move(rhs.value_.prefix_tree));
+        break;
+      }
+      case Type::sets:
+      {
+        set_sets(std::move(rhs.value_.sets));
+        break;
+      }
+      case Type::setter:
+      {
+        set_setter(std::move(rhs.value_.setter));
+        break;
+      }
+      case Type::str:
+      {
+        set_str(std::move(rhs.value_.str));
+        break;
+      }
+      case Type::strings:
+      {
+        set_strings(std::move(rhs.value_.strings));
+        break;
+      }
+      case Type::type:
+      {
+        set_type(std::move(rhs.value_.type));
+        break;
+      }
+      case Type::value:
+      {
+        set_value(std::move(rhs.value_.value));
+        break;
+      }
+      case Type::value_to_name:
+      {
+        set_value_to_name(std::move(rhs.value_.value_to_name));
+        break;
+      }
+      case Type::values:
+      {
+        set_values(std::move(rhs.value_.values));
+        break;
+      }
+      case Type::id:
+      {
+        set_id(std::move(rhs.value_.id));
+        break;
+      }
+      case Type::ids:
+      {
+        set_ids(std::move(rhs.value_.ids));
+        break;
+      }
+      case Type::descriptor:
+      {
+        set_descriptor(std::move(rhs.value_.descriptor));
+        break;
+      }
+      case Type::descriptors:
+      {
+        set_descriptors(std::move(rhs.value_.descriptors));
+        break;
+      }
+      case Type::key:
+      {
+        set_key(std::move(rhs.value_.key));
+        break;
+      }
+      case Type::keys:
+      {
+        set_keys(std::move(rhs.value_.keys));
+        break;
+      }
+      case Type::annotation:
+      {
+        set_annotation(std::move(rhs.value_.annotation));
+        break;
+      }
+      case Type::annotations:
+      {
+        set_annotations(std::move(rhs.value_.annotations));
+        break;
+      }
+      case Type::member:
+      {
+        set_member(std::move(rhs.value_.member));
+        break;
+      }
+      case Type::members:
+      {
+        set_members(std::move(rhs.value_.members));
+        break;
+      }
+      case Type::field:
+      {
+        set_field(std::move(rhs.value_.field));
+        break;
+      }
+      case Type::fields:
+      {
+        set_fields(std::move(rhs.value_.fields));
+        break;
+      }
+      default:
+      {
+        assert(false);
+        break;
+      }
+    }
+    rhs.__clear();
+  }
+
+  union_with_special_names(const union_with_special_names& rhs) :
+      type_(Type::__EMPTY__) {
+    if (this == &rhs) {return; }
+    if (rhs.type_ == Type::__EMPTY__) { return; }
+    switch(rhs.type_) {
+      case Type::get:
+      {
+        set_get(rhs.value_.get);
+        break;
+      }
+      case Type::getter:
+      {
+        set_getter(rhs.value_.getter);
+        break;
+      }
+      case Type::lists:
+      {
+        set_lists(rhs.value_.lists);
+        break;
+      }
+      case Type::maps:
+      {
+        set_maps(rhs.value_.maps);
+        break;
+      }
+      case Type::name:
+      {
+        set_name(rhs.value_.name);
+        break;
+      }
+      case Type::name_to_value:
+      {
+        set_name_to_value(rhs.value_.name_to_value);
+        break;
+      }
+      case Type::names:
+      {
+        set_names(rhs.value_.names);
+        break;
+      }
+      case Type::prefix_tree:
+      {
+        set_prefix_tree(rhs.value_.prefix_tree);
+        break;
+      }
+      case Type::sets:
+      {
+        set_sets(rhs.value_.sets);
+        break;
+      }
+      case Type::setter:
+      {
+        set_setter(rhs.value_.setter);
+        break;
+      }
+      case Type::str:
+      {
+        set_str(rhs.value_.str);
+        break;
+      }
+      case Type::strings:
+      {
+        set_strings(rhs.value_.strings);
+        break;
+      }
+      case Type::type:
+      {
+        set_type(rhs.value_.type);
+        break;
+      }
+      case Type::value:
+      {
+        set_value(rhs.value_.value);
+        break;
+      }
+      case Type::value_to_name:
+      {
+        set_value_to_name(rhs.value_.value_to_name);
+        break;
+      }
+      case Type::values:
+      {
+        set_values(rhs.value_.values);
+        break;
+      }
+      case Type::id:
+      {
+        set_id(rhs.value_.id);
+        break;
+      }
+      case Type::ids:
+      {
+        set_ids(rhs.value_.ids);
+        break;
+      }
+      case Type::descriptor:
+      {
+        set_descriptor(rhs.value_.descriptor);
+        break;
+      }
+      case Type::descriptors:
+      {
+        set_descriptors(rhs.value_.descriptors);
+        break;
+      }
+      case Type::key:
+      {
+        set_key(rhs.value_.key);
+        break;
+      }
+      case Type::keys:
+      {
+        set_keys(rhs.value_.keys);
+        break;
+      }
+      case Type::annotation:
+      {
+        set_annotation(rhs.value_.annotation);
+        break;
+      }
+      case Type::annotations:
+      {
+        set_annotations(rhs.value_.annotations);
+        break;
+      }
+      case Type::member:
+      {
+        set_member(rhs.value_.member);
+        break;
+      }
+      case Type::members:
+      {
+        set_members(rhs.value_.members);
+        break;
+      }
+      case Type::field:
+      {
+        set_field(rhs.value_.field);
+        break;
+      }
+      case Type::fields:
+      {
+        set_fields(rhs.value_.fields);
+        break;
+      }
+      default:
+      {
+        assert(false);
+        break;
+      }
+    }
+  }
+
+  union_with_special_names& operator=(union_with_special_names&& rhs) {
+    if (this == &rhs) {return *this; }
+    __clear();
+    if (rhs.type_ == Type::__EMPTY__) { return *this; }
+    switch(rhs.type_) {
+      case Type::get:
+      {
+        set_get(std::move(rhs.value_.get));
+        break;
+      }
+      case Type::getter:
+      {
+        set_getter(std::move(rhs.value_.getter));
+        break;
+      }
+      case Type::lists:
+      {
+        set_lists(std::move(rhs.value_.lists));
+        break;
+      }
+      case Type::maps:
+      {
+        set_maps(std::move(rhs.value_.maps));
+        break;
+      }
+      case Type::name:
+      {
+        set_name(std::move(rhs.value_.name));
+        break;
+      }
+      case Type::name_to_value:
+      {
+        set_name_to_value(std::move(rhs.value_.name_to_value));
+        break;
+      }
+      case Type::names:
+      {
+        set_names(std::move(rhs.value_.names));
+        break;
+      }
+      case Type::prefix_tree:
+      {
+        set_prefix_tree(std::move(rhs.value_.prefix_tree));
+        break;
+      }
+      case Type::sets:
+      {
+        set_sets(std::move(rhs.value_.sets));
+        break;
+      }
+      case Type::setter:
+      {
+        set_setter(std::move(rhs.value_.setter));
+        break;
+      }
+      case Type::str:
+      {
+        set_str(std::move(rhs.value_.str));
+        break;
+      }
+      case Type::strings:
+      {
+        set_strings(std::move(rhs.value_.strings));
+        break;
+      }
+      case Type::type:
+      {
+        set_type(std::move(rhs.value_.type));
+        break;
+      }
+      case Type::value:
+      {
+        set_value(std::move(rhs.value_.value));
+        break;
+      }
+      case Type::value_to_name:
+      {
+        set_value_to_name(std::move(rhs.value_.value_to_name));
+        break;
+      }
+      case Type::values:
+      {
+        set_values(std::move(rhs.value_.values));
+        break;
+      }
+      case Type::id:
+      {
+        set_id(std::move(rhs.value_.id));
+        break;
+      }
+      case Type::ids:
+      {
+        set_ids(std::move(rhs.value_.ids));
+        break;
+      }
+      case Type::descriptor:
+      {
+        set_descriptor(std::move(rhs.value_.descriptor));
+        break;
+      }
+      case Type::descriptors:
+      {
+        set_descriptors(std::move(rhs.value_.descriptors));
+        break;
+      }
+      case Type::key:
+      {
+        set_key(std::move(rhs.value_.key));
+        break;
+      }
+      case Type::keys:
+      {
+        set_keys(std::move(rhs.value_.keys));
+        break;
+      }
+      case Type::annotation:
+      {
+        set_annotation(std::move(rhs.value_.annotation));
+        break;
+      }
+      case Type::annotations:
+      {
+        set_annotations(std::move(rhs.value_.annotations));
+        break;
+      }
+      case Type::member:
+      {
+        set_member(std::move(rhs.value_.member));
+        break;
+      }
+      case Type::members:
+      {
+        set_members(std::move(rhs.value_.members));
+        break;
+      }
+      case Type::field:
+      {
+        set_field(std::move(rhs.value_.field));
+        break;
+      }
+      case Type::fields:
+      {
+        set_fields(std::move(rhs.value_.fields));
+        break;
+      }
+      default:
+      {
+        assert(false);
+        break;
+      }
+    }
+    rhs.__clear();
+    return *this;
+  }
+
+  union_with_special_names& operator=(const union_with_special_names& rhs) {
+    if (this == &rhs) {return *this; }
+    __clear();
+    if (rhs.type_ == Type::__EMPTY__) { return *this; }
+    switch(rhs.type_) {
+      case Type::get:
+      {
+        set_get(rhs.value_.get);
+        break;
+      }
+      case Type::getter:
+      {
+        set_getter(rhs.value_.getter);
+        break;
+      }
+      case Type::lists:
+      {
+        set_lists(rhs.value_.lists);
+        break;
+      }
+      case Type::maps:
+      {
+        set_maps(rhs.value_.maps);
+        break;
+      }
+      case Type::name:
+      {
+        set_name(rhs.value_.name);
+        break;
+      }
+      case Type::name_to_value:
+      {
+        set_name_to_value(rhs.value_.name_to_value);
+        break;
+      }
+      case Type::names:
+      {
+        set_names(rhs.value_.names);
+        break;
+      }
+      case Type::prefix_tree:
+      {
+        set_prefix_tree(rhs.value_.prefix_tree);
+        break;
+      }
+      case Type::sets:
+      {
+        set_sets(rhs.value_.sets);
+        break;
+      }
+      case Type::setter:
+      {
+        set_setter(rhs.value_.setter);
+        break;
+      }
+      case Type::str:
+      {
+        set_str(rhs.value_.str);
+        break;
+      }
+      case Type::strings:
+      {
+        set_strings(rhs.value_.strings);
+        break;
+      }
+      case Type::type:
+      {
+        set_type(rhs.value_.type);
+        break;
+      }
+      case Type::value:
+      {
+        set_value(rhs.value_.value);
+        break;
+      }
+      case Type::value_to_name:
+      {
+        set_value_to_name(rhs.value_.value_to_name);
+        break;
+      }
+      case Type::values:
+      {
+        set_values(rhs.value_.values);
+        break;
+      }
+      case Type::id:
+      {
+        set_id(rhs.value_.id);
+        break;
+      }
+      case Type::ids:
+      {
+        set_ids(rhs.value_.ids);
+        break;
+      }
+      case Type::descriptor:
+      {
+        set_descriptor(rhs.value_.descriptor);
+        break;
+      }
+      case Type::descriptors:
+      {
+        set_descriptors(rhs.value_.descriptors);
+        break;
+      }
+      case Type::key:
+      {
+        set_key(rhs.value_.key);
+        break;
+      }
+      case Type::keys:
+      {
+        set_keys(rhs.value_.keys);
+        break;
+      }
+      case Type::annotation:
+      {
+        set_annotation(rhs.value_.annotation);
+        break;
+      }
+      case Type::annotations:
+      {
+        set_annotations(rhs.value_.annotations);
+        break;
+      }
+      case Type::member:
+      {
+        set_member(rhs.value_.member);
+        break;
+      }
+      case Type::members:
+      {
+        set_members(rhs.value_.members);
+        break;
+      }
+      case Type::field:
+      {
+        set_field(rhs.value_.field);
+        break;
+      }
+      case Type::fields:
+      {
+        set_fields(rhs.value_.fields);
+        break;
+      }
+      default:
+      {
+        assert(false);
+        break;
+      }
+    }
+    return *this;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<1, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_get(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<2, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_getter(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<3, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_lists(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<4, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_maps(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<5, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_name(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<6, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_name_to_value(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<7, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_names(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<8, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_prefix_tree(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<9, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_sets(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<10, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_setter(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<11, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_str(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<12, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_strings(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<13, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_type(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<14, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_value(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<15, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_value_to_name(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<16, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_values(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<17, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_id(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<18, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_ids(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<19, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_descriptor(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<20, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_descriptors(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<21, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_key(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<22, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_keys(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<23, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_annotation(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<24, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_annotations(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<25, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_member(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<26, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_members(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<27, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_field(arg.move());
+  }
+  template <typename T__ThriftWrappedArgument__Ctor>
+  union_with_special_names(::apache::thrift::detail::argument_wrapper<28, T__ThriftWrappedArgument__Ctor> arg):
+    type_(Type::__EMPTY__)
+  {
+    set_fields(arg.move());
+  }
+  void __clear();
+
+  ~union_with_special_names() {
+    __clear();
+  }
+  union storage_type {
+    int32_t get;
+    int32_t getter;
+    int32_t lists;
+    int32_t maps;
+    int32_t name;
+    int32_t name_to_value;
+    int32_t names;
+    int32_t prefix_tree;
+    int32_t sets;
+    int32_t setter;
+    int32_t str;
+    int32_t strings;
+    int32_t type;
+    int32_t value;
+    int32_t value_to_name;
+    int32_t values;
+    int32_t id;
+    int32_t ids;
+    int32_t descriptor;
+    int32_t descriptors;
+    int32_t key;
+    int32_t keys;
+    int32_t annotation;
+    int32_t annotations;
+    int32_t member;
+    int32_t members;
+    int32_t field;
+    int32_t fields;
+
+    storage_type() {}
+    ~storage_type() {}
+  } ;
+  bool operator==(const union_with_special_names& rhs) const;
+
+  bool operator < (const union_with_special_names& rhs) const {
+    if (type_ != rhs.type_) { return type_ < rhs.type_; }
+    switch(type_) {
+      case Type::get:
+      {
+        return value_.get < rhs.value_.get;
+      }
+      case Type::getter:
+      {
+        return value_.getter < rhs.value_.getter;
+      }
+      case Type::lists:
+      {
+        return value_.lists < rhs.value_.lists;
+      }
+      case Type::maps:
+      {
+        return value_.maps < rhs.value_.maps;
+      }
+      case Type::name:
+      {
+        return value_.name < rhs.value_.name;
+      }
+      case Type::name_to_value:
+      {
+        return value_.name_to_value < rhs.value_.name_to_value;
+      }
+      case Type::names:
+      {
+        return value_.names < rhs.value_.names;
+      }
+      case Type::prefix_tree:
+      {
+        return value_.prefix_tree < rhs.value_.prefix_tree;
+      }
+      case Type::sets:
+      {
+        return value_.sets < rhs.value_.sets;
+      }
+      case Type::setter:
+      {
+        return value_.setter < rhs.value_.setter;
+      }
+      case Type::str:
+      {
+        return value_.str < rhs.value_.str;
+      }
+      case Type::strings:
+      {
+        return value_.strings < rhs.value_.strings;
+      }
+      case Type::type:
+      {
+        return value_.type < rhs.value_.type;
+      }
+      case Type::value:
+      {
+        return value_.value < rhs.value_.value;
+      }
+      case Type::value_to_name:
+      {
+        return value_.value_to_name < rhs.value_.value_to_name;
+      }
+      case Type::values:
+      {
+        return value_.values < rhs.value_.values;
+      }
+      case Type::id:
+      {
+        return value_.id < rhs.value_.id;
+      }
+      case Type::ids:
+      {
+        return value_.ids < rhs.value_.ids;
+      }
+      case Type::descriptor:
+      {
+        return value_.descriptor < rhs.value_.descriptor;
+      }
+      case Type::descriptors:
+      {
+        return value_.descriptors < rhs.value_.descriptors;
+      }
+      case Type::key:
+      {
+        return value_.key < rhs.value_.key;
+      }
+      case Type::keys:
+      {
+        return value_.keys < rhs.value_.keys;
+      }
+      case Type::annotation:
+      {
+        return value_.annotation < rhs.value_.annotation;
+      }
+      case Type::annotations:
+      {
+        return value_.annotations < rhs.value_.annotations;
+      }
+      case Type::member:
+      {
+        return value_.member < rhs.value_.member;
+      }
+      case Type::members:
+      {
+        return value_.members < rhs.value_.members;
+      }
+      case Type::field:
+      {
+        return value_.field < rhs.value_.field;
+      }
+      case Type::fields:
+      {
+        return value_.fields < rhs.value_.fields;
+      }
+      default:
+      {
+        return false;
+      }
+    }
+  }
+
+  int32_t& set_get(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::get;
+    ::new (std::addressof(value_.get)) int32_t(t);
+    return value_.get;
+  }
+
+  int32_t& set_getter(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::getter;
+    ::new (std::addressof(value_.getter)) int32_t(t);
+    return value_.getter;
+  }
+
+  int32_t& set_lists(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::lists;
+    ::new (std::addressof(value_.lists)) int32_t(t);
+    return value_.lists;
+  }
+
+  int32_t& set_maps(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::maps;
+    ::new (std::addressof(value_.maps)) int32_t(t);
+    return value_.maps;
+  }
+
+  int32_t& set_name(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::name;
+    ::new (std::addressof(value_.name)) int32_t(t);
+    return value_.name;
+  }
+
+  int32_t& set_name_to_value(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::name_to_value;
+    ::new (std::addressof(value_.name_to_value)) int32_t(t);
+    return value_.name_to_value;
+  }
+
+  int32_t& set_names(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::names;
+    ::new (std::addressof(value_.names)) int32_t(t);
+    return value_.names;
+  }
+
+  int32_t& set_prefix_tree(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::prefix_tree;
+    ::new (std::addressof(value_.prefix_tree)) int32_t(t);
+    return value_.prefix_tree;
+  }
+
+  int32_t& set_sets(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::sets;
+    ::new (std::addressof(value_.sets)) int32_t(t);
+    return value_.sets;
+  }
+
+  int32_t& set_setter(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::setter;
+    ::new (std::addressof(value_.setter)) int32_t(t);
+    return value_.setter;
+  }
+
+  int32_t& set_str(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::str;
+    ::new (std::addressof(value_.str)) int32_t(t);
+    return value_.str;
+  }
+
+  int32_t& set_strings(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::strings;
+    ::new (std::addressof(value_.strings)) int32_t(t);
+    return value_.strings;
+  }
+
+  int32_t& set_type(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::type;
+    ::new (std::addressof(value_.type)) int32_t(t);
+    return value_.type;
+  }
+
+  int32_t& set_value(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::value;
+    ::new (std::addressof(value_.value)) int32_t(t);
+    return value_.value;
+  }
+
+  int32_t& set_value_to_name(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::value_to_name;
+    ::new (std::addressof(value_.value_to_name)) int32_t(t);
+    return value_.value_to_name;
+  }
+
+  int32_t& set_values(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::values;
+    ::new (std::addressof(value_.values)) int32_t(t);
+    return value_.values;
+  }
+
+  int32_t& set_id(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::id;
+    ::new (std::addressof(value_.id)) int32_t(t);
+    return value_.id;
+  }
+
+  int32_t& set_ids(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::ids;
+    ::new (std::addressof(value_.ids)) int32_t(t);
+    return value_.ids;
+  }
+
+  int32_t& set_descriptor(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::descriptor;
+    ::new (std::addressof(value_.descriptor)) int32_t(t);
+    return value_.descriptor;
+  }
+
+  int32_t& set_descriptors(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::descriptors;
+    ::new (std::addressof(value_.descriptors)) int32_t(t);
+    return value_.descriptors;
+  }
+
+  int32_t& set_key(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::key;
+    ::new (std::addressof(value_.key)) int32_t(t);
+    return value_.key;
+  }
+
+  int32_t& set_keys(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::keys;
+    ::new (std::addressof(value_.keys)) int32_t(t);
+    return value_.keys;
+  }
+
+  int32_t& set_annotation(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::annotation;
+    ::new (std::addressof(value_.annotation)) int32_t(t);
+    return value_.annotation;
+  }
+
+  int32_t& set_annotations(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::annotations;
+    ::new (std::addressof(value_.annotations)) int32_t(t);
+    return value_.annotations;
+  }
+
+  int32_t& set_member(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::member;
+    ::new (std::addressof(value_.member)) int32_t(t);
+    return value_.member;
+  }
+
+  int32_t& set_members(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::members;
+    ::new (std::addressof(value_.members)) int32_t(t);
+    return value_.members;
+  }
+
+  int32_t& set_field(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::field;
+    ::new (std::addressof(value_.field)) int32_t(t);
+    return value_.field;
+  }
+
+  int32_t& set_fields(int32_t t = int32_t()) {
+    __clear();
+    type_ = Type::fields;
+    ::new (std::addressof(value_.fields)) int32_t(t);
+    return value_.fields;
+  }
+
+  int32_t const & get_get() const {
+    assert(type_ == Type::get);
+    return value_.get;
+  }
+
+  int32_t const & get_getter() const {
+    assert(type_ == Type::getter);
+    return value_.getter;
+  }
+
+  int32_t const & get_lists() const {
+    assert(type_ == Type::lists);
+    return value_.lists;
+  }
+
+  int32_t const & get_maps() const {
+    assert(type_ == Type::maps);
+    return value_.maps;
+  }
+
+  int32_t const & get_name() const {
+    assert(type_ == Type::name);
+    return value_.name;
+  }
+
+  int32_t const & get_name_to_value() const {
+    assert(type_ == Type::name_to_value);
+    return value_.name_to_value;
+  }
+
+  int32_t const & get_names() const {
+    assert(type_ == Type::names);
+    return value_.names;
+  }
+
+  int32_t const & get_prefix_tree() const {
+    assert(type_ == Type::prefix_tree);
+    return value_.prefix_tree;
+  }
+
+  int32_t const & get_sets() const {
+    assert(type_ == Type::sets);
+    return value_.sets;
+  }
+
+  int32_t const & get_setter() const {
+    assert(type_ == Type::setter);
+    return value_.setter;
+  }
+
+  int32_t const & get_str() const {
+    assert(type_ == Type::str);
+    return value_.str;
+  }
+
+  int32_t const & get_strings() const {
+    assert(type_ == Type::strings);
+    return value_.strings;
+  }
+
+  int32_t const & get_type() const {
+    assert(type_ == Type::type);
+    return value_.type;
+  }
+
+  int32_t const & get_value() const {
+    assert(type_ == Type::value);
+    return value_.value;
+  }
+
+  int32_t const & get_value_to_name() const {
+    assert(type_ == Type::value_to_name);
+    return value_.value_to_name;
+  }
+
+  int32_t const & get_values() const {
+    assert(type_ == Type::values);
+    return value_.values;
+  }
+
+  int32_t const & get_id() const {
+    assert(type_ == Type::id);
+    return value_.id;
+  }
+
+  int32_t const & get_ids() const {
+    assert(type_ == Type::ids);
+    return value_.ids;
+  }
+
+  int32_t const & get_descriptor() const {
+    assert(type_ == Type::descriptor);
+    return value_.descriptor;
+  }
+
+  int32_t const & get_descriptors() const {
+    assert(type_ == Type::descriptors);
+    return value_.descriptors;
+  }
+
+  int32_t const & get_key() const {
+    assert(type_ == Type::key);
+    return value_.key;
+  }
+
+  int32_t const & get_keys() const {
+    assert(type_ == Type::keys);
+    return value_.keys;
+  }
+
+  int32_t const & get_annotation() const {
+    assert(type_ == Type::annotation);
+    return value_.annotation;
+  }
+
+  int32_t const & get_annotations() const {
+    assert(type_ == Type::annotations);
+    return value_.annotations;
+  }
+
+  int32_t const & get_member() const {
+    assert(type_ == Type::member);
+    return value_.member;
+  }
+
+  int32_t const & get_members() const {
+    assert(type_ == Type::members);
+    return value_.members;
+  }
+
+  int32_t const & get_field() const {
+    assert(type_ == Type::field);
+    return value_.field;
+  }
+
+  int32_t const & get_fields() const {
+    assert(type_ == Type::fields);
+    return value_.fields;
+  }
+
+  int32_t & mutable_get() {
+    assert(type_ == Type::get);
+    return value_.get;
+  }
+
+  int32_t & mutable_getter() {
+    assert(type_ == Type::getter);
+    return value_.getter;
+  }
+
+  int32_t & mutable_lists() {
+    assert(type_ == Type::lists);
+    return value_.lists;
+  }
+
+  int32_t & mutable_maps() {
+    assert(type_ == Type::maps);
+    return value_.maps;
+  }
+
+  int32_t & mutable_name() {
+    assert(type_ == Type::name);
+    return value_.name;
+  }
+
+  int32_t & mutable_name_to_value() {
+    assert(type_ == Type::name_to_value);
+    return value_.name_to_value;
+  }
+
+  int32_t & mutable_names() {
+    assert(type_ == Type::names);
+    return value_.names;
+  }
+
+  int32_t & mutable_prefix_tree() {
+    assert(type_ == Type::prefix_tree);
+    return value_.prefix_tree;
+  }
+
+  int32_t & mutable_sets() {
+    assert(type_ == Type::sets);
+    return value_.sets;
+  }
+
+  int32_t & mutable_setter() {
+    assert(type_ == Type::setter);
+    return value_.setter;
+  }
+
+  int32_t & mutable_str() {
+    assert(type_ == Type::str);
+    return value_.str;
+  }
+
+  int32_t & mutable_strings() {
+    assert(type_ == Type::strings);
+    return value_.strings;
+  }
+
+  int32_t & mutable_type() {
+    assert(type_ == Type::type);
+    return value_.type;
+  }
+
+  int32_t & mutable_value() {
+    assert(type_ == Type::value);
+    return value_.value;
+  }
+
+  int32_t & mutable_value_to_name() {
+    assert(type_ == Type::value_to_name);
+    return value_.value_to_name;
+  }
+
+  int32_t & mutable_values() {
+    assert(type_ == Type::values);
+    return value_.values;
+  }
+
+  int32_t & mutable_id() {
+    assert(type_ == Type::id);
+    return value_.id;
+  }
+
+  int32_t & mutable_ids() {
+    assert(type_ == Type::ids);
+    return value_.ids;
+  }
+
+  int32_t & mutable_descriptor() {
+    assert(type_ == Type::descriptor);
+    return value_.descriptor;
+  }
+
+  int32_t & mutable_descriptors() {
+    assert(type_ == Type::descriptors);
+    return value_.descriptors;
+  }
+
+  int32_t & mutable_key() {
+    assert(type_ == Type::key);
+    return value_.key;
+  }
+
+  int32_t & mutable_keys() {
+    assert(type_ == Type::keys);
+    return value_.keys;
+  }
+
+  int32_t & mutable_annotation() {
+    assert(type_ == Type::annotation);
+    return value_.annotation;
+  }
+
+  int32_t & mutable_annotations() {
+    assert(type_ == Type::annotations);
+    return value_.annotations;
+  }
+
+  int32_t & mutable_member() {
+    assert(type_ == Type::member);
+    return value_.member;
+  }
+
+  int32_t & mutable_members() {
+    assert(type_ == Type::members);
+    return value_.members;
+  }
+
+  int32_t & mutable_field() {
+    assert(type_ == Type::field);
+    return value_.field;
+  }
+
+  int32_t & mutable_fields() {
+    assert(type_ == Type::fields);
+    return value_.fields;
+  }
+
+  int32_t move_get() {
+    assert(type_ == Type::get);
+    return std::move(value_.get);
+  }
+
+  int32_t move_getter() {
+    assert(type_ == Type::getter);
+    return std::move(value_.getter);
+  }
+
+  int32_t move_lists() {
+    assert(type_ == Type::lists);
+    return std::move(value_.lists);
+  }
+
+  int32_t move_maps() {
+    assert(type_ == Type::maps);
+    return std::move(value_.maps);
+  }
+
+  int32_t move_name() {
+    assert(type_ == Type::name);
+    return std::move(value_.name);
+  }
+
+  int32_t move_name_to_value() {
+    assert(type_ == Type::name_to_value);
+    return std::move(value_.name_to_value);
+  }
+
+  int32_t move_names() {
+    assert(type_ == Type::names);
+    return std::move(value_.names);
+  }
+
+  int32_t move_prefix_tree() {
+    assert(type_ == Type::prefix_tree);
+    return std::move(value_.prefix_tree);
+  }
+
+  int32_t move_sets() {
+    assert(type_ == Type::sets);
+    return std::move(value_.sets);
+  }
+
+  int32_t move_setter() {
+    assert(type_ == Type::setter);
+    return std::move(value_.setter);
+  }
+
+  int32_t move_str() {
+    assert(type_ == Type::str);
+    return std::move(value_.str);
+  }
+
+  int32_t move_strings() {
+    assert(type_ == Type::strings);
+    return std::move(value_.strings);
+  }
+
+  int32_t move_type() {
+    assert(type_ == Type::type);
+    return std::move(value_.type);
+  }
+
+  int32_t move_value() {
+    assert(type_ == Type::value);
+    return std::move(value_.value);
+  }
+
+  int32_t move_value_to_name() {
+    assert(type_ == Type::value_to_name);
+    return std::move(value_.value_to_name);
+  }
+
+  int32_t move_values() {
+    assert(type_ == Type::values);
+    return std::move(value_.values);
+  }
+
+  int32_t move_id() {
+    assert(type_ == Type::id);
+    return std::move(value_.id);
+  }
+
+  int32_t move_ids() {
+    assert(type_ == Type::ids);
+    return std::move(value_.ids);
+  }
+
+  int32_t move_descriptor() {
+    assert(type_ == Type::descriptor);
+    return std::move(value_.descriptor);
+  }
+
+  int32_t move_descriptors() {
+    assert(type_ == Type::descriptors);
+    return std::move(value_.descriptors);
+  }
+
+  int32_t move_key() {
+    assert(type_ == Type::key);
+    return std::move(value_.key);
+  }
+
+  int32_t move_keys() {
+    assert(type_ == Type::keys);
+    return std::move(value_.keys);
+  }
+
+  int32_t move_annotation() {
+    assert(type_ == Type::annotation);
+    return std::move(value_.annotation);
+  }
+
+  int32_t move_annotations() {
+    assert(type_ == Type::annotations);
+    return std::move(value_.annotations);
+  }
+
+  int32_t move_member() {
+    assert(type_ == Type::member);
+    return std::move(value_.member);
+  }
+
+  int32_t move_members() {
+    assert(type_ == Type::members);
+    return std::move(value_.members);
+  }
+
+  int32_t move_field() {
+    assert(type_ == Type::field);
+    return std::move(value_.field);
+  }
+
+  int32_t move_fields() {
+    assert(type_ == Type::fields);
+    return std::move(value_.fields);
+  }
+
+  Type getType() const { return type_; }
+
+  template <class Protocol_>
+  uint32_t read(Protocol_* iprot);
+  template <class Protocol_>
+  uint32_t serializedSize(Protocol_ const* prot_) const;
+  template <class Protocol_>
+  uint32_t serializedSizeZC(Protocol_ const* prot_) const;
+  template <class Protocol_>
+  uint32_t write(Protocol_* prot_) const;
+ protected:
+  template <class T>
+  void destruct(T &val) {
+    (&val)->~T();
+  }
+
+  Type type_;
+  storage_type value_;
+
+ private:
+  static void translateFieldName(FOLLY_MAYBE_UNUSED folly::StringPiece _fname, FOLLY_MAYBE_UNUSED int16_t& fid, FOLLY_MAYBE_UNUSED apache::thrift::protocol::TType& _ftype);
+};
+
+void swap(union_with_special_names& a, union_with_special_names& b);
+extern template uint32_t union_with_special_names::read<>(apache::thrift::BinaryProtocolReader*);
+extern template uint32_t union_with_special_names::write<>(apache::thrift::BinaryProtocolWriter*) const;
+extern template uint32_t union_with_special_names::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t union_with_special_names::serializedSizeZC<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t union_with_special_names::read<>(apache::thrift::CompactProtocolReader*);
+extern template uint32_t union_with_special_names::write<>(apache::thrift::CompactProtocolWriter*) const;
+extern template uint32_t union_with_special_names::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
+extern template uint32_t union_with_special_names::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+
+}} // test_cpp2::cpp_reflection
+namespace apache { namespace thrift {
+
+template <> inline void Cpp2Ops< ::test_cpp2::cpp_reflection::union_with_special_names>::clear( ::test_cpp2::cpp_reflection::union_with_special_names* obj) {
+  return obj->__clear();
+}
+
+template <> inline constexpr apache::thrift::protocol::TType Cpp2Ops< ::test_cpp2::cpp_reflection::union_with_special_names>::thriftType() {
+  return apache::thrift::protocol::T_STRUCT;
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union_with_special_names>::write(Protocol* proto,  ::test_cpp2::cpp_reflection::union_with_special_names const* obj) {
+  return obj->write(proto);
+}
+
+template <> template <class Protocol> void Cpp2Ops< ::test_cpp2::cpp_reflection::union_with_special_names>::read(Protocol* proto,  ::test_cpp2::cpp_reflection::union_with_special_names* obj) {
+  obj->read(proto);
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union_with_special_names>::serializedSize(Protocol const* proto,  ::test_cpp2::cpp_reflection::union_with_special_names const* obj) {
+  return obj->serializedSize(proto);
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::union_with_special_names>::serializedSizeZC(Protocol const* proto,  ::test_cpp2::cpp_reflection::union_with_special_names const* obj) {
+  return obj->serializedSizeZC(proto);
+}
+
+}} // apache::thrift
+namespace test_cpp2 { namespace cpp_reflection {
+
+class struct_with_special_names final : private apache::thrift::detail::st::ComparisonOperators<struct_with_special_names> {
+ public:
+
+  struct_with_special_names() :
+      get(0),
+      getter(0),
+      lists(0),
+      maps(0),
+      name(0),
+      name_to_value(0),
+      names(0),
+      prefix_tree(0),
+      sets(0),
+      setter(0),
+      str(0),
+      strings(0),
+      type(0),
+      value(0),
+      value_to_name(0),
+      values(0),
+      id(0),
+      ids(0),
+      descriptor(0),
+      descriptors(0),
+      key(0),
+      keys(0),
+      annotation(0),
+      annotations(0),
+      member(0),
+      members(0),
+      field(0),
+      fields(0) {}
+  // FragileConstructor for use in initialization lists only
+  struct_with_special_names(apache::thrift::FragileConstructor, int32_t get__arg, int32_t getter__arg, int32_t lists__arg, int32_t maps__arg, int32_t name__arg, int32_t name_to_value__arg, int32_t names__arg, int32_t prefix_tree__arg, int32_t sets__arg, int32_t setter__arg, int32_t str__arg, int32_t strings__arg, int32_t type__arg, int32_t value__arg, int32_t value_to_name__arg, int32_t values__arg, int32_t id__arg, int32_t ids__arg, int32_t descriptor__arg, int32_t descriptors__arg, int32_t key__arg, int32_t keys__arg, int32_t annotation__arg, int32_t annotations__arg, int32_t member__arg, int32_t members__arg, int32_t field__arg, int32_t fields__arg);
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<1, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    get = arg.move();
+    __isset.get = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<2, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    getter = arg.move();
+    __isset.getter = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<3, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    lists = arg.move();
+    __isset.lists = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<4, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    maps = arg.move();
+    __isset.maps = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<5, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    name = arg.move();
+    __isset.name = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<6, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    name_to_value = arg.move();
+    __isset.name_to_value = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<7, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    names = arg.move();
+    __isset.names = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<8, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    prefix_tree = arg.move();
+    __isset.prefix_tree = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<9, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    sets = arg.move();
+    __isset.sets = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<10, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    setter = arg.move();
+    __isset.setter = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<11, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    str = arg.move();
+    __isset.str = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<12, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    strings = arg.move();
+    __isset.strings = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<13, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    type = arg.move();
+    __isset.type = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<14, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    value = arg.move();
+    __isset.value = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<15, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    value_to_name = arg.move();
+    __isset.value_to_name = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<16, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    values = arg.move();
+    __isset.values = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<17, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    id = arg.move();
+    __isset.id = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<18, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    ids = arg.move();
+    __isset.ids = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<19, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    descriptor = arg.move();
+    __isset.descriptor = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<20, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    descriptors = arg.move();
+    __isset.descriptors = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<21, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    key = arg.move();
+    __isset.key = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<22, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    keys = arg.move();
+    __isset.keys = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<23, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    annotation = arg.move();
+    __isset.annotation = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<24, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    annotations = arg.move();
+    __isset.annotations = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<25, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    member = arg.move();
+    __isset.member = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<26, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    members = arg.move();
+    __isset.members = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<27, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    field = arg.move();
+    __isset.field = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_special_names(::apache::thrift::detail::argument_wrapper<28, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_special_names(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    fields = arg.move();
+    __isset.fields = true;
+  }
+
+  struct_with_special_names(struct_with_special_names&&) = default;
+
+  struct_with_special_names(const struct_with_special_names&) = default;
+
+  struct_with_special_names& operator=(struct_with_special_names&&) = default;
+
+  struct_with_special_names& operator=(const struct_with_special_names&) = default;
+  void __clear();
+  int32_t get;
+  int32_t getter;
+  int32_t lists;
+  int32_t maps;
+  int32_t name;
+  int32_t name_to_value;
+  int32_t names;
+  int32_t prefix_tree;
+  int32_t sets;
+  int32_t setter;
+  int32_t str;
+  int32_t strings;
+  int32_t type;
+  int32_t value;
+  int32_t value_to_name;
+  int32_t values;
+  int32_t id;
+  int32_t ids;
+  int32_t descriptor;
+  int32_t descriptors;
+  int32_t key;
+  int32_t keys;
+  int32_t annotation;
+  int32_t annotations;
+  int32_t member;
+  int32_t members;
+  int32_t field;
+  int32_t fields;
+
+  struct __isset {
+
+    bool get;
+    bool getter;
+    bool lists;
+    bool maps;
+    bool name;
+    bool name_to_value;
+    bool names;
+    bool prefix_tree;
+    bool sets;
+    bool setter;
+    bool str;
+    bool strings;
+    bool type;
+    bool value;
+    bool value_to_name;
+    bool values;
+    bool id;
+    bool ids;
+    bool descriptor;
+    bool descriptors;
+    bool key;
+    bool keys;
+    bool annotation;
+    bool annotations;
+    bool member;
+    bool members;
+    bool field;
+    bool fields;
+  } __isset = {};
+  bool operator==(const struct_with_special_names& rhs) const;
+
+  bool operator < (const struct_with_special_names& rhs) const {
+    if (!(get == rhs.get)) {
+      return get < rhs.get;
+    }
+    if (!(getter == rhs.getter)) {
+      return getter < rhs.getter;
+    }
+    if (!(lists == rhs.lists)) {
+      return lists < rhs.lists;
+    }
+    if (!(maps == rhs.maps)) {
+      return maps < rhs.maps;
+    }
+    if (!(name == rhs.name)) {
+      return name < rhs.name;
+    }
+    if (!(name_to_value == rhs.name_to_value)) {
+      return name_to_value < rhs.name_to_value;
+    }
+    if (!(names == rhs.names)) {
+      return names < rhs.names;
+    }
+    if (!(prefix_tree == rhs.prefix_tree)) {
+      return prefix_tree < rhs.prefix_tree;
+    }
+    if (!(sets == rhs.sets)) {
+      return sets < rhs.sets;
+    }
+    if (!(setter == rhs.setter)) {
+      return setter < rhs.setter;
+    }
+    if (!(str == rhs.str)) {
+      return str < rhs.str;
+    }
+    if (!(strings == rhs.strings)) {
+      return strings < rhs.strings;
+    }
+    if (!(type == rhs.type)) {
+      return type < rhs.type;
+    }
+    if (!(value == rhs.value)) {
+      return value < rhs.value;
+    }
+    if (!(value_to_name == rhs.value_to_name)) {
+      return value_to_name < rhs.value_to_name;
+    }
+    if (!(values == rhs.values)) {
+      return values < rhs.values;
+    }
+    if (!(id == rhs.id)) {
+      return id < rhs.id;
+    }
+    if (!(ids == rhs.ids)) {
+      return ids < rhs.ids;
+    }
+    if (!(descriptor == rhs.descriptor)) {
+      return descriptor < rhs.descriptor;
+    }
+    if (!(descriptors == rhs.descriptors)) {
+      return descriptors < rhs.descriptors;
+    }
+    if (!(key == rhs.key)) {
+      return key < rhs.key;
+    }
+    if (!(keys == rhs.keys)) {
+      return keys < rhs.keys;
+    }
+    if (!(annotation == rhs.annotation)) {
+      return annotation < rhs.annotation;
+    }
+    if (!(annotations == rhs.annotations)) {
+      return annotations < rhs.annotations;
+    }
+    if (!(member == rhs.member)) {
+      return member < rhs.member;
+    }
+    if (!(members == rhs.members)) {
+      return members < rhs.members;
+    }
+    if (!(field == rhs.field)) {
+      return field < rhs.field;
+    }
+    if (!(fields == rhs.fields)) {
+      return fields < rhs.fields;
+    }
+    (void)rhs;
+    return false;
+  }
+
+  int32_t get_get() const {
+    return get;
+  }
+
+  int32_t& set_get(int32_t get_) {
+    get = get_;
+    __isset.get = true;
+    return get;
+  }
+
+  int32_t get_getter() const {
+    return getter;
+  }
+
+  int32_t& set_getter(int32_t getter_) {
+    getter = getter_;
+    __isset.getter = true;
+    return getter;
+  }
+
+  int32_t get_lists() const {
+    return lists;
+  }
+
+  int32_t& set_lists(int32_t lists_) {
+    lists = lists_;
+    __isset.lists = true;
+    return lists;
+  }
+
+  int32_t get_maps() const {
+    return maps;
+  }
+
+  int32_t& set_maps(int32_t maps_) {
+    maps = maps_;
+    __isset.maps = true;
+    return maps;
+  }
+
+  int32_t get_name() const {
+    return name;
+  }
+
+  int32_t& set_name(int32_t name_) {
+    name = name_;
+    __isset.name = true;
+    return name;
+  }
+
+  int32_t get_name_to_value() const {
+    return name_to_value;
+  }
+
+  int32_t& set_name_to_value(int32_t name_to_value_) {
+    name_to_value = name_to_value_;
+    __isset.name_to_value = true;
+    return name_to_value;
+  }
+
+  int32_t get_names() const {
+    return names;
+  }
+
+  int32_t& set_names(int32_t names_) {
+    names = names_;
+    __isset.names = true;
+    return names;
+  }
+
+  int32_t get_prefix_tree() const {
+    return prefix_tree;
+  }
+
+  int32_t& set_prefix_tree(int32_t prefix_tree_) {
+    prefix_tree = prefix_tree_;
+    __isset.prefix_tree = true;
+    return prefix_tree;
+  }
+
+  int32_t get_sets() const {
+    return sets;
+  }
+
+  int32_t& set_sets(int32_t sets_) {
+    sets = sets_;
+    __isset.sets = true;
+    return sets;
+  }
+
+  int32_t get_setter() const {
+    return setter;
+  }
+
+  int32_t& set_setter(int32_t setter_) {
+    setter = setter_;
+    __isset.setter = true;
+    return setter;
+  }
+
+  int32_t get_str() const {
+    return str;
+  }
+
+  int32_t& set_str(int32_t str_) {
+    str = str_;
+    __isset.str = true;
+    return str;
+  }
+
+  int32_t get_strings() const {
+    return strings;
+  }
+
+  int32_t& set_strings(int32_t strings_) {
+    strings = strings_;
+    __isset.strings = true;
+    return strings;
+  }
+
+  int32_t get_type() const {
+    return type;
+  }
+
+  int32_t& set_type(int32_t type_) {
+    type = type_;
+    __isset.type = true;
+    return type;
+  }
+
+  int32_t get_value() const {
+    return value;
+  }
+
+  int32_t& set_value(int32_t value_) {
+    value = value_;
+    __isset.value = true;
+    return value;
+  }
+
+  int32_t get_value_to_name() const {
+    return value_to_name;
+  }
+
+  int32_t& set_value_to_name(int32_t value_to_name_) {
+    value_to_name = value_to_name_;
+    __isset.value_to_name = true;
+    return value_to_name;
+  }
+
+  int32_t get_values() const {
+    return values;
+  }
+
+  int32_t& set_values(int32_t values_) {
+    values = values_;
+    __isset.values = true;
+    return values;
+  }
+
+  int32_t get_id() const {
+    return id;
+  }
+
+  int32_t& set_id(int32_t id_) {
+    id = id_;
+    __isset.id = true;
+    return id;
+  }
+
+  int32_t get_ids() const {
+    return ids;
+  }
+
+  int32_t& set_ids(int32_t ids_) {
+    ids = ids_;
+    __isset.ids = true;
+    return ids;
+  }
+
+  int32_t get_descriptor() const {
+    return descriptor;
+  }
+
+  int32_t& set_descriptor(int32_t descriptor_) {
+    descriptor = descriptor_;
+    __isset.descriptor = true;
+    return descriptor;
+  }
+
+  int32_t get_descriptors() const {
+    return descriptors;
+  }
+
+  int32_t& set_descriptors(int32_t descriptors_) {
+    descriptors = descriptors_;
+    __isset.descriptors = true;
+    return descriptors;
+  }
+
+  int32_t get_key() const {
+    return key;
+  }
+
+  int32_t& set_key(int32_t key_) {
+    key = key_;
+    __isset.key = true;
+    return key;
+  }
+
+  int32_t get_keys() const {
+    return keys;
+  }
+
+  int32_t& set_keys(int32_t keys_) {
+    keys = keys_;
+    __isset.keys = true;
+    return keys;
+  }
+
+  int32_t get_annotation() const {
+    return annotation;
+  }
+
+  int32_t& set_annotation(int32_t annotation_) {
+    annotation = annotation_;
+    __isset.annotation = true;
+    return annotation;
+  }
+
+  int32_t get_annotations() const {
+    return annotations;
+  }
+
+  int32_t& set_annotations(int32_t annotations_) {
+    annotations = annotations_;
+    __isset.annotations = true;
+    return annotations;
+  }
+
+  int32_t get_member() const {
+    return member;
+  }
+
+  int32_t& set_member(int32_t member_) {
+    member = member_;
+    __isset.member = true;
+    return member;
+  }
+
+  int32_t get_members() const {
+    return members;
+  }
+
+  int32_t& set_members(int32_t members_) {
+    members = members_;
+    __isset.members = true;
+    return members;
+  }
+
+  int32_t get_field() const {
+    return field;
+  }
+
+  int32_t& set_field(int32_t field_) {
+    field = field_;
+    __isset.field = true;
+    return field;
+  }
+
+  int32_t get_fields() const {
+    return fields;
+  }
+
+  int32_t& set_fields(int32_t fields_) {
+    fields = fields_;
+    __isset.fields = true;
+    return fields;
+  }
+
+  template <class Protocol_>
+  uint32_t read(Protocol_* iprot);
+  template <class Protocol_>
+  uint32_t serializedSize(Protocol_ const* prot_) const;
+  template <class Protocol_>
+  uint32_t serializedSizeZC(Protocol_ const* prot_) const;
+  template <class Protocol_>
+  uint32_t write(Protocol_* prot_) const;
+
+ private:
+  static void translateFieldName(FOLLY_MAYBE_UNUSED folly::StringPiece _fname, FOLLY_MAYBE_UNUSED int16_t& fid, FOLLY_MAYBE_UNUSED apache::thrift::protocol::TType& _ftype);
+};
+
+void swap(struct_with_special_names& a, struct_with_special_names& b);
+extern template uint32_t struct_with_special_names::read<>(apache::thrift::BinaryProtocolReader*);
+extern template uint32_t struct_with_special_names::write<>(apache::thrift::BinaryProtocolWriter*) const;
+extern template uint32_t struct_with_special_names::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t struct_with_special_names::serializedSizeZC<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t struct_with_special_names::read<>(apache::thrift::CompactProtocolReader*);
+extern template uint32_t struct_with_special_names::write<>(apache::thrift::CompactProtocolWriter*) const;
+extern template uint32_t struct_with_special_names::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
+extern template uint32_t struct_with_special_names::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+
+}} // test_cpp2::cpp_reflection
+namespace apache { namespace thrift {
+
+template <> inline void Cpp2Ops< ::test_cpp2::cpp_reflection::struct_with_special_names>::clear( ::test_cpp2::cpp_reflection::struct_with_special_names* obj) {
+  return obj->__clear();
+}
+
+template <> inline constexpr apache::thrift::protocol::TType Cpp2Ops< ::test_cpp2::cpp_reflection::struct_with_special_names>::thriftType() {
+  return apache::thrift::protocol::T_STRUCT;
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct_with_special_names>::write(Protocol* proto,  ::test_cpp2::cpp_reflection::struct_with_special_names const* obj) {
+  return obj->write(proto);
+}
+
+template <> template <class Protocol> void Cpp2Ops< ::test_cpp2::cpp_reflection::struct_with_special_names>::read(Protocol* proto,  ::test_cpp2::cpp_reflection::struct_with_special_names* obj) {
+  obj->read(proto);
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct_with_special_names>::serializedSize(Protocol const* proto,  ::test_cpp2::cpp_reflection::struct_with_special_names const* obj) {
+  return obj->serializedSize(proto);
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct_with_special_names>::serializedSizeZC(Protocol const* proto,  ::test_cpp2::cpp_reflection::struct_with_special_names const* obj) {
+  return obj->serializedSizeZC(proto);
+}
+
+}} // apache::thrift
+namespace test_cpp2 { namespace cpp_reflection {
+
+class struct_with_indirections final : private apache::thrift::detail::st::ComparisonOperators<struct_with_indirections> {
+ public:
+
+  struct_with_indirections();
+  // FragileConstructor for use in initialization lists only
+  struct_with_indirections(apache::thrift::FragileConstructor, int32_t real__arg,  ::test_cpp2::cpp_reflection::FakeI32 fake__arg,  ::test_cpp2::cpp_reflection::HasANumber number__arg,  ::test_cpp2::cpp_reflection::HasAResult result__arg,  ::test_cpp2::cpp_reflection::HasAPhrase phrase__arg);
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_indirections(::apache::thrift::detail::argument_wrapper<1, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_indirections(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    real = arg.move();
+    __isset.real = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_indirections(::apache::thrift::detail::argument_wrapper<2, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_indirections(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    fake = arg.move();
+    __isset.fake = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_indirections(::apache::thrift::detail::argument_wrapper<3, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_indirections(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    number = arg.move();
+    __isset.number = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_indirections(::apache::thrift::detail::argument_wrapper<4, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_indirections(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    result = arg.move();
+    __isset.result = true;
+  }
+  template <typename T__ThriftWrappedArgument__Ctor, typename... Args__ThriftWrappedArgument__Ctor>
+  struct_with_indirections(::apache::thrift::detail::argument_wrapper<5, T__ThriftWrappedArgument__Ctor> arg, Args__ThriftWrappedArgument__Ctor&&... args):
+    struct_with_indirections(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    phrase = arg.move();
+    __isset.phrase = true;
+  }
+
+  struct_with_indirections(struct_with_indirections&&) = default;
+
+  struct_with_indirections(const struct_with_indirections&) = default;
+
+  struct_with_indirections& operator=(struct_with_indirections&&) = default;
+
+  struct_with_indirections& operator=(const struct_with_indirections&) = default;
+  void __clear();
+   ~struct_with_indirections();
+
+  int32_t real;
+   ::test_cpp2::cpp_reflection::FakeI32 fake;
+   ::test_cpp2::cpp_reflection::HasANumber number;
+   ::test_cpp2::cpp_reflection::HasAResult result;
+   ::test_cpp2::cpp_reflection::HasAPhrase phrase;
+
+  struct __isset {
+
+    bool real;
+    bool fake;
+    bool number;
+    bool result;
+    bool phrase;
+  } __isset = {};
+  bool operator==(const struct_with_indirections& rhs) const;
+  bool operator < (const struct_with_indirections& rhs) const;
+
+  int32_t get_real() const {
+    return real;
+  }
+
+  int32_t& set_real(int32_t real_) {
+    real = real_;
+    __isset.real = true;
+    return real;
+  }
+
+   ::test_cpp2::cpp_reflection::FakeI32 get_fake() const {
+    return fake;
+  }
+
+   ::test_cpp2::cpp_reflection::FakeI32& set_fake( ::test_cpp2::cpp_reflection::FakeI32 fake_) {
+    fake = fake_;
+    __isset.fake = true;
+    return fake;
+  }
+
+   ::test_cpp2::cpp_reflection::HasANumber get_number() const {
+    return number;
+  }
+
+   ::test_cpp2::cpp_reflection::HasANumber& set_number( ::test_cpp2::cpp_reflection::HasANumber number_) {
+    number = number_;
+    __isset.number = true;
+    return number;
+  }
+
+   ::test_cpp2::cpp_reflection::HasAResult get_result() const {
+    return result;
+  }
+
+   ::test_cpp2::cpp_reflection::HasAResult& set_result( ::test_cpp2::cpp_reflection::HasAResult result_) {
+    result = result_;
+    __isset.result = true;
+    return result;
+  }
+
+  const  ::test_cpp2::cpp_reflection::HasAPhrase& get_phrase() const& {
+    return phrase;
+  }
+
+   ::test_cpp2::cpp_reflection::HasAPhrase get_phrase() && {
+    return std::move(phrase);
+  }
+
+  template <typename T_struct_with_indirections_phrase_struct_setter>
+   ::test_cpp2::cpp_reflection::HasAPhrase& set_phrase(T_struct_with_indirections_phrase_struct_setter&& phrase_) {
+    phrase = std::forward<T_struct_with_indirections_phrase_struct_setter>(phrase_);
+    __isset.phrase = true;
+    return phrase;
+  }
+
+  template <class Protocol_>
+  uint32_t read(Protocol_* iprot);
+  template <class Protocol_>
+  uint32_t serializedSize(Protocol_ const* prot_) const;
+  template <class Protocol_>
+  uint32_t serializedSizeZC(Protocol_ const* prot_) const;
+  template <class Protocol_>
+  uint32_t write(Protocol_* prot_) const;
+
+ private:
+  static void translateFieldName(FOLLY_MAYBE_UNUSED folly::StringPiece _fname, FOLLY_MAYBE_UNUSED int16_t& fid, FOLLY_MAYBE_UNUSED apache::thrift::protocol::TType& _ftype);
+};
+
+void swap(struct_with_indirections& a, struct_with_indirections& b);
+extern template uint32_t struct_with_indirections::read<>(apache::thrift::BinaryProtocolReader*);
+extern template uint32_t struct_with_indirections::write<>(apache::thrift::BinaryProtocolWriter*) const;
+extern template uint32_t struct_with_indirections::serializedSize<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t struct_with_indirections::serializedSizeZC<>(apache::thrift::BinaryProtocolWriter const*) const;
+extern template uint32_t struct_with_indirections::read<>(apache::thrift::CompactProtocolReader*);
+extern template uint32_t struct_with_indirections::write<>(apache::thrift::CompactProtocolWriter*) const;
+extern template uint32_t struct_with_indirections::serializedSize<>(apache::thrift::CompactProtocolWriter const*) const;
+extern template uint32_t struct_with_indirections::serializedSizeZC<>(apache::thrift::CompactProtocolWriter const*) const;
+
+}} // test_cpp2::cpp_reflection
+namespace apache { namespace thrift {
+
+template <> inline void Cpp2Ops< ::test_cpp2::cpp_reflection::struct_with_indirections>::clear( ::test_cpp2::cpp_reflection::struct_with_indirections* obj) {
+  return obj->__clear();
+}
+
+template <> inline constexpr apache::thrift::protocol::TType Cpp2Ops< ::test_cpp2::cpp_reflection::struct_with_indirections>::thriftType() {
+  return apache::thrift::protocol::T_STRUCT;
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct_with_indirections>::write(Protocol* proto,  ::test_cpp2::cpp_reflection::struct_with_indirections const* obj) {
+  return obj->write(proto);
+}
+
+template <> template <class Protocol> void Cpp2Ops< ::test_cpp2::cpp_reflection::struct_with_indirections>::read(Protocol* proto,  ::test_cpp2::cpp_reflection::struct_with_indirections* obj) {
+  obj->read(proto);
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct_with_indirections>::serializedSize(Protocol const* proto,  ::test_cpp2::cpp_reflection::struct_with_indirections const* obj) {
+  return obj->serializedSize(proto);
+}
+
+template <> template <class Protocol> uint32_t Cpp2Ops< ::test_cpp2::cpp_reflection::struct_with_indirections>::serializedSizeZC(Protocol const* proto,  ::test_cpp2::cpp_reflection::struct_with_indirections const* obj) {
   return obj->serializedSizeZC(proto);
 }
 

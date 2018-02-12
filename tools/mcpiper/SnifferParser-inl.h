@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
+ *  Copyright (c) 2017, Facebook, Inc.
  *  All rights reserved.
  *
  *  This source code is licensed under the BSD-style license found in the
@@ -9,7 +9,8 @@
  */
 #pragma once
 
-namespace facebook { namespace memcache {
+namespace facebook {
+namespace memcache {
 
 namespace detail {
 
@@ -18,14 +19,12 @@ const std::chrono::milliseconds kMatchingKeyTimeout{5000};
 
 } // detail namespace
 
-template <class Callback>
-SnifferParser<Callback>::SnifferParser(Callback& cb) noexcept
-    : callback_(cb),
-      parser_(*this) {
-}
+template <class Callback, class RequestList>
+SnifferParser<Callback, RequestList>::SnifferParser(Callback& cb) noexcept
+    : SnifferParserBase<Callback>(cb), parser_(*this) {}
 
 template <class Callback>
-void SnifferParser<Callback>::evictOldItems(TimePoint now) {
+void SnifferParserBase<Callback>::evictOldItems(TimePoint now) {
   TimePoint oldest = now - detail::kMatchingKeyTimeout;
   auto cur = evictionQueue_.begin();
   while (cur != evictionQueue_.end() && cur->created <= oldest) {
@@ -37,34 +36,48 @@ void SnifferParser<Callback>::evictOldItems(TimePoint now) {
 
 template <class Callback>
 template <class Request>
-void SnifferParser<Callback>::requestReady(uint64_t msgId, Request request) {
+void SnifferParserBase<Callback>::requestReady(
+    uint64_t msgId,
+    Request&& request) {
   TimePoint now = Clock::now();
   evictOldItems(now);
 
   if (msgId != 0) {
     auto msgIt = msgs_.emplace(
         msgId,
-        Item(msgId, request.fullKey().str(), now));
+        Item(
+            msgId, request.key().fullKey().str(), currentMsgStartTimeUs_, now));
     evictionQueue_.push_back(msgIt.first->second);
   }
-  callback_.requestReady(msgId, std::move(request), fromAddress_, toAddress_);
+  callback_.requestReady(
+      msgId, std::move(request), fromAddress_, toAddress_, getParserProtocol());
 }
 
 template <class Callback>
-template <class Request>
-void SnifferParser<Callback>::replyReady(uint64_t msgId,
-                                         ReplyT<Request> reply) {
+template <class Reply>
+void SnifferParserBase<Callback>::replyReady(
+    uint64_t msgId,
+    Reply&& reply,
+    ReplyStatsContext replyStatsContext) {
   std::string key;
+  int64_t latency = 0;
   if (msgId != 0) {
     auto pairMsgIt = msgs_.find(msgId);
     if (pairMsgIt != msgs_.end()) {
       key = std::move(pairMsgIt->second.key);
+      latency = currentMsgStartTimeUs_ - pairMsgIt->second.msgStartTimeUs;
       msgs_.erase(pairMsgIt->first);
     }
   }
-  callback_.template replyReady<Request>(msgId, std::move(reply),
-                                         std::move(key),
-                                         fromAddress_, toAddress_);
+  callback_.replyReady(
+      msgId,
+      std::move(reply),
+      std::move(key),
+      fromAddress_,
+      toAddress_,
+      getParserProtocol(),
+      latency,
+      replyStatsContext);
 }
-
-}} // facebook::memcache
+}
+} // facebook::memcache

@@ -20,8 +20,6 @@
 #include <math.h>
 
 #include <thrift/lib/cpp/Thrift.h>
-
-using namespace folly::json;
 namespace apache { namespace thrift { namespace reflection {
 class Schema;
 }}}
@@ -33,7 +31,7 @@ class Included;
 
 void swap(Included &a, Included &b);
 
-class Included : public apache::thrift::TStructType<Included> {
+class Included final : public apache::thrift::TStructType<Included> {
  public:
 
   static const uint64_t _reflection_id = 16202005076139393548U;
@@ -60,9 +58,6 @@ class Included : public apache::thrift::TStructType<Included> {
   Included& operator=(Included&&) = default;
 
   void __clear();
-
-  virtual ~Included() throw() {}
-
   int16_t some_val;
 
   struct __isset {
@@ -80,11 +75,15 @@ class Included : public apache::thrift::TStructType<Included> {
 
   bool operator < (const Included & ) const;
 
-  void readFromJson(const char* jsonText, size_t len);
-  void readFromJson(const char* jsonText);
+  void readFromJson(const char* jsonText, size_t len, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
+  void readFromJson(const char* jsonText, const folly::json::serialization_opts& opts = folly::json::serialization_opts());
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class Included;

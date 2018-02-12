@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Facebook, Inc.
+ * Copyright 2004-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,15 +24,15 @@
 #include <vector>
 
 #include <folly/Memory.h>
+#include <folly/SocketAddress.h>
 #include <folly/io/async/EventBase.h>
 #include <thrift/lib/cpp/concurrency/ThreadManager.h>
 #include <thrift/lib/cpp/server/TServer.h>
 #include <thrift/lib/cpp/server/TServerObserver.h>
 #include <thrift/lib/cpp/transport/THeader.h>
-#include <folly/SocketAddress.h>
-#include <thrift/lib/cpp/transport/TTransportUtils.h>
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/async/AsyncProcessor.h>
+#include <thrift/lib/cpp2/server/ServerConfigs.h>
 
 namespace apache {
 namespace thrift {
@@ -64,12 +64,13 @@ class ThriftServerAsyncProcessorFactory : public AsyncProcessorFactory {
  *   Base class for thrift servers using cpp2 style generated code.
  */
 
-class BaseThriftServer : public apache::thrift::server::TServer {
+class BaseThriftServer : public apache::thrift::server::TServer,
+                         public apache::thrift::server::ServerConfigs {
  protected:
   //! Default number of worker threads (should be # of processor cores).
-  static const int T_ASYNC_DEFAULT_WORKER_THREADS;
+  static const size_t T_ASYNC_DEFAULT_WORKER_THREADS;
 
-  static const uint32_t T_MAX_NUM_PENDING_CONNECTIONS_PER_WORKER = 0xffffffff;
+  static const uint32_t T_MAX_NUM_PENDING_CONNECTIONS_PER_WORKER = 4096;
 
   static const std::chrono::milliseconds DEFAULT_TIMEOUT;
 
@@ -93,11 +94,14 @@ class BaseThriftServer : public apache::thrift::server::TServer {
   int port_ = -1;
 
   //! Number of io worker threads (may be set) (should be # of CPU cores)
-  int nWorkers_ = T_ASYNC_DEFAULT_WORKER_THREADS;
+  size_t nWorkers_ = T_ASYNC_DEFAULT_WORKER_THREADS;
+
+  //! Number of SSL handshake worker threads (may be set)
+  size_t nSSLHandshakeWorkers_ = 0;
 
   //! Number of sync pool threads (may be set) (should be set to expected
   //  sync load)
-  int nPoolThreads_ = 0;
+  size_t nPoolThreads_ = 0;
 
   /**
    * The thread manager used for sync calls.
@@ -156,8 +160,9 @@ class BaseThriftServer : public apache::thrift::server::TServer {
   // If it is set true, server will check and use client timeout header
   bool useClientTimeout_ = true;
 
-  std::function<bool(const transport::THeader*)> isOverloaded_ =
-      [](const transport::THeader* header) { return false; };
+  std::string overloadedErrorCode_ = kOverloadedErrorCode;
+  folly::Function<bool(const transport::THeader*)> isOverloaded_ =
+      [](const transport::THeader*) { return false; };
   std::function<int64_t(const std::string&)> getLoad_;
 
   enum class InjectedFailure { NONE, ERROR, DROP, DISCONNECT };
@@ -192,9 +197,15 @@ class BaseThriftServer : public apache::thrift::server::TServer {
   getHandlerFunc getHandler_;
   GetHeaderHandlerFunc getHeaderHandler_;
 
+  ClientIdentityHook clientIdentityHook_;
+
   // Flag indicating whether it is safe to mutate the server config through its
   // setters.
   std::atomic<bool> configMutable_{true};
+
+  // Max response size allowed. This is the size of the serialized and
+  // transformed response, headers not included. 0 (default) means no limit.
+  uint64_t maxResponseSize_ = 0;
 
   BaseThriftServer()
       : apache::thrift::server::TServer(std::shared_ptr<server::TProcessor>()) {
@@ -212,22 +223,45 @@ class BaseThriftServer : public apache::thrift::server::TServer {
    */
   bool configMutable() { return configMutable_; }
 
+
   /**
-   * Get the prefix for naming the pool threads.
+   * Get the prefix for naming the CPU (pool) threads.
    *
    * @return current setting.
    */
-  const std::string& getPoolThreadName() const { return poolThreadName_; }
+  const std::string& getCPUWorkerThreadName() const { return poolThreadName_; }
 
   /**
-   * Set the prefix for naming the pool threads. Not set by default.
+   * DEPRECATED: Get the prefix for naming the CPU (pool) threads.
+   * Use getCPUWorkerThreadName instead.
+   *
+   * @return current setting.
+   */
+  inline const std::string& getPoolThreadName() const {
+    return getCPUWorkerThreadName();
+  }
+
+  /**
+   * Set the prefix for naming the CPU (pool) threads. Not set by default.
    * must be called before serve() for it to take effect
    * ignored if setThreadManager() is called.
    *
+   * @param cpuWorkerThreadName thread name prefix
+   */
+  void setCPUWorkerThreadName(const std::string& cpuWorkerThreadName) {
+    poolThreadName_ = cpuWorkerThreadName;
+  }
+
+  /**
+   * DEPRECATED: Set the prefix for naming the CPU (pool) threads. Not set by
+   * default. Must be called before serve() for it to take effect
+   * ignored if setThreadManager() is called.
+   * Use setCPUWorkerThreadName instead.
+   *
    * @param poolThreadName thread name prefix
    */
-  void setPoolThreadName(const std::string& poolThreadName) {
-    poolThreadName_ = poolThreadName;
+  inline void setPoolThreadName(const std::string& poolThreadName) {
+    setCPUWorkerThreadName(poolThreadName);
   }
 
   /**
@@ -275,7 +309,9 @@ class BaseThriftServer : public apache::thrift::server::TServer {
    *
    * @return current setting.
    */
-  uint32_t getMaxRequests() const { return maxRequests_; }
+  uint32_t getMaxRequests() const {
+    return maxRequests_;
+  }
 
   /**
    * Set the maximum # of requests being processed in handler before overload.
@@ -283,6 +319,12 @@ class BaseThriftServer : public apache::thrift::server::TServer {
    * @param maxRequests new setting for maximum # of active requests.
    */
   void setMaxRequests(uint32_t maxRequests) { maxRequests_ = maxRequests; }
+
+  uint64_t getMaxResponseSize() const override {
+    return maxResponseSize_;
+  }
+
+  void setMaxResponseSize(uint64_t size) { maxResponseSize_ = size; }
 
   /**
    * NOTE: low hanging perf fruit. In a test this was roughly a 10%
@@ -320,7 +362,7 @@ class BaseThriftServer : public apache::thrift::server::TServer {
   }
 
   const std::shared_ptr<apache::thrift::server::TServerObserver>& getObserver()
-      const {
+      const override {
     return observer_;
   }
 
@@ -414,41 +456,101 @@ class BaseThriftServer : public apache::thrift::server::TServer {
   }
 
   /**
-   * Set the number of worker threads
+   * Set the number of IO worker threads
    *
-   * @param number of worker threads
+   * @param number of IO worker threads
    */
-  void setNWorkerThreads(int nWorkers) {
+  void setNumIOWorkerThreads(size_t numIOWorkerThreads) override {
     CHECK(configMutable());
-    nWorkers_ = nWorkers;
+    nWorkers_ = numIOWorkerThreads;
   }
 
   /**
-   * Get the number of worker threads
+   * DEPRECATED: Set the number of IO worker threads
+   * Use setNumIOWorkerThreads instead.
    *
-   * @return number of worker threads
+   * @param number of IO worker threads
    */
-  int getNWorkerThreads() { return nWorkers_; }
+  inline void setNWorkerThreads(size_t nWorkers) {
+    setNumIOWorkerThreads(nWorkers);
+  }
 
   /**
-   * Set the number of pool threads
+   * Get the number of IO worker threads
+   *
+   * @return number of IO worker threads
+   */
+  size_t getNumIOWorkerThreads() const override {
+    return nWorkers_;
+  }
+
+  /**
+   * DEPRECATED: Get the number of IO worker threads
+   * Use getNumIOWorkerThreads instead.
+   *
+   * @return number of IO worker threads
+   */
+  inline size_t getNWorkerThreads() {
+    return getNumIOWorkerThreads();
+  }
+
+  /**
+   * Set the number of CPU (pool) threads.
    * Only valid if you do not also set a threadmanager.
    *
-   * @param number of pool threads
+   * @param number of CPU (pool) threads
    */
-  void setNPoolThreads(int nPoolThreads) {
+  void setNumCPUWorkerThreads(size_t numCPUWorkerThreads) {
     CHECK(configMutable());
     CHECK(!threadManager_);
 
-    nPoolThreads_ = nPoolThreads;
+    nPoolThreads_ = numCPUWorkerThreads;
   }
 
   /**
-   * Get the number of pool threads
+   * DEPRECATED: Set the number of CPU (pool) threads
+   * Only valid if you do not also set a threadmanager.
+   * Use setNumCPUWorkerThreads instead.
    *
-   * @return number of pool threads
+   * @param number of CPU (pool) threads
    */
-  int getNPoolThreads() { return nPoolThreads_; }
+  inline void setNPoolThreads(size_t nPoolThreads) {
+    setNumCPUWorkerThreads(nPoolThreads);
+  }
+
+  /**
+   * Get the number of CPU (pool) threads
+   *
+   * @return number of CPU (pool) threads
+   */
+  size_t getNumCPUWorkerThreads() {
+    return nPoolThreads_;
+  }
+
+  /**
+   * DEPRECATED: Get the number of CPU (pool) threads
+   * Use getNumCPUWorkerThreads instead.
+   *
+   * @return number of CPU (pool) threads
+   */
+  inline size_t getNPoolThreads() {
+    return getNumCPUWorkerThreads();
+  }
+
+  /**
+   * Set the number of SSL handshake worker threads.
+   */
+  void setNumSSLHandshakeWorkerThreads(size_t nSSLHandshakeThreads) {
+    CHECK(configMutable());
+    nSSLHandshakeWorkers_ = nSSLHandshakeThreads;
+  }
+
+  /**
+   * Get the number of threads used to perform SSL handshakes
+   */
+  size_t getNumSSLHandshakeWorkerThreads() const {
+    return nSSLHandshakeWorkers_;
+  }
 
   /**
    * Codel queuing timeout - limit queueing time before overload
@@ -475,7 +577,8 @@ class BaseThriftServer : public apache::thrift::server::TServer {
    * Sets an explicit AsyncProcessorFactory
    *
    */
-  void setProcessorFactory(std::shared_ptr<AsyncProcessorFactory> pFac) {
+  virtual void setProcessorFactory(
+      std::shared_ptr<AsyncProcessorFactory> pFac) {
     CHECK(configMutable());
     cpp2Pfac_ = pFac;
   }
@@ -520,6 +623,15 @@ class BaseThriftServer : public apache::thrift::server::TServer {
   }
 
   /**
+   * Calls the twin function getTaskExpireTimeForRequest with the
+   * clientQueueTimeoutMs and clientTimeoutMs fields retrieved from the THeader.
+   */
+  bool getTaskExpireTimeForRequest(
+      const apache::thrift::transport::THeader& header,
+      std::chrono::milliseconds& queueTimeout,
+      std::chrono::milliseconds& taskTimeout) const;
+
+  /**
    * A task has two timeouts:
    *
    * If the task hasn't started processing the request by the time the soft
@@ -536,9 +648,10 @@ class BaseThriftServer : public apache::thrift::server::TServer {
    * @returns whether or not the soft and hard timeouts are different
    */
   bool getTaskExpireTimeForRequest(
-      const apache::thrift::transport::THeader& header,
+      std::chrono::milliseconds clientQueueTimeoutMs,
+      std::chrono::milliseconds clientTimeoutMs,
       std::chrono::milliseconds& queueTimeout,
-      std::chrono::milliseconds& taskTimeout) const;
+      std::chrono::milliseconds& taskTimeout) const override;
 
   /**
    * Set the listen backlog. Refer to the comment on listenBacklog_ member for
@@ -553,9 +666,17 @@ class BaseThriftServer : public apache::thrift::server::TServer {
    */
   int getListenBacklog() const { return listenBacklog_; }
 
-  void setIsOverloaded(std::function<
+  void setOverloadedErrorCode(const std::string& errorCode) {
+    overloadedErrorCode_ = errorCode;
+  }
+
+  const std::string& getOverloadedErrorCode() {
+    return overloadedErrorCode_;
+  }
+
+  void setIsOverloaded(folly::Function<
       bool(const apache::thrift::transport::THeader*)> isOverloaded) {
-    isOverloaded_ = isOverloaded;
+    isOverloaded_ = std::move(isOverloaded);
   }
 
   void setGetLoad(std::function<int64_t(const std::string&)> getLoad) {
@@ -580,6 +701,17 @@ class BaseThriftServer : public apache::thrift::server::TServer {
   }
 
   GetHeaderHandlerFunc getGetHeaderHandler() { return getHeaderHandler_; }
+
+  /**
+   * Set the client identity hook for the server, which will be called in
+   * Cpp2ConnContext(). It can be used to cache client identities for each
+   * connection. They can be retrieved with Cpp2ConnContext::getPeerIdentities.
+   */
+  void setClientIdentityHook(ClientIdentityHook func) {
+    clientIdentityHook_ = func;
+  }
+
+  ClientIdentityHook getClientIdentityHook() { return clientIdentityHook_; }
 };
 }
 } // apache::thrift

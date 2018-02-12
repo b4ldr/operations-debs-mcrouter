@@ -1,20 +1,26 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #pragma once
 
 #include <chrono>
 #include <folly/SocketAddress.h>
 #include <folly/io/async/AsyncSocket.h>
-#include <wangle/acceptor/Acceptor.h>
 #include <wangle/acceptor/AcceptorHandshakeManager.h>
 #include <wangle/acceptor/ManagedConnection.h>
+#include <wangle/acceptor/PeekingAcceptorHandshakeHelper.h>
 #include <wangle/acceptor/TransportInfo.h>
 
 namespace wangle {
@@ -23,24 +29,26 @@ class SSLAcceptorHandshakeHelper : public AcceptorHandshakeHelper,
                                    public folly::AsyncSSLSocket::HandshakeCB {
  public:
   SSLAcceptorHandshakeHelper(
-      Acceptor* acceptor,
       const folly::SocketAddress& clientAddr,
       std::chrono::steady_clock::time_point acceptTime,
       TransportInfo& tinfo) :
-    acceptor_(acceptor),
     clientAddr_(clientAddr),
     acceptTime_(acceptTime),
     tinfo_(tinfo) {}
 
-  virtual void start(
+  void start(
       folly::AsyncSSLSocket::UniquePtr sock,
       AcceptorHandshakeHelper::Callback* callback) noexcept override;
 
-  virtual void dropConnection(
-      SSLErrorEnum reason = SSLErrorEnum::NO_ERROR) override {
+  void dropConnection(SSLErrorEnum reason = SSLErrorEnum::NO_ERROR) override {
     sslError_ = reason;
-    socket_->closeNow();
+    if (socket_) {
+      socket_->closeNow();
+    }
   }
+
+  static void fillSSLTransportInfoFields(
+      folly::AsyncSSLSocket* sock, TransportInfo& tinfo);
 
  protected:
   // AsyncSSLSocket::HandshakeCallback API
@@ -49,7 +57,6 @@ class SSLAcceptorHandshakeHelper : public AcceptorHandshakeHelper,
                     const folly::AsyncSocketException& ex) noexcept override;
 
   folly::AsyncSSLSocket::UniquePtr socket_;
-  Acceptor* acceptor_;
   AcceptorHandshakeHelper::Callback* callback_;
   const folly::SocketAddress& clientAddr_;
   std::chrono::steady_clock::time_point acceptTime_;
@@ -57,17 +64,19 @@ class SSLAcceptorHandshakeHelper : public AcceptorHandshakeHelper,
   SSLErrorEnum sslError_{SSLErrorEnum::NO_ERROR};
 };
 
-class SSLAcceptorHandshakeManager : public AcceptorHandshakeManager {
+class DefaultToSSLPeekingCallback :
+  public PeekingAcceptorHandshakeHelper::PeekCallback {
  public:
-  using AcceptorHandshakeManager::AcceptorHandshakeManager;
+  DefaultToSSLPeekingCallback():
+    PeekingAcceptorHandshakeHelper::PeekCallback(0) {}
 
-  virtual void startHelper(folly::AsyncSSLSocket::UniquePtr sock) override {
-    helper_.reset(new SSLAcceptorHandshakeHelper(
-        acceptor_,
-        clientAddr_,
-        acceptTime_,
-        tinfo_));
-    helper_->start(std::move(sock), this);
+  AcceptorHandshakeHelper::UniquePtr getHelper(
+      const std::vector<uint8_t>& /* bytes */,
+      const folly::SocketAddress& clientAddr,
+      std::chrono::steady_clock::time_point acceptTime,
+      TransportInfo& tinfo) override {
+    return AcceptorHandshakeHelper::UniquePtr(new SSLAcceptorHandshakeHelper(
+        clientAddr, acceptTime, tinfo));
   }
 };
 

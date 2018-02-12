@@ -18,9 +18,9 @@
 
 #include <folly/Conv.h>
 #include <folly/Memory.h>
-#include <folly/Random.h>
 #include <folly/Logging.h>
 #include <folly/ScopeGuard.h>
+#include <folly/portability/Sockets.h>
 #include <thrift/lib/cpp2/server/Cpp2Connection.h>
 #include <thrift/lib/cpp/concurrency/PosixThreadFactory.h>
 #include <thrift/lib/cpp/concurrency/ThreadManager.h>
@@ -32,13 +32,7 @@
 
 #include <iostream>
 #include <random>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <netdb.h>
 #include <fcntl.h>
-#include <errno.h>
-#include <assert.h>
 #include <signal.h>
 
 namespace apache {
@@ -372,7 +366,7 @@ void ProxygenThriftServer::serve() {
 
   configMutable_ = false;
 
-  server_ = folly::make_unique<HTTPServer>(std::move(options));
+  server_ = std::make_unique<HTTPServer>(std::move(options));
   server_->bind(IPs);
   server_->setSessionInfoCallback(this);
 

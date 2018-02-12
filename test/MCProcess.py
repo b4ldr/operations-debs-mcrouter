@@ -1,4 +1,4 @@
-# Copyright (c) 2016, Facebook, Inc.
+# Copyright (c) 2017, Facebook, Inc.
 # All rights reserved.
 #
 # This source code is licensed under the BSD-style license found in the
@@ -20,6 +20,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 
 from mcrouter.test.config import McrouterGlobals
 
@@ -301,9 +302,9 @@ class MCProcess(ProcessBase):
         return True
 
     def _set(self, command, key, value, replicate=False, noreply=False,
-             exptime=0):
+             exptime=0, flags=0):
         value = str(value)
-        flags = 1024 if replicate else 0
+        flags = flags | (1024 if replicate else 0)
         self.socket.sendall("%s %s %d %d %d%s\r\n%s\r\n" %
                             (command, key, flags, exptime, len(value),
                             (' noreply' if noreply else ''), value))
@@ -334,8 +335,9 @@ class MCProcess(ProcessBase):
             return re.match("STALE_STORED", answer)
         return re.match("STORED", answer)
 
-    def set(self, key, value, replicate=False, noreply=False, exptime=0):
-        return self._set("set", key, value, replicate, noreply, exptime)
+    def set(self, key, value, replicate=False, noreply=False, exptime=0,
+            flags=0):
+        return self._set("set", key, value, replicate, noreply, exptime, flags)
 
     def add(self, key, value, replicate=False, noreply=False):
         return self._set("add", key, value, replicate, noreply)
@@ -446,6 +448,8 @@ class MCProcess(ProcessBase):
             return None
         while l != 'END':
             l = self.fd.readline().strip()
+            if len(l) == 0:
+                return None
             a = l.split(None, 2)
             if len(a) == 3:
                 s[a[1]] = a[2]
@@ -711,7 +715,7 @@ class McrouterClients:
     def __getitem__(self, idx):
         return self.clients[idx]
 
-class Memcached(MCProcess):
+class MockMemcached(MCProcess):
     def __init__(self, port=None):
         args = [McrouterGlobals.binPath('mockmc')]
         listen_sock = None
@@ -726,6 +730,47 @@ class Memcached(MCProcess):
 
         if listen_sock is not None:
             listen_sock.close()
+
+class Memcached(MCProcess):
+    def __init__(self, port=None):
+        args = [McrouterGlobals.binPath('prodmc')]
+        listen_sock = None
+
+        # if mockmc is used here, we initialize the same way as MockMemcached
+        if McrouterGlobals.binPath('mockmc') == args[0]:
+            if port is None:
+                listen_sock = create_listen_socket()
+                port = listen_sock.getsockname()[1]
+                args.extend(['-t', str(listen_sock.fileno())])
+            else:
+                args.extend(['-P', str(port)])
+
+            MCProcess.__init__(self, args, port)
+
+            if listen_sock is not None:
+                listen_sock.close()
+        else:
+            if port is None:
+                listen_sock = create_listen_socket()
+                port = listen_sock.getsockname()[1]
+                args.extend(['--listen_sock', str(listen_sock.fileno())])
+            else:
+                args.extend(['--port', str(port)])
+
+            MCProcess.__init__(self, args, port)
+
+            if listen_sock is not None:
+                listen_sock.close()
+
+            # delay here until the server goes up
+            self.ensure_connected()
+            l = 20
+            s = self.stats()
+            while (len(s) == 0 and l > 0):
+                s = self.stats()
+                time.sleep(0.5)
+                l = l - 1
+            self.disconnect()
 
 class Mcpiper(ProcessBase):
     def __init__(self, fifos_dir, extra_args=None):

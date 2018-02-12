@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Facebook, Inc.
+ * Copyright 2015-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,20 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #pragma once
 
 #include <thrift/lib/cpp2/server/BaseThriftServer.h>
 
 #include <memory>
 
+#include <folly/executors/IOThreadPoolExecutor.h>
 #include <folly/io/async/HHWheelTimer.h>
 #include <folly/io/async/Request.h>
 #include <proxygen/httpserver/HTTPServer.h>
 #include <proxygen/httpserver/RequestHandlerFactory.h>
 #include <proxygen/lib/http/HTTPMessage.h>
 #include <proxygen/lib/http/session/HTTPSession.h>
-#include <wangle/concurrent/IOThreadPoolExecutor.h>
 
 namespace apache {
 namespace thrift {
@@ -95,7 +94,7 @@ class ProxygenThriftServer : public BaseThriftServer,
           taskTimeout_(this, true),
           request_(nullptr) {}
 
-    virtual ~ThriftRequestHandler() {
+    ~ThriftRequestHandler() override {
       queueTimeout_.cancelTimeout();
       taskTimeout_.cancelTimeout();
     }
@@ -139,7 +138,7 @@ class ProxygenThriftServer : public BaseThriftServer,
             connCtx_(connCtx),
             reqCtx_(reqCtx) {}
 
-      ~ProxygenRequest() {
+      ~ProxygenRequest() override {
         if (handler_) {
           handler_->request_ = nullptr;
         }
@@ -229,11 +228,11 @@ class ProxygenThriftServer : public BaseThriftServer,
 
   class ConnectionContext : public apache::thrift::server::TConnectionContext {
    public:
-    explicit ConnectionContext(const proxygen::HTTPSession& session)
+    explicit ConnectionContext(const proxygen::HTTPSessionBase& session)
         : apache::thrift::server::TConnectionContext() {
       peerAddress_ = session.getPeerAddress();
     }
-    ~ConnectionContext() {}
+    ~ConnectionContext() override {}
   };
 
   bool isOverloaded(
@@ -242,27 +241,17 @@ class ProxygenThriftServer : public BaseThriftServer,
   /**
    * Get the number of connections dropped by the AsyncServerSocket
    */
-  virtual uint64_t getNumDroppedConnections() const override;
+  uint64_t getNumDroppedConnections() const override;
 
   // proxygen::HTTPSession::InfoCallback methods
-  void onCreate(const proxygen::HTTPSession& session) override {
-    auto ctx = folly::make_unique<ConnectionContext>(session);
+  void onCreate(const proxygen::HTTPSessionBase& session) override {
+    auto ctx = std::make_unique<ConnectionContext>(session);
     if (eventHandler_) {
       eventHandler_->newConnection(ctx.get());
     }
     connectionMap_[&session] = std::move(ctx);
   }
-  void onIngressError(const proxygen::HTTPSession&,
-                      proxygen::ProxygenError) override {}
-  void onIngressEOF() override {}
-  void onRead(const proxygen::HTTPSession&, size_t) override {}
-  void onWrite(const proxygen::HTTPSession&, size_t) override {}
-  void onRequestBegin(const proxygen::HTTPSession&) override {}
-  void onRequestEnd(const proxygen::HTTPSession&,
-                    uint32_t) override {}
-  void onActivateConnection(const proxygen::HTTPSession&) override {}
-  void onDeactivateConnection(const proxygen::HTTPSession&) override {}
-  void onDestroy(const proxygen::HTTPSession& session) override {
+  void onDestroy(const proxygen::HTTPSessionBase& session) override {
     auto itr = connectionMap_.find(&session);
     DCHECK(itr != connectionMap_.end());
     if (eventHandler_) {
@@ -270,26 +259,15 @@ class ProxygenThriftServer : public BaseThriftServer,
     }
     connectionMap_.erase(itr);
   }
-  void onIngressMessage(const proxygen::HTTPSession&,
-                        const proxygen::HTTPMessage&) override {}
-  void onIngressLimitExceeded(const proxygen::HTTPSession&) override {}
-  void onIngressPaused(const proxygen::HTTPSession&) override {}
-  void onTransactionDetached(const proxygen::HTTPSession&) override {}
-  void onPingReplySent(int64_t) override {}
-  void onPingReplyReceived() override {}
-  void onSettingsOutgoingStreamsFull(const proxygen::HTTPSession&) override {}
-  void onSettingsOutgoingStreamsNotFull(const proxygen::HTTPSession&) override {
-  }
-  void onFlowControlWindowClosed(const proxygen::HTTPSession&) override {}
-  void onEgressBuffered(const proxygen::HTTPSession&) override {}
-  void onEgressBufferCleared(const proxygen::HTTPSession&) override {}
 
   std::unique_ptr<proxygen::HTTPServer> server_;
 
   size_t initialReceiveWindow_{65536};
 
-  std::unordered_map<const proxygen::HTTPSession*,
-                     std::unique_ptr<ConnectionContext>> connectionMap_;
+  std::unordered_map<
+      const proxygen::HTTPSessionBase*,
+      std::unique_ptr<ConnectionContext>>
+      connectionMap_;
 
  public:
   void setInitialReceiveWindow(size_t window) {
@@ -298,15 +276,15 @@ class ProxygenThriftServer : public BaseThriftServer,
 
   size_t getInitialReceiveWindow() { return initialReceiveWindow_; }
 
-  virtual void serve() override;
+  void serve() override;
 
-  virtual void stop() override;
+  void stop() override;
 
   // This API is intended to stop listening on the server
   // socket and stop accepting new connection first while
   // still letting the established connections to be
   // processed on the server.
-  virtual void stopListening() override;
+  void stopListening() override;
 };
 }
 } // apache::thrift

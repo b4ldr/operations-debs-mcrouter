@@ -1,9 +1,21 @@
 namespace cpp apache.thrift.cpp1
 namespace cpp2 apache.thrift.cpp2
 
+struct StructWithEmptyMap {
+  1: map<string, i64> myMap,
+}
+
 struct SubStruct {
   3: i64 mySubI64 = 17,
   12: string mySubString = "foobar",
+}
+
+union SubUnion {
+  209: string text,
+}
+
+const SubUnion kSubUnion = {
+  "text": "glorious",
 }
 
 struct OneOfEach {
@@ -30,4 +42,5 @@ struct OneOfEach {
     "baz",
   ],
   11: SubStruct myStruct,
+  12: SubUnion myUnion = kSubUnion,
 }

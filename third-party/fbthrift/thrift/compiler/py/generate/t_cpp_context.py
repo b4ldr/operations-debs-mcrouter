@@ -18,11 +18,8 @@
 # under the License.
 #
 
-import functools
-import os
 import re
 
-from t_output import DummyOutput
 from t_output import CompositeOutput
 from t_output_aggregator import create_scope_factory
 from t_output_aggregator import OutputContext
@@ -81,6 +78,7 @@ class Definition(Primitive):
             txt = str(self)
         else:
             fields['name'] = self.name
+            fields['unqualified_name'] = self.name
             # if we're in a class, define the {class} field to its name
             if 'abspath' in self.parent.opts:
                 fields['class'] = self.parent.opts.abspath
@@ -106,6 +104,8 @@ class Definition(Primitive):
         if self.pure_virtual:
             context.h.write(" = 0;")
             write_defn = False
+        elif self.override:
+            context.h.write(" override")
         elif self.default:
             context.h.write(" = default;")
             write_defn = False
@@ -131,6 +131,8 @@ class Definition(Primitive):
                 fields['name'] = ''.join((self.parent.opts.abspath,
                     '::', self.name))
                 txt = str(self).format(**fields)
+                if self.no_except:
+                    txt += ' noexcept'
             decl_output = self.output or context.impl
             # make sure this parameter is set and not assumed
             self.in_header = False
@@ -145,11 +147,11 @@ class Definition(Primitive):
                 raise AttributeError("Can't have both value and init_dict"
                     " in a defn. It's either a constructor"
                     " or it has a value.")
-            if not self.in_header:
-                raise AttributeError("Constructors (definitions that "
-                    "include init_dict) have to have in_header set.")
             init_txt = ' : \n    ' + ',\n    '.join("{0}({1})".format(*x)
                                 for x in self.init_dict.iteritems())
+            if not self.in_header:
+                decl_output.write(self.impl_signature)
+                self._opts['impl_signature'] = ''
             decl_output.write(init_txt)
         if 'value' in self:
             # well, we don't have to store the self.impl_signature
@@ -169,19 +171,33 @@ class Definition(Primitive):
 
 
 class Class(Primitive):
-    _classRegex = re.compile('(class|struct) (\w+(\s*::(\s*\w+))*)')
+    # String Format: type folly abspath::name
+    # Example: class FOLLY_DEPRECATE("msg") classname::function : extrastuff
+    _pattern_type = "(?P<type>class |struct )"
+    _pattern_folly = "(?P<folly>\w+\(.*?\) )*"
+    _pattern_name = "(?:\s*(?P<name>\w+))"
+    _pattern_scope = "(?:\s*::{pname})*".format(pname=_pattern_name)
+    _pattern_abspath = "(?P<abspath>\w+{pscope})".format(pscope=_pattern_scope)
+    _pattern = "{ptype}{pfolly}{pabspath}".format(
+        ptype=_pattern_type,
+        pfolly=_pattern_folly,
+        pabspath=_pattern_abspath)
+    _classRegex = re.compile(_pattern, re.S)
 
     def _write(self, context):
         # deduce name
         m = self._classRegex.match(str(self))
         if not m:
             raise SyntaxError("C++ class/struct incorrectly defined")
-        self.name, self.abspath = m.group(4, 2)
+        self.name, self.abspath = m.group('name', 'abspath')
+        if 'abspath' in self.parent.opts and self.parent.opts.abspath:
+            self.abspath = '::'.join((self.parent.opts.abspath, self.abspath))
         # this is magic! Basically what it does it it checks if we're
         # already on an empty line. If we are not then we introduce a
         # newline before the class defn
         context.h.double_space()
-        context.impl.double_space()
+        if context.impl:
+            context.impl.double_space()
         print >>context.h, self,
         # the scope of this will be written to output_h
         self.output = context.h
@@ -252,7 +268,7 @@ class Case(Primitive):
 
     def exit_scope_callback(self, context, scope):
         context.output.line_feed()
-        if 'nobreak' not in self:
+        if 'nobreak' not in self or not self.nobreak:
             print >>context.output, 'break;'
         context.output.unindent(2)
         print >>context.output, '}',
@@ -289,24 +305,27 @@ class Catch(Primitive):
 class Namespace(Primitive):
     def __init__(self, parent, path):
         super(Namespace, self).__init__(parent, text=None, path=path)
+        self.epilogue = None
 
     def _write(self, context):
-        path = self.path
-        text = ' '.join(r'namespace {0} {{'.format(i) for i in path) + \
-                '\n'
-        self.epilogue = '}' * len(path) + ' // ' + '::'.join(path)
-        context.outputs.line_feed()
-        print >>context.outputs, text
+        path = filter(None, self.path)
+        if path:
+            parts = [r'namespace {0} {{'.format(i) for i in path]
+            text = ' '.join(parts) + '\n'
+            self.epilogue = '}' * len(path) + ' // ' + '::'.join(path)
+            context.outputs.line_feed()
+            print >>context.outputs, text
 
     def enter_scope_callback(self, context, scope):
         return dict(physical_scope=False)
 
     def exit_scope_callback(self, context, scope):
-        # namespaces don't have physical_scope cause they have an ending text
-        # hardcoded into .epilogue by the write_primitive method
-        context.outputs.double_space()
-        # => write the epilogue statement for all outputs
-        print >>context.outputs, scope.opts.epilogue,
+        if scope.opts.epilogue:
+            # namespaces don't have physical_scope cause they have an ending
+            # text hardcoded into .epilogue by the write_primitive method
+            context.outputs.double_space()
+            # => write the epilogue statement for all outputs
+            print >>context.outputs, scope.opts.epilogue,
         return dict(physical_scope=False)
 
 
@@ -334,17 +353,22 @@ class CppPrimitiveFactory(PrimitiveFactory):
 class CppOutputContext(OutputContext):
 
     def __init__(self, output_cpp, output_h, output_tcc, header_path,
-            additional_outputs=[], custom_protocol_h=None):
+                 additional_outputs=[], custom_protocol_h=None,
+                 is_types_context=False):
+        self.omit_include = False
         self._output_cpp = output_cpp
         self._output_h = output_h
         self._output_tcc = output_tcc
         self._additional_outputs = additional_outputs
         self._custom_protocol_h = custom_protocol_h
         self._header_path = header_path
-        outputs = [output_cpp, output_h] + additional_outputs
-
+        self._add_common_service_includes_to_tcc = not is_types_context
+        outputs = [output_h]
+        if output_cpp:
+            outputs.append(output_cpp)
         if output_tcc:
             outputs.append(output_tcc)
+        outputs.extend(additional_outputs)
 
         for output in outputs:
             output.make_scope = create_scope_factory(CppScope, output)
@@ -406,14 +430,17 @@ class CppOutputContext(OutputContext):
                 print >>self._custom_protocol_h, '#include "{0}.tcc"\n'.format(
                         self._header_path)
             # include h in cpp
-            print >>self._output_cpp, '#include "{0}.h"\n'.format(
-                        self._header_path)
+            if not self.omit_include:
+                if self._output_cpp:
+                    print >>self._output_cpp, '#include "{0}.h"\n'.format(
+                            self._header_path)
             for output in self._additional_outputs:
                 print >>output, '#include "{0}.h"\n'.format(
                     self._header_path)
             if self._output_tcc:
-                print >>self._output_cpp, '#include "{0}.tcc"\n'.format(
-                    self._header_path)
+                if self._output_cpp:
+                    print >>self._output_cpp, '#include "{0}.tcc"\n'.format(
+                        self._header_path)
                 for output in self._additional_outputs:
                     print >>output, '#include "{0}.tcc"\n'.format(
                         self._header_path)
@@ -428,10 +455,15 @@ class CppOutputContext(OutputContext):
                 print >>self._output_tcc, '#include <folly/io/IOBufQueue.h>'
                 print >>self._output_tcc, \
                         '#include <thrift/lib/cpp/transport/THeader.h>'
-                print >>self._output_tcc, \
+                # Make sure we don't add these into the 'types' libraries
+                # so that they can be a separate rule
+                if self._add_common_service_includes_to_tcc:
+                    print >>self._output_tcc, \
                         '#include <thrift/lib/cpp2/server/Cpp2ConnContext.h>'
-                print >>self._output_tcc, \
+                    print >>self._output_tcc, \
                         '#include <thrift/lib/cpp2/GeneratedCodeHelper.h>'
+                print >>self._output_tcc, \
+                        '#include <thrift/lib/cpp2/GeneratedSerializationCodeHelper.h>'
                 print >>self._output_tcc, ''
             return
 
@@ -450,6 +482,8 @@ class CppOutputContext(OutputContext):
 
     def _exit_scope_handler(self, scope, physical_scope=True):
         if scope.parent is None:
+            # Make sure file is newline terminated.
+            self.outputs.line_feed()
             return
 
         if physical_scope:

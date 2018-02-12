@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2016-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-#include <gtest/gtest.h>
-#include <thrift/lib/cpp2/security/SecurityKillSwitchPoller.h>
-#include <thrift/lib/cpp2/security/SecurityKillSwitch.h>
-#include <folly/futures/Barrier.h>
-#include <folly/Baton.h>
 #include <folly/Singleton.h>
+#include <folly/futures/Barrier.h>
+#include <folly/synchronization/Baton.h>
+#include <gtest/gtest.h>
+#include <thrift/lib/cpp2/test/MockSecurityKillSwitchPoller.h>
 
 namespace apache {
 namespace thrift {
@@ -35,20 +34,24 @@ TEST(PollerTest, StartsCleanly) {
     b.post();
     return true;
   };
-  SecurityKillSwitchPoller poller(chrono::milliseconds(10000), counter);
-  EXPECT_TRUE(b.timed_wait(chrono::seconds(5)));
+  MockSecurityKillSwitchPoller poller(counter);
+  EXPECT_TRUE(b.try_wait_for(chrono::seconds(5)));
   EXPECT_EQ(numCalls, 1);
 }
 
 TEST(PollerTest, PollsInSeparateThread) {
   auto current = this_thread::get_id();
   folly::Baton<> b;
+  bool firstTime = true;
   auto func = [&]{
-    b.post();
+    if (!firstTime) {
+      b.post();
+    }
+    firstTime = false;
     return current != this_thread::get_id();
   };
-  SecurityKillSwitchPoller poller(chrono::milliseconds(10), func);
-  EXPECT_TRUE(b.timed_wait(chrono::seconds(5)));
+  MockSecurityKillSwitchPoller poller(func);
+  EXPECT_TRUE(b.try_wait_for(chrono::seconds(5)));
   EXPECT_TRUE(poller.isKillSwitchEnabled());
 }
 
@@ -58,13 +61,8 @@ TEST(PollerTest, RunsRepeatedly) {
     b.wait();
     return true;
   };
-  SecurityKillSwitchPoller poller(chrono::milliseconds(10), countdown);
+  MockSecurityKillSwitchPoller poller(countdown);
   b.wait().get(chrono::seconds(5));
-}
-
-TEST(PollerTest, SingletonTest) {
-  auto poller = folly::Singleton<SecurityKillSwitchPoller>::try_get();
-  EXPECT_TRUE(poller);
 }
 }
 }

@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2015, Facebook, Inc.
+ *  Copyright (c) 2017, Facebook, Inc.
  *  All rights reserved.
  *
  *  This source code is licensed under the BSD-style license found in the
@@ -15,6 +15,7 @@
 #include <sys/uio.h>
 
 #include "fbtrace/libfbtrace/c/fbtrace.h"
+#include "fbtrace/libfbtrace/c/fbtrace_encode.h"
 
 __BEGIN_DECLS
 
@@ -37,4 +38,4 @@ mc_fbtrace_info_t* mc_fbtrace_info_incref(mc_fbtrace_info_t* fbt_w);
 
 __END_DECLS
 
-#endif  // FB_MEMCACHE_MC_FBTRACE_H
+#endif // FB_MEMCACHE_MC_FBTRACE_H

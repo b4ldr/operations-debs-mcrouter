@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
+ *  Copyright (c) 2017, Facebook, Inc.
  *  All rights reserved.
  *
  *  This source code is licensed under the BSD-style license found in the
@@ -14,31 +14,48 @@
 #include <folly/Memory.h>
 #include <folly/small_vector.h>
 
-#include "mcrouter/lib/debug/Fifo.h"
+#include "mcrouter/lib/debug/FifoManager.h"
 #include "mcrouter/lib/network/McServerRequestContext.h"
 #include "mcrouter/lib/network/MultiOpParent.h"
 #include "mcrouter/lib/network/WriteBuffer.h"
 
-namespace facebook { namespace memcache {
+namespace facebook {
+namespace memcache {
+
+namespace {
+
+ConnectionFifo getDebugFifo(
+    const std::string& path,
+    const folly::AsyncTransportWrapper* transport,
+    const std::string& requestHandlerName) {
+  if (!path.empty()) {
+    if (auto fifoManager = FifoManager::getInstance()) {
+      if (auto fifo = fifoManager->fetchThreadLocal(path)) {
+        return ConnectionFifo(std::move(fifo), transport, requestHandlerName);
+      }
+    }
+  }
+  return ConnectionFifo();
+}
+
+} // anonymous namespace
 
 constexpr size_t kIovecVectorSize = 64;
 
 McServerSession& McServerSession::create(
-  folly::AsyncTransportWrapper::UniquePtr transport,
-  std::shared_ptr<McServerOnRequest> cb,
-  StateCallback& stateCb,
-  AsyncMcServerWorkerOptions options,
-  void* userCtxt,
-  std::shared_ptr<Fifo> debugFifo) {
-
+    folly::AsyncTransportWrapper::UniquePtr transport,
+    std::shared_ptr<McServerOnRequest> cb,
+    StateCallback& stateCb,
+    AsyncMcServerWorkerOptions options,
+    void* userCtxt,
+    const CompressionCodecMap* codecMap) {
   auto ptr = new McServerSession(
-    std::move(transport),
-    std::move(cb),
-    stateCb,
-    std::move(options),
-    userCtxt,
-    std::move(debugFifo)
-  );
+      std::move(transport),
+      std::move(cb),
+      stateCb,
+      std::move(options),
+      userCtxt,
+      codecMap);
 
   assert(ptr->state_ == STREAMING);
 
@@ -53,35 +70,40 @@ McServerSession& McServerSession::create(
 }
 
 McServerSession::McServerSession(
-  folly::AsyncTransportWrapper::UniquePtr transport,
-  std::shared_ptr<McServerOnRequest> cb,
-  StateCallback& stateCb,
-  AsyncMcServerWorkerOptions options,
-  void* userCtxt,
-  std::shared_ptr<Fifo> debugFifo)
+    folly::AsyncTransportWrapper::UniquePtr transport,
+    std::shared_ptr<McServerOnRequest> cb,
+    StateCallback& stateCb,
+    AsyncMcServerWorkerOptions options,
+    void* userCtxt,
+    const CompressionCodecMap* codecMap)
     : transport_(std::move(transport)),
       eventBase_(*transport_->getEventBase()),
       onRequest_(std::move(cb)),
       stateCb_(stateCb),
       options_(std::move(options)),
-      debugFifo_(std::move(debugFifo)),
+      debugFifo_(getDebugFifo(
+          options_.debugFifoPath,
+          transport_.get(),
+          onRequest_->name())),
       pendingWrites_(folly::make_unique<WriteBufferIntrusiveList>()),
       sendWritesCallback_(*this),
-      parser_(*this,
-              options_.minBufferSize,
-              options_.maxBufferSize),
+      compressionCodecMap_(codecMap),
+      parser_(
+          *this,
+          options_.minBufferSize,
+          options_.maxBufferSize,
+          &debugFifo_),
       userCtxt_(userCtxt) {
-
   try {
     transport_->getPeerAddress(&socketAddress_);
-  } catch (const std::runtime_error& e) {
+  } catch (const std::exception& e) {
     // std::system_error or other exception, leave IP address empty
     LOG(WARNING) << "Failed to get socket address: " << e.what();
   }
 
   auto socket = transport_->getUnderlyingTransport<folly::AsyncSSLSocket>();
   if (socket != nullptr) {
-    socket->sslAccept(this, /* timeout = */ 0);
+    socket->sslAccept(this, /* timeout = */ std::chrono::milliseconds::zero());
   }
 }
 
@@ -96,9 +118,7 @@ void McServerSession::resume(PauseReason reason) {
 
   /* Client can half close the socket and in those cases there is
      no point in enabling reads */
-  if (!pauseState_ &&
-      state_ == STREAMING &&
-      transport_->good()) {
+  if (!pauseState_ && state_ == STREAMING && transport_->good()) {
     transport_->setReadCB(this);
   }
 }
@@ -177,9 +197,15 @@ void McServerSession::processMultiOpEnd() {
 void McServerSession::close() {
   DestructorGuard dg(this);
 
+  // Regardless of the reason we're closing, we should immediately stop reading
+  // from the socket or we may get into invalid state.
+  if (transport_) {
+    transport_->setReadCB(nullptr);
+  }
+
   if (currentMultiop_) {
     /* If we got closed in the middle of a multiop request,
-       process it as if we saw mc_op_end */
+       process it as if we saw the multi-op end sentinel */
     processMultiOpEnd();
   }
 
@@ -199,12 +225,6 @@ void McServerSession::getReadBuffer(void** bufReturn, size_t* lenReturn) {
 
 void McServerSession::readDataAvailable(size_t len) noexcept {
   DestructorGuard dg(this);
-
-  if (debugFifo_) {
-    debugFifo_->writeIfConnected(transport_.get(), MessageDirection::Received,
-                                 curBuffer_.first, len);
-  }
-
   if (!parser_.readDataAvailable(len)) {
     close();
   }
@@ -229,19 +249,19 @@ void McServerSession::multiOpEnd() {
 }
 
 void McServerSession::onRequest(
-    TypedThriftRequest<cpp2::McVersionRequest>&& req,
+    McVersionRequest&& req,
     bool /* noreply = false */) {
-
   uint64_t reqid = 0;
   if (!parser_.outOfOrder()) {
     reqid = tailReqid_++;
   }
 
-  McServerRequestContext ctx(*this, mc_op_version, reqid, false, nullptr);
+  McServerRequestContext ctx(*this, reqid);
 
   if (options_.defaultVersionHandler) {
-    TypedThriftReply<cpp2::McVersionReply> reply(mc_res_ok);
-    reply.setValue(options_.versionString);
+    McVersionReply reply(mc_res_ok);
+    reply.value() =
+        folly::IOBuf(folly::IOBuf::COPY_BUFFER, options_.versionString);
     McServerRequestContext::reply(std::move(ctx), std::move(reply));
     return;
   }
@@ -249,32 +269,29 @@ void McServerSession::onRequest(
   onRequest_->requestReady(std::move(ctx), std::move(req));
 }
 
-void McServerSession::onRequest(TypedThriftRequest<cpp2::McShutdownRequest>&&,
-                                bool) {
+void McServerSession::onRequest(McShutdownRequest&&, bool) {
   uint64_t reqid = 0;
   if (!parser_.outOfOrder()) {
     reqid = tailReqid_++;
   }
-  McServerRequestContext ctx(*this, mc_op_shutdown, reqid, true, nullptr);
-  McServerRequestContext::reply(
-      std::move(ctx), TypedThriftReply<cpp2::McShutdownReply>(mc_res_ok));
+  McServerRequestContext ctx(*this, reqid, true /* noReply */);
+  McServerRequestContext::reply(std::move(ctx), McShutdownReply(mc_res_ok));
   stateCb_.onShutdown();
 }
 
-void McServerSession::onRequest(TypedThriftRequest<cpp2::McQuitRequest>&&,
-                                bool) {
+void McServerSession::onRequest(McQuitRequest&&, bool) {
   uint64_t reqid = 0;
   if (!parser_.outOfOrder()) {
     reqid = tailReqid_++;
   }
-  McServerRequestContext ctx(*this, mc_op_quit, reqid, true, nullptr);
-  McServerRequestContext::reply(std::move(ctx),
-                                TypedThriftReply<cpp2::McQuitReply>(mc_res_ok));
+  McServerRequestContext ctx(*this, reqid, true /* noReply */);
+  McServerRequestContext::reply(std::move(ctx), McQuitReply(mc_res_ok));
   close();
 }
 
-void McServerSession::caretRequestReady(const UmbrellaMessageInfo& headerInfo,
-                                        const folly::IOBuf& reqBody) {
+void McServerSession::caretRequestReady(
+    const UmbrellaMessageInfo& headerInfo,
+    const folly::IOBuf& reqBody) {
   DestructorGuard dg(this);
 
   assert(parser_.protocol() == mc_caret_protocol);
@@ -284,16 +301,40 @@ void McServerSession::caretRequestReady(const UmbrellaMessageInfo& headerInfo,
     return;
   }
 
-  McServerRequestContext ctx(*this, mc_op_unknown, headerInfo.reqId);
+  updateCompressionCodecIdRange(headerInfo);
 
-  if (IdFromType<cpp2::McVersionRequest, TRequestList>::value ==
-          headerInfo.typeId &&
+  McServerRequestContext ctx(
+      *this,
+      headerInfo.reqId,
+      false /* noReply */,
+      nullptr /* multiOpParent */,
+      false /* isEndContext */);
+
+  if (McVersionRequest::typeId == headerInfo.typeId &&
       options_.defaultVersionHandler) {
-    TypedThriftReply<cpp2::McVersionReply> versionReply(mc_res_ok);
-    versionReply.setValue(options_.versionString);
+    McVersionReply versionReply(mc_res_ok);
+    versionReply.value() =
+        folly::IOBuf(folly::IOBuf::COPY_BUFFER, options_.versionString);
     McServerRequestContext::reply(std::move(ctx), std::move(versionReply));
   } else {
-    onRequest_->caretRequestReady(headerInfo, reqBody, std::move(ctx));
+    try {
+      onRequest_->caretRequestReady(headerInfo, reqBody, std::move(ctx));
+    } catch (const std::exception& e) {
+      // Ideally, ctx would be created after successful parsing of Caret data.
+      // For now, if ctx hasn't been moved out of, mark as replied.
+      ctx.replied_ = true;
+      throw;
+    }
+  }
+}
+
+void McServerSession::updateCompressionCodecIdRange(
+    const UmbrellaMessageInfo& headerInfo) noexcept {
+  if (headerInfo.supportedCodecsSize == 0 || !compressionCodecMap_) {
+    codecIdRange_ = CodecIdRange::Empty;
+  } else {
+    codecIdRange_ = {headerInfo.supportedCodecsFirstId,
+                     headerInfo.supportedCodecsSize};
   }
 }
 
@@ -304,9 +345,11 @@ void McServerSession::parseError(mc_res_t result, folly::StringPiece reason) {
     return;
   }
 
+  McVersionReply errorReply(result);
+  errorReply.message() = reason.str();
+  errorReply.value() = folly::IOBuf(folly::IOBuf::COPY_BUFFER, reason.str());
   McServerRequestContext::reply(
-    McServerRequestContext(*this, mc_op_unknown, tailReqid_++),
-    McReply(result, reason));
+      McServerRequestContext(*this, tailReqid_++), std::move(errorReply));
   close();
 }
 
@@ -321,14 +364,13 @@ void McServerSession::queueWrite(std::unique_ptr<WriteBuffer> wb) {
     return;
   }
   if (options_.singleWrite) {
+    if (UNLIKELY(debugFifo_.isConnected())) {
+      writeToDebugFifo(wb.get());
+    }
     const struct iovec* iovs = wb->getIovsBegin();
     size_t iovCount = wb->getIovsCount();
     writeBufs_->push(std::move(wb));
     transport_->writev(this, iovs, iovCount);
-    if (debugFifo_) {
-      debugFifo_->writeIfConnected(transport_.get(), MessageDirection::Sent,
-                                   iovs, iovCount);
-    }
     if (!writeBufs_->empty()) {
       /* We only need to pause if the sendmsg() call didn't write everything
          in one go */
@@ -353,9 +395,13 @@ void McServerSession::sendWrites() {
   while (!pendingWrites_->empty()) {
     auto wb = pendingWrites_->popFront();
     if (!wb->noReply()) {
-      iovs.insert(iovs.end(),
-                  wb->getIovsBegin(),
-                  wb->getIovsBegin() + wb->getIovsCount());
+      if (UNLIKELY(debugFifo_.isConnected())) {
+        writeToDebugFifo(wb.get());
+      }
+      iovs.insert(
+          iovs.end(),
+          wb->getIovsBegin(),
+          wb->getIovsBegin() + wb->getIovsCount());
     }
     if (pendingWrites_->empty()) {
       wb->markEndOfBatch();
@@ -363,11 +409,25 @@ void McServerSession::sendWrites() {
     writeBufs_->push(std::move(wb));
   }
 
-  if (debugFifo_) {
-    debugFifo_->writeIfConnected(transport_.get(), MessageDirection::Sent,
-                                 iovs.data(), iovs.size());
-  }
   transport_->writev(this, iovs.data(), iovs.size());
+}
+
+void McServerSession::writeToDebugFifo(const WriteBuffer* wb) noexcept {
+  if (!wb->isSubRequest()) {
+    debugFifo_.startMessage(MessageDirection::Sent, wb->typeId());
+    hasPendingMultiOp_ = false;
+  } else {
+    // Handle multi-op
+    if (!hasPendingMultiOp_) {
+      debugFifo_.startMessage(MessageDirection::Sent, wb->typeId());
+      hasPendingMultiOp_ = true;
+    }
+    if (wb->isEndContext()) {
+      // Multi-op replies always finish with an end context
+      hasPendingMultiOp_ = false;
+    }
+  }
+  debugFifo_.writeData(wb->getIovsBegin(), wb->getIovsCount());
 }
 
 void McServerSession::completeWrite() {
@@ -387,17 +447,17 @@ void McServerSession::writeSuccess() noexcept {
 }
 
 void McServerSession::writeErr(
-  size_t bytesWritten,
-  const folly::AsyncSocketException& ex) noexcept {
-
+    size_t bytesWritten,
+    const folly::AsyncSocketException& ex) noexcept {
   DestructorGuard dg(this);
   completeWrite();
   close();
 }
 
-bool McServerSession::handshakeVer(folly::AsyncSSLSocket*,
-                                   bool preverifyOk,
-                                   X509_STORE_CTX* ctx) noexcept {
+bool McServerSession::handshakeVer(
+    folly::AsyncSSLSocket*,
+    bool preverifyOk,
+    X509_STORE_CTX* ctx) noexcept {
   if (!preverifyOk) {
     return false;
   }
@@ -445,6 +505,7 @@ void McServerSession::handshakeSuc(folly::AsyncSSLSocket* sock) noexcept {
 }
 
 void McServerSession::handshakeErr(
-    folly::AsyncSSLSocket*, const folly::AsyncSocketException&) noexcept {}
+    folly::AsyncSSLSocket*,
+    const folly::AsyncSocketException&) noexcept {}
 } // memcache
 } // facebook

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2016-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,10 +28,17 @@ using namespace folly;
 using namespace apache::thrift;
 using namespace apache::thrift::protocol;
 using namespace apache::thrift::transport;
+using namespace apache::thrift::util;
 
 namespace {
 
 class JSONProtocolTest : public testing::Test {};
+
+using P1 = TJSONProtocol;
+using S1 = ThriftSerializerJson<>;
+using W2 = JSONProtocolWriter;
+using R2 = JSONProtocolReader;
+using S2 = JSONSerializer;
 
 template <typename T>
 struct action_traits_impl;
@@ -44,16 +51,16 @@ using action_traits = action_traits_impl<decltype(&F::operator())>;
 template <typename F>
 using arg = typename action_traits<F>::arg_type;
 
-string writing_cpp1(function<void(TJSONProtocol&)> f) {
+string writing_cpp1(function<void(P1&)> f) {
   auto buffer = make_shared<TMemoryBuffer>();
-  TJSONProtocol proto(buffer);
+  P1 proto(buffer);
   f(proto);
   return buffer->getBufferAsString();
 }
 
-string writing_cpp2(function<void(JSONProtocolWriter&)> f) {
+string writing_cpp2(function<void(W2&)> f) {
   IOBufQueue queue;
-  JSONProtocolWriter writer;
+  W2 writer;
   writer.setOutput(&queue);
   f(writer);
   string _return;
@@ -69,36 +76,44 @@ arg<F> returning(F&& f) {
 }
 
 template <typename T>
-T reading_cpp1(ByteRange input, function<T(TJSONProtocol&)> f) {
+T reading_cpp1(ByteRange input, function<T(P1&)> f) {
   auto buffer = make_shared<TMemoryBuffer>(
       const_cast<uint8_t*>(input.data()), input.size());
-  TJSONProtocol proto(buffer);
+  P1 proto(buffer);
   return f(proto);
 }
 
 template <typename T>
-T reading_cpp1(StringPiece input, function<T(TJSONProtocol&)>&& f) {
+T reading_cpp1(StringPiece input, function<T(P1&)>&& f) {
   using F = typename std::remove_reference<decltype(f)>::type;
   return reading_cpp1(ByteRange(input), std::forward<F>(f));
 }
 
 template <typename T>
-T reading_cpp2(ByteRange input, function<T(JSONProtocolReader&)> f) {
+T reading_cpp2(const vector<StringPiece>& input, function<T(R2&)> f) {
+  IOBufQueue queue;
+  for (const auto& data : input) {
+    queue.wrapBuffer(data.data(), data.size());
+  }
+  auto buf = queue.move();
+  R2 reader;
+  reader.setInput(buf.get());
+  return f(reader);
+}
+
+template <typename T>
+T reading_cpp2(ByteRange input, function<T(R2&)> f) {
   IOBuf buf(IOBuf::WRAP_BUFFER, input);
-  JSONProtocolReader reader;
+  R2 reader;
   reader.setInput(&buf);
   return f(reader);
 }
 
 template <typename T>
-T reading_cpp2(StringPiece input, function<T(JSONProtocolReader&)>&& f) {
+T reading_cpp2(StringPiece input, function<T(R2&)>&& f) {
   using F = typename std::remove_reference<decltype(f)>::type;
   return reading_cpp2(ByteRange(input), std::forward<F>(f));
 }
-
-using P1 = TJSONProtocol;
-using W2 = JSONProtocolWriter;
-using R2 = JSONProtocolReader;
 
 }
 
@@ -318,39 +333,39 @@ TEST_F(JSONProtocolTest, writeSet_string) {
 }
 
 TEST_F(JSONProtocolTest, serializedSizeBool_false) {
-  EXPECT_EQ(2, JSONProtocolWriter().serializedSizeBool(false));
+  EXPECT_EQ(2, W2().serializedSizeBool(false));
 }
 
 TEST_F(JSONProtocolTest, serializedSizeBool_true) {
-  EXPECT_EQ(2, JSONProtocolWriter().serializedSizeBool(true));
+  EXPECT_EQ(2, W2().serializedSizeBool(true));
 }
 
 TEST_F(JSONProtocolTest, serializedSizeByte) {
-  EXPECT_EQ(6, JSONProtocolWriter().serializedSizeByte(17));
+  EXPECT_EQ(6, W2().serializedSizeByte(17));
 }
 
 TEST_F(JSONProtocolTest, serializedSizeI16) {
-  EXPECT_EQ(8, JSONProtocolWriter().serializedSizeI16(1017));
+  EXPECT_EQ(8, W2().serializedSizeI16(1017));
 }
 
 TEST_F(JSONProtocolTest, serializedSizeI32) {
-  EXPECT_EQ(13, JSONProtocolWriter().serializedSizeI32(100017));
+  EXPECT_EQ(13, W2().serializedSizeI32(100017));
 }
 
 TEST_F(JSONProtocolTest, serializedSizeI64) {
-  EXPECT_EQ(25, JSONProtocolWriter().serializedSizeI64(5000000017));
+  EXPECT_EQ(25, W2().serializedSizeI64(5000000017));
 }
 
 TEST_F(JSONProtocolTest, serializedSizeDouble) {
-  EXPECT_EQ(25, JSONProtocolWriter().serializedSizeDouble(5.25));
+  EXPECT_EQ(25, W2().serializedSizeDouble(5.25));
 }
 
 TEST_F(JSONProtocolTest, serializedSizeFloat) {
-  EXPECT_EQ(25, JSONProtocolWriter().serializedSizeFloat(5.25f));
+  EXPECT_EQ(25, W2().serializedSizeFloat(5.25f));
 }
 
 TEST_F(JSONProtocolTest, serializedSizeStop) {
-  EXPECT_EQ(0, JSONProtocolWriter().serializedSizeStop());
+  EXPECT_EQ(0, W2().serializedSizeStop());
 }
 
 TEST_F(JSONProtocolTest, readBool_false) {
@@ -430,6 +445,58 @@ TEST_F(JSONProtocolTest, readDouble) {
   }));
 }
 
+TEST_F(JSONProtocolTest, readDouble_malformed) {
+  auto input = "\"nondouble\"";
+  EXPECT_ANY_THROW(reading_cpp1<double>(input, [](P1& p) {
+    return returning([&](double& _) { p.readDouble(_); });
+  }));
+  EXPECT_ANY_THROW(reading_cpp2<double>(input, [](R2& p) {
+    return returning([&](double& _) { p.readDouble(_); });
+  }));
+}
+
+TEST_F(JSONProtocolTest, readDouble_empty) {
+  auto input = StringPiece("5.25").subpiece(0, 0);
+  EXPECT_ANY_THROW(reading_cpp1<double>(input, [](P1& p) {
+    return returning([&](double& _) { p.readDouble(_); });
+  }));
+  EXPECT_ANY_THROW(reading_cpp2<double>(input, [](R2& p) {
+    return returning([&](double& _) { p.readDouble(_); });
+  }));
+}
+
+TEST_F(JSONProtocolTest, readDouble_null) {
+  auto input = StringPiece();
+  EXPECT_ANY_THROW(reading_cpp1<double>(input, [](P1& p) {
+    return returning([&](double& _) { p.readDouble(_); });
+  }));
+  EXPECT_ANY_THROW(reading_cpp2<double>(input, [](R2& p) {
+    return returning([&](double& _) { p.readDouble(_); });
+  }));
+}
+
+TEST_F(JSONProtocolTest, readDouble_split) {
+  vector<StringPiece> input = {" ", "\t \r \n ", "   5", ".2", "5 "};
+  auto expected = 5.25;
+  EXPECT_EQ(expected, reading_cpp2<double>(input, [](R2& p) {
+    return returning([&](double& _) { p.readDouble(_); });
+  }));
+}
+
+TEST_F(JSONProtocolTest, readDouble_split_malformed) {
+  vector<StringPiece> input = {" ", "\t \r \n ", "  \"nondouble\" "};
+  EXPECT_ANY_THROW(reading_cpp2<double>(input, [](R2& p) {
+    return returning([&](double& _) { p.readDouble(_); });
+  }));
+}
+
+TEST_F(JSONProtocolTest, readDouble_split_empty) {
+  vector<StringPiece> input = {" ", "\t \r \n ", "   "};
+  EXPECT_ANY_THROW(reading_cpp2<double>(input, [](R2& p) {
+    return returning([&](double& _) { p.readDouble(_); });
+  }));
+}
+
 TEST_F(JSONProtocolTest, readFloat) {
   auto input = "5.25";
   auto expected = 5.25f;
@@ -445,6 +512,37 @@ TEST_F(JSONProtocolTest, readString) {
   auto input = R"("foobar")";
   auto expected = "foobar";
   EXPECT_EQ(expected, reading_cpp1<string>(input, [](P1& p) {
+        return returning([&](string& _) { p.readString(_); });
+  }));
+  EXPECT_EQ(expected, reading_cpp2<string>(input, [](R2& p) {
+        return returning([&](string& _) { p.readString(_); });
+  }));
+}
+
+TEST_F(JSONProtocolTest, readString_raw) {
+  auto input = R"("\u0019\u0002\u0000\u0000")";
+  auto expected = string("\x19\x02\x00\x00", 4);
+  EXPECT_EQ(expected, reading_cpp1<string>(input, [](P1& p) {
+        return returning([&](string& _) { p.readString(_); });
+  }));
+  EXPECT_EQ(expected, reading_cpp1<string>(input, [](P1& p) {
+        p.allowDecodeUTF8(true);
+        return returning([&](string& _) { p.readString(_); });
+  }));
+  EXPECT_EQ(expected, reading_cpp2<string>(input, [](R2& p) {
+        p.setAllowDecodeUTF8(false);
+        return returning([&](string& _) { p.readString(_); });
+  }));
+  EXPECT_EQ(expected, reading_cpp2<string>(input, [](R2& p) {
+        return returning([&](string& _) { p.readString(_); });
+  }));
+}
+
+TEST_F(JSONProtocolTest, readString_utf8) {
+  auto input = R"("\u263A")";
+  auto expected = string(u8"\u263A");
+  EXPECT_EQ(expected, reading_cpp1<string>(input, [](P1& p) {
+        p.allowDecodeUTF8(true);
         return returning([&](string& _) { p.readString(_); });
   }));
   EXPECT_EQ(expected, reading_cpp2<string>(input, [](R2& p) {
@@ -671,21 +769,24 @@ TEST_F(JSONProtocolTest, readMessage) {
 
 TEST_F(JSONProtocolTest, roundtrip) {
   //  cpp2 -> str -> cpp2
-  const auto orig = cpp2::OneOfEach{};
-  const auto serialized = JSONSerializer::serialize<string>(orig);
-  cpp2::OneOfEach deserialized;
-  const auto size = JSONSerializer::deserialize(serialized, deserialized);
+  using type = cpp2::OneOfEach;
+  const auto orig = type{};
+  const auto serialized = S2::serialize<string>(orig);
+  type deserialized;
+  const auto size = S2::deserialize(serialized, deserialized);
   EXPECT_EQ(serialized.size(), size);
   EXPECT_EQ(orig, deserialized);
 }
 
 TEST_F(JSONProtocolTest, super_roundtrip) {
-  //  cpp2 -> str -> cp1 -> str -> cpp2
-  util::ThriftSerializerJson<> cpp1_serializer;
-  const auto orig = cpp2::OneOfEach{};
-  const auto serialized_1 = JSONSerializer::serialize<string>(orig);
+  //  cpp2 -> str -> cpp1 -> str -> cpp2
+  using cpp1_type = cpp1::OneOfEach;
+  using cpp2_type = cpp2::OneOfEach;
+  S1 cpp1_serializer;
+  const auto orig = cpp2_type{};
+  const auto serialized_1 = S2::serialize<string>(orig);
   const auto deserialized_size_1 =
-    returning([&](tuple<cpp1::OneOfEach, uint32_t>& _) {
+    returning([&](tuple<cpp1_type, uint32_t>& _) {
         get<1>(_) = cpp1_serializer.deserialize(serialized_1, &get<0>(_));
     });
   const auto deserialized_1 = get<0>(deserialized_size_1);
@@ -696,8 +797,8 @@ TEST_F(JSONProtocolTest, super_roundtrip) {
   });
   EXPECT_EQ(serialized_1, serialized_2);
   const auto deserialized_size_2 =
-    returning([&](tuple<cpp2::OneOfEach, uint32_t>& _) {
-        get<1>(_) = JSONSerializer::deserialize(serialized_2, get<0>(_));
+    returning([&](tuple<cpp2_type, uint32_t>& _) {
+        get<1>(_) = S2::deserialize(serialized_2, get<0>(_));
     });
   const auto deserialized_2 = get<0>(deserialized_size_2);
   const auto size_2 = get<1>(deserialized_size_2);

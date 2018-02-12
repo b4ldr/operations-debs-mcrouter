@@ -18,6 +18,33 @@ class Schema;
 
 
 
+enum TypedEnum : short {
+  VAL1 = 0,
+  VAL2 = 1,
+};
+
+using _TypedEnum_EnumMapFactory = apache::thrift::detail::TEnumMapFactory<TypedEnum, short>;
+
+extern const _TypedEnum_EnumMapFactory::ValuesToNamesMapType _TypedEnum_VALUES_TO_NAMES;
+
+extern const _TypedEnum_EnumMapFactory::NamesToValuesMapType _TypedEnum_NAMES_TO_VALUES;
+
+
+namespace apache { namespace thrift {
+template <> struct TEnumDataStorage< ::TypedEnum>;
+template <> const std::size_t TEnumTraits< ::TypedEnum>::size;
+template <> const folly::Range<const  ::TypedEnum*> TEnumTraits< ::TypedEnum>::values;
+template <> const folly::Range<const folly::StringPiece*> TEnumTraits< ::TypedEnum>::names;
+template <> inline constexpr  ::TypedEnum TEnumTraits< ::TypedEnum>::min() {
+return  ::TypedEnum::VAL1;
+}
+template <> inline constexpr  ::TypedEnum TEnumTraits< ::TypedEnum>::max() {
+return  ::TypedEnum::VAL2;
+}
+}} // apache::thrift
+
+
+
 class MyUnion;
 
 class MyField;
@@ -28,7 +55,21 @@ class StructWithUnion;
 
 class RecursiveStruct;
 
-class MyUnion : public apache::thrift::TStructType<MyUnion> {
+class StructWithContainers;
+
+class StructWithSharedConst;
+
+class Empty;
+
+class StructWithRef;
+
+class StructWithRefTypeUnique;
+
+class StructWithRefTypeShared;
+
+class StructWithRefTypeSharedConst;
+
+class MyUnion final : public apache::thrift::TStructType<MyUnion> {
  public:
   enum class Type {
     __EMPTY__ = 0,
@@ -137,7 +178,7 @@ class MyUnion : public apache::thrift::TStructType<MyUnion> {
     }
     type_ = Type::__EMPTY__;
   }
-  virtual ~MyUnion() throw() {
+  ~MyUnion() noexcept {
     __clear();
   }
 
@@ -236,6 +277,10 @@ class MyUnion : public apache::thrift::TStructType<MyUnion> {
 
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
  private:
   Type type_;
   storage_type value_;
@@ -244,7 +289,7 @@ class MyUnion : public apache::thrift::TStructType<MyUnion> {
 
 void swap(MyField &a, MyField &b);
 
-class MyField : public apache::thrift::TStructType<MyField> {
+class MyField final : public apache::thrift::TStructType<MyField> {
  public:
 
   static const uint64_t _reflection_id = 16778989117799402412U;
@@ -296,9 +341,6 @@ class MyField : public apache::thrift::TStructType<MyField> {
   MyField& operator=(MyField&&) = default;
 
   void __clear();
-
-  virtual ~MyField() throw() {}
-
   int64_t opt_value;
   int64_t value;
   int64_t req_value;
@@ -323,6 +365,10 @@ class MyField : public apache::thrift::TStructType<MyField> {
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class MyField;
@@ -330,7 +376,7 @@ void merge(const MyField& from, MyField& to);
 void merge(MyField&& from, MyField& to);
 void swap(MyStruct &a, MyStruct &b);
 
-class MyStruct : public apache::thrift::TStructType<MyStruct> {
+class MyStruct final : public apache::thrift::TStructType<MyStruct> {
  public:
 
   static const uint64_t _reflection_id = 7958971832214294220U;
@@ -347,7 +393,7 @@ class MyStruct : public apache::thrift::TStructType<MyStruct> {
   ):
     MyStruct(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
   {
-    opt_ref = arg.move();
+    opt_ref = std::make_unique<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
   }
   template <
     typename T__ThriftWrappedArgument__Ctor,
@@ -359,7 +405,7 @@ class MyStruct : public apache::thrift::TStructType<MyStruct> {
   ):
     MyStruct(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
   {
-    ref = arg.move();
+    ref = std::make_unique<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
   }
   template <
     typename T__ThriftWrappedArgument__Ctor,
@@ -371,7 +417,7 @@ class MyStruct : public apache::thrift::TStructType<MyStruct> {
   ):
     MyStruct(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
   {
-    req_ref = arg.move();
+    req_ref = std::make_unique<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
   }
 
   MyStruct(const MyStruct&);
@@ -384,9 +430,6 @@ class MyStruct : public apache::thrift::TStructType<MyStruct> {
   MyStruct& operator=(MyStruct&&) = default;
 
   void __clear();
-
-  virtual ~MyStruct() throw() {}
-
   std::unique_ptr<MyField> opt_ref;
   std::unique_ptr<MyField> ref;
   std::unique_ptr<MyField> req_ref;
@@ -407,6 +450,10 @@ class MyStruct : public apache::thrift::TStructType<MyStruct> {
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class MyStruct;
@@ -414,7 +461,7 @@ void merge(const MyStruct& from, MyStruct& to);
 void merge(MyStruct&& from, MyStruct& to);
 void swap(StructWithUnion &a, StructWithUnion &b);
 
-class StructWithUnion : public apache::thrift::TStructType<StructWithUnion> {
+class StructWithUnion final : public apache::thrift::TStructType<StructWithUnion> {
  public:
 
   static const uint64_t _reflection_id = 11295191354176986988U;
@@ -431,7 +478,7 @@ class StructWithUnion : public apache::thrift::TStructType<StructWithUnion> {
   ):
     StructWithUnion(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
   {
-    u = arg.move();
+    u = std::make_unique<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
   }
   template <
     typename T__ThriftWrappedArgument__Ctor,
@@ -470,9 +517,6 @@ class StructWithUnion : public apache::thrift::TStructType<StructWithUnion> {
   StructWithUnion& operator=(StructWithUnion&&) = default;
 
   void __clear();
-
-  virtual ~StructWithUnion() throw() {}
-
   std::unique_ptr<MyUnion> u;
   double aDouble;
   MyField f;
@@ -497,6 +541,10 @@ class StructWithUnion : public apache::thrift::TStructType<StructWithUnion> {
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class StructWithUnion;
@@ -504,7 +552,7 @@ void merge(const StructWithUnion& from, StructWithUnion& to);
 void merge(StructWithUnion&& from, StructWithUnion& to);
 void swap(RecursiveStruct &a, RecursiveStruct &b);
 
-class RecursiveStruct : public apache::thrift::TStructType<RecursiveStruct> {
+class RecursiveStruct final : public apache::thrift::TStructType<RecursiveStruct> {
  public:
 
   static const uint64_t _reflection_id = 2826922994162023308U;
@@ -531,9 +579,6 @@ class RecursiveStruct : public apache::thrift::TStructType<RecursiveStruct> {
   RecursiveStruct& operator=(RecursiveStruct&&) = default;
 
   void __clear();
-
-  virtual ~RecursiveStruct() throw() {}
-
   std::vector<RecursiveStruct>  mes;
 
   struct __isset {
@@ -554,10 +599,593 @@ class RecursiveStruct : public apache::thrift::TStructType<RecursiveStruct> {
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class RecursiveStruct;
 void merge(const RecursiveStruct& from, RecursiveStruct& to);
 void merge(RecursiveStruct&& from, RecursiveStruct& to);
+void swap(StructWithContainers &a, StructWithContainers &b);
+
+class StructWithContainers final : public apache::thrift::TStructType<StructWithContainers> {
+ public:
+
+  static const uint64_t _reflection_id = 18101585657679500556U;
+  static void _reflection_register(::apache::thrift::reflection::Schema&);
+  StructWithContainers() {
+    list_ref.reset(new typename decltype(list_ref)::element_type());
+    set_ref.reset(new typename decltype(set_ref)::element_type());
+    map_ref.reset(new typename decltype(map_ref)::element_type());
+    list_ref_unique.reset(new typename decltype(list_ref_unique)::element_type());
+    set_ref_shared.reset(new typename decltype(set_ref_shared)::element_type());
+    list_ref_shared_const.reset(new typename decltype(list_ref_shared_const)::element_type());
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithContainers(
+    ::apache::thrift::detail::argument_wrapper<1, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithContainers(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    list_ref = std::make_unique<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithContainers(
+    ::apache::thrift::detail::argument_wrapper<2, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithContainers(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    set_ref = std::make_unique<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithContainers(
+    ::apache::thrift::detail::argument_wrapper<3, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithContainers(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    map_ref = std::make_unique<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithContainers(
+    ::apache::thrift::detail::argument_wrapper<4, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithContainers(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    list_ref_unique = std::make_unique<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithContainers(
+    ::apache::thrift::detail::argument_wrapper<5, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithContainers(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    set_ref_shared = std::make_shared<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithContainers(
+    ::apache::thrift::detail::argument_wrapper<6, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithContainers(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    list_ref_shared_const = std::make_shared<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+
+  StructWithContainers(const StructWithContainers&);
+  StructWithContainers& operator=(const StructWithContainers& src) {
+    StructWithContainers tmp(src);
+    swap(*this, tmp);
+    return *this;
+  }
+  StructWithContainers(StructWithContainers&&) = default;
+  StructWithContainers& operator=(StructWithContainers&&) = default;
+
+  void __clear();
+  std::unique_ptr<std::vector<int32_t> > list_ref;
+  std::unique_ptr<std::set<int32_t> > set_ref;
+  std::unique_ptr<std::map<int32_t, int32_t> > map_ref;
+  std::unique_ptr<std::vector<int32_t> > list_ref_unique;
+  std::shared_ptr<std::set<int32_t> > set_ref_shared;
+  std::shared_ptr<const std::vector<int32_t> > list_ref_shared_const;
+
+  struct __isset {
+    __isset() { __clear(); } 
+    void __clear() {
+    }
+  } __isset;
+
+  bool operator == (const StructWithContainers &) const;
+  bool operator != (const StructWithContainers& rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const StructWithContainers & ) const;
+
+  uint32_t read(apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
+
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
+};
+
+class StructWithContainers;
+void merge(const StructWithContainers& from, StructWithContainers& to);
+void merge(StructWithContainers&& from, StructWithContainers& to);
+void swap(StructWithSharedConst &a, StructWithSharedConst &b);
+
+class StructWithSharedConst final : public apache::thrift::TStructType<StructWithSharedConst> {
+ public:
+
+  static const uint64_t _reflection_id = 17232433652683371404U;
+  static void _reflection_register(::apache::thrift::reflection::Schema&);
+  StructWithSharedConst() {
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithSharedConst(
+    ::apache::thrift::detail::argument_wrapper<1, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithSharedConst(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    opt_shared_const = std::make_shared<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithSharedConst(
+    ::apache::thrift::detail::argument_wrapper<2, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithSharedConst(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    shared_const = std::make_shared<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithSharedConst(
+    ::apache::thrift::detail::argument_wrapper<3, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithSharedConst(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    req_shared_const = std::make_shared<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+
+  StructWithSharedConst(const StructWithSharedConst&) = default;
+  StructWithSharedConst& operator=(const StructWithSharedConst& src)= default;
+  StructWithSharedConst(StructWithSharedConst&&) = default;
+  StructWithSharedConst& operator=(StructWithSharedConst&&) = default;
+
+  void __clear();
+  std::shared_ptr<const MyField> opt_shared_const;
+  std::shared_ptr<const MyField> shared_const;
+  std::shared_ptr<const MyField> req_shared_const;
+
+  struct __isset {
+    __isset() { __clear(); } 
+    void __clear() {
+    }
+  } __isset;
+
+  bool operator == (const StructWithSharedConst &) const;
+  bool operator != (const StructWithSharedConst& rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const StructWithSharedConst & ) const;
+
+  uint32_t read(apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
+
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
+};
+
+class StructWithSharedConst;
+void merge(const StructWithSharedConst& from, StructWithSharedConst& to);
+void merge(StructWithSharedConst&& from, StructWithSharedConst& to);
+void swap(Empty &a, Empty &b);
+
+class Empty final : public apache::thrift::TStructType<Empty> {
+ public:
+
+  static const uint64_t _reflection_id = 14313748354111837868U;
+  static void _reflection_register(::apache::thrift::reflection::Schema&);
+  Empty() {
+  }
+
+  Empty(const Empty&) = default;
+  Empty& operator=(const Empty& src)= default;
+  Empty(Empty&&) = default;
+  Empty& operator=(Empty&&) = default;
+
+  void __clear();
+
+  bool operator == (const Empty &) const;
+  bool operator != (const Empty& rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const Empty & ) const;
+
+  uint32_t read(apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
+
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
+};
+
+class Empty;
+void merge(const Empty& from, Empty& to);
+void merge(Empty&& from, Empty& to);
+void swap(StructWithRef &a, StructWithRef &b);
+
+class StructWithRef final : public apache::thrift::TStructType<StructWithRef> {
+ public:
+
+  static const uint64_t _reflection_id = 11749517231251122252U;
+  static void _reflection_register(::apache::thrift::reflection::Schema&);
+  StructWithRef() {
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithRef(
+    ::apache::thrift::detail::argument_wrapper<1, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithRef(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    def_field = std::make_unique<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithRef(
+    ::apache::thrift::detail::argument_wrapper<2, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithRef(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    opt_field = std::make_unique<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithRef(
+    ::apache::thrift::detail::argument_wrapper<3, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithRef(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    req_field = std::make_unique<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+
+  StructWithRef(const StructWithRef&);
+  StructWithRef& operator=(const StructWithRef& src) {
+    StructWithRef tmp(src);
+    swap(*this, tmp);
+    return *this;
+  }
+  StructWithRef(StructWithRef&&) = default;
+  StructWithRef& operator=(StructWithRef&&) = default;
+
+  void __clear();
+  std::unique_ptr<Empty> def_field;
+  std::unique_ptr<Empty> opt_field;
+  std::unique_ptr<Empty> req_field;
+
+  struct __isset {
+    __isset() { __clear(); } 
+    void __clear() {
+    }
+  } __isset;
+
+  bool operator == (const StructWithRef &) const;
+  bool operator != (const StructWithRef& rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const StructWithRef & ) const;
+
+  uint32_t read(apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
+
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
+};
+
+class StructWithRef;
+void merge(const StructWithRef& from, StructWithRef& to);
+void merge(StructWithRef&& from, StructWithRef& to);
+void swap(StructWithRefTypeUnique &a, StructWithRefTypeUnique &b);
+
+class StructWithRefTypeUnique final : public apache::thrift::TStructType<StructWithRefTypeUnique> {
+ public:
+
+  static const uint64_t _reflection_id = 215755688094406540U;
+  static void _reflection_register(::apache::thrift::reflection::Schema&);
+  StructWithRefTypeUnique() {
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithRefTypeUnique(
+    ::apache::thrift::detail::argument_wrapper<1, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithRefTypeUnique(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    def_field = std::make_unique<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithRefTypeUnique(
+    ::apache::thrift::detail::argument_wrapper<2, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithRefTypeUnique(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    opt_field = std::make_unique<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithRefTypeUnique(
+    ::apache::thrift::detail::argument_wrapper<3, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithRefTypeUnique(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    req_field = std::make_unique<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+
+  StructWithRefTypeUnique(const StructWithRefTypeUnique&);
+  StructWithRefTypeUnique& operator=(const StructWithRefTypeUnique& src) {
+    StructWithRefTypeUnique tmp(src);
+    swap(*this, tmp);
+    return *this;
+  }
+  StructWithRefTypeUnique(StructWithRefTypeUnique&&) = default;
+  StructWithRefTypeUnique& operator=(StructWithRefTypeUnique&&) = default;
+
+  void __clear();
+  std::unique_ptr<Empty> def_field;
+  std::unique_ptr<Empty> opt_field;
+  std::unique_ptr<Empty> req_field;
+
+  struct __isset {
+    __isset() { __clear(); } 
+    void __clear() {
+    }
+  } __isset;
+
+  bool operator == (const StructWithRefTypeUnique &) const;
+  bool operator != (const StructWithRefTypeUnique& rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const StructWithRefTypeUnique & ) const;
+
+  uint32_t read(apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
+
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
+};
+
+class StructWithRefTypeUnique;
+void merge(const StructWithRefTypeUnique& from, StructWithRefTypeUnique& to);
+void merge(StructWithRefTypeUnique&& from, StructWithRefTypeUnique& to);
+void swap(StructWithRefTypeShared &a, StructWithRefTypeShared &b);
+
+class StructWithRefTypeShared final : public apache::thrift::TStructType<StructWithRefTypeShared> {
+ public:
+
+  static const uint64_t _reflection_id = 12352376109981065772U;
+  static void _reflection_register(::apache::thrift::reflection::Schema&);
+  StructWithRefTypeShared() {
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithRefTypeShared(
+    ::apache::thrift::detail::argument_wrapper<1, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithRefTypeShared(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    def_field = std::make_shared<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithRefTypeShared(
+    ::apache::thrift::detail::argument_wrapper<2, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithRefTypeShared(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    opt_field = std::make_shared<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithRefTypeShared(
+    ::apache::thrift::detail::argument_wrapper<3, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithRefTypeShared(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    req_field = std::make_shared<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+
+  StructWithRefTypeShared(const StructWithRefTypeShared&) = default;
+  StructWithRefTypeShared& operator=(const StructWithRefTypeShared& src)= default;
+  StructWithRefTypeShared(StructWithRefTypeShared&&) = default;
+  StructWithRefTypeShared& operator=(StructWithRefTypeShared&&) = default;
+
+  void __clear();
+  std::shared_ptr<Empty> def_field;
+  std::shared_ptr<Empty> opt_field;
+  std::shared_ptr<Empty> req_field;
+
+  struct __isset {
+    __isset() { __clear(); } 
+    void __clear() {
+    }
+  } __isset;
+
+  bool operator == (const StructWithRefTypeShared &) const;
+  bool operator != (const StructWithRefTypeShared& rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const StructWithRefTypeShared & ) const;
+
+  uint32_t read(apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
+
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
+};
+
+class StructWithRefTypeShared;
+void merge(const StructWithRefTypeShared& from, StructWithRefTypeShared& to);
+void merge(StructWithRefTypeShared&& from, StructWithRefTypeShared& to);
+void swap(StructWithRefTypeSharedConst &a, StructWithRefTypeSharedConst &b);
+
+class StructWithRefTypeSharedConst final : public apache::thrift::TStructType<StructWithRefTypeSharedConst> {
+ public:
+
+  static const uint64_t _reflection_id = 11678635121852876428U;
+  static void _reflection_register(::apache::thrift::reflection::Schema&);
+  StructWithRefTypeSharedConst() {
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithRefTypeSharedConst(
+    ::apache::thrift::detail::argument_wrapper<1, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithRefTypeSharedConst(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    def_field = std::make_shared<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithRefTypeSharedConst(
+    ::apache::thrift::detail::argument_wrapper<2, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithRefTypeSharedConst(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    opt_field = std::make_shared<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit StructWithRefTypeSharedConst(
+    ::apache::thrift::detail::argument_wrapper<3, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    StructWithRefTypeSharedConst(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    req_field = std::make_shared<folly::_t<std::decay<T__ThriftWrappedArgument__Ctor>>>(arg.move());
+  }
+
+  StructWithRefTypeSharedConst(const StructWithRefTypeSharedConst&) = default;
+  StructWithRefTypeSharedConst& operator=(const StructWithRefTypeSharedConst& src)= default;
+  StructWithRefTypeSharedConst(StructWithRefTypeSharedConst&&) = default;
+  StructWithRefTypeSharedConst& operator=(StructWithRefTypeSharedConst&&) = default;
+
+  void __clear();
+  std::shared_ptr<const Empty> def_field;
+  std::shared_ptr<const Empty> opt_field;
+  std::shared_ptr<const Empty> req_field;
+
+  struct __isset {
+    __isset() { __clear(); } 
+    void __clear() {
+    }
+  } __isset;
+
+  bool operator == (const StructWithRefTypeSharedConst &) const;
+  bool operator != (const StructWithRefTypeSharedConst& rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator < (const StructWithRefTypeSharedConst & ) const;
+
+  uint32_t read(apache::thrift::protocol::TProtocol* iprot);
+  uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
+
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
+};
+
+class StructWithRefTypeSharedConst;
+void merge(const StructWithRefTypeSharedConst& from, StructWithRefTypeSharedConst& to);
+void merge(StructWithRefTypeSharedConst&& from, StructWithRefTypeSharedConst& to);
 
 

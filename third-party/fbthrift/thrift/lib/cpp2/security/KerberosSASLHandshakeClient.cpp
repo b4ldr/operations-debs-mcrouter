@@ -174,7 +174,7 @@ void KerberosSASLHandshakeClient::cleanUpState(
   logger->logEnd("clean_up_state");
 }
 
-void KerberosSASLHandshakeClient::throwKrb5Exception(
+[[noreturn]] void KerberosSASLHandshakeClient::throwKrb5Exception(
     const std::string& custom,
     krb5_context ctx,
     krb5_error_code code) {
@@ -391,7 +391,6 @@ std::unique_ptr<std::string> KerberosSASLHandshakeClient::getTokenToSend() {
       }
       return unique_ptr<string>(
         new string((const char*) outputToken_->value, outputToken_->length));
-      break;
     }
     case SELECT_SECURITY_LAYER:
     {
@@ -406,7 +405,6 @@ std::unique_ptr<std::string> KerberosSASLHandshakeClient::getTokenToSend() {
       ));
       logger_->logEnd("prepare_third_request");
       return ptr;
-      break;
     }
     default:
       break;
@@ -420,6 +418,9 @@ void KerberosSASLHandshakeClient::handleResponse(const string& msg) {
       // Should not call this function if in INIT state
       assert(false);
     case ESTABLISH_CONTEXT:
+      if (msg.length() == 0) {
+        throw TKerberosException("Security negotiation failed, empty response");
+      }
       logger_->logEnd("first_rtt");
       logger_->logStart("prepare_second_request");
       assert(contextStatus_ == GSS_S_CONTINUE_NEEDED);

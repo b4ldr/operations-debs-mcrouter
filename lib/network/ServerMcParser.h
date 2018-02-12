@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
+ *  Copyright (c) 2017, Facebook, Inc.
  *  All rights reserved.
  *
  *  This source code is licensed under the BSD-style license found in the
@@ -9,15 +9,23 @@
  */
 #pragma once
 
+#include "mcrouter/lib/network/AsciiSerialized.h"
 #include "mcrouter/lib/network/McAsciiParser.h"
 #include "mcrouter/lib/network/McParser.h"
 
-namespace facebook { namespace memcache {
+namespace facebook {
+namespace memcache {
+
+class ConnectionFifo;
 
 template <class Callback>
 class ServerMcParser : private McParser::ParserCallback {
  public:
-  ServerMcParser(Callback& cb, size_t minBufferSize, size_t maxBufferSize);
+  ServerMcParser(
+      Callback& cb,
+      size_t minBufferSize,
+      size_t maxBufferSize,
+      ConnectionFifo* debugFifo = nullptr);
 
   ~ServerMcParser();
 
@@ -59,29 +67,35 @@ class ServerMcParser : private McParser::ParserCallback {
 
   Callback& callback_;
 
-  template <class ThriftType>
-  void requestReadyHelper(TypedThriftRequest<ThriftType>&& req,
-                          uint64_t reqid);
+  // Debug fifo fields and methods
+  ConnectionFifo* debugFifo_{nullptr};
+  template <class Request>
+  FOLLY_NOINLINE void writeToPipe(const Request& req);
+
+  template <class Request>
+  void requestReadyHelper(Request&& req, uint64_t reqid);
 
   /* McParser callbacks */
-  bool umMessageReady(const UmbrellaMessageInfo& info,
-                      const folly::IOBuf& buffer) override final;
-  bool caretMessageReady(const UmbrellaMessageInfo& headerInfo,
-                         const folly::IOBuf& buffer) override final;
+  bool umMessageReady(
+      const UmbrellaMessageInfo& info,
+      const folly::IOBuf& buffer) override final;
+  bool caretMessageReady(
+      const UmbrellaMessageInfo& headerInfo,
+      const folly::IOBuf& buffer) override final;
   void handleAscii(folly::IOBuf& readBuffer) override final;
   void parseError(mc_res_t result, folly::StringPiece reason) override final;
   bool shouldReadToAsciiBuffer() const;
 
+  // McServerAsciiParser callbacks
   template <class Request>
   void onRequest(Request&&, bool noreply);
-
   void multiOpEnd();
 
   // McServerAsciiParser callback wrapper.
   template <class C, class ReqsList>
   friend class detail::CallbackWrapper;
 };
-
-}}  // facebook::memcache
+}
+} // facebook::memcache
 
 #include "ServerMcParser-inl.h"

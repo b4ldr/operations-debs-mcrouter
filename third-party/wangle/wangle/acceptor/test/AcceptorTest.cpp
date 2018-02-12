@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #include <wangle/acceptor/Acceptor.h>
 
@@ -27,7 +33,7 @@ class TestableAcceptor : public Acceptor {
   public:
     explicit TestableAcceptor(const ServerSocketConfig& accConfig) :
       Acceptor(accConfig) {}
-    virtual ~TestableAcceptor() {}
+    ~TestableAcceptor() override {}
 
     void setActiveConnectionCountForLoadShedding(
         const uint64_t activeConnectionCountForLoadShedding) {
@@ -44,10 +50,10 @@ class TestableAcceptor : public Acceptor {
     using Acceptor::canAccept;
 
   protected:
-    virtual uint64_t getConnectionCountForLoadShedding() const override {
-      return connectionCountForLoadShedding_;
+   uint64_t getConnectionCountForLoadShedding() const override {
+     return connectionCountForLoadShedding_;
     }
-    virtual uint64_t getActiveConnectionCountForLoadShedding() const override {
+    uint64_t getActiveConnectionCountForLoadShedding() const override {
       return activeConnectionCountForLoadShedding_;
     }
 
@@ -91,6 +97,9 @@ TEST_F(AcceptorTest, TestCanAcceptWithCurrentConnsGreaterThanMax) {
   // Should not accept if currentConnections is larger than maxConnections
   connectionCounter_.setNumConnections(300);
   connectionCounter_.setMaxConnections(200);
+  acceptor_.setConnectionCountForLoadShedding(300);
+  loadShedConfig_.setMaxConnections(200);
+  acceptor_.setLoadShedConfig(loadShedConfig_, &connectionCounter_);
   EXPECT_FALSE(acceptor_.canAccept(address_));
 }
 
@@ -114,6 +123,18 @@ TEST_F(AcceptorTest, TestCanAcceptWithNoLoadShed) {
   loadShedConfig_.setMaxActiveConnections(100);
   loadShedConfig_.setMaxConnections(200);
   acceptor_.setLoadShedConfig(loadShedConfig_, &connectionCounter_);
+  EXPECT_TRUE(acceptor_.canAccept(address_));
+}
+
+TEST_F(AcceptorTest, TestCanAcceptWithMaxActiveConnectionsNotSet) {
+  // Should accept if max active connections threshold is not set and
+  // total connections is within the overall max connections limit
+  connectionCounter_.setNumConnections(300);
+  connectionCounter_.setMaxConnections(200);
+  loadShedConfig_.setMaxConnections(400);
+  acceptor_.setLoadShedConfig(loadShedConfig_, &connectionCounter_);
+  acceptor_.setActiveConnectionCountForLoadShedding(300);
+  acceptor_.setConnectionCountForLoadShedding(300);
   EXPECT_TRUE(acceptor_.canAccept(address_));
 }
 

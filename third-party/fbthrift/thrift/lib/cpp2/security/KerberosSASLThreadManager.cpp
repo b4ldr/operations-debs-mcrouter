@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2014-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,13 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include <thrift/lib/cpp2/security/KerberosSASLThreadManager.h>
 
 #include <folly/ExceptionWrapper.h>
 #include <folly/io/async/EventBase.h>
-#include <thrift/lib/cpp/concurrency/ThreadManager.h>
+#include <folly/system/ThreadName.h>
 #include <thrift/lib/cpp/concurrency/PosixThreadFactory.h>
+#include <thrift/lib/cpp/concurrency/ThreadManager.h>
 #include <thrift/lib/cpp2/security/SecurityLogger.h>
 
 #include <chrono>
@@ -43,7 +43,7 @@ const int kPendingFailureRatio = 1000;
 SaslThreadManager::SaslThreadManager(std::shared_ptr<SecurityLogger> logger,
                                      int threadCount, int stackSizeMb)
   : logger_(logger)
-  , lastActivity_(0)
+  , lastActivity_()
   , healthy_(true) {
 
   secureConnectionsInProgress_ = 0;
@@ -53,6 +53,9 @@ SaslThreadManager::SaslThreadManager(std::shared_ptr<SecurityLogger> logger,
   } else {
     maxSimultaneousSecureConnections_ = -1;
   }
+
+  VLOG(1) << "Starting " << threadCount << " threads for SaslThreadManager";
+
   threadManager_ = concurrency::ThreadManager::newSimpleThreadManager(
     threadCount);
 
@@ -78,12 +81,11 @@ void SaslThreadManager::threadManagerHealthCheck() {
     queueToDrain;
   {
     concurrency::Guard g(mutex_);
-    auto cur = std::chrono::duration_cast<std::chrono::milliseconds>(
-      std::chrono::steady_clock::now().time_since_epoch());
-    auto diff = cur.count() - lastActivity_.count();
+    auto cur = std::chrono::steady_clock::now();
+    auto diff = cur - lastActivity_;
     auto idleWorkers = threadManager_->idleWorkerCount();
     if (idleWorkers == 0 &&
-        diff > FLAGS_sasl_health_check_thread_period_ms) {
+        diff > std::chrono::milliseconds(FLAGS_sasl_health_check_thread_period_ms)) {
       healthy_ = false;
       while (auto el = threadManager_->removeNextPending()) {
         queueToDrain.push_back(el);
@@ -117,8 +119,7 @@ bool SaslThreadManager::isHealthy() {
 
 void SaslThreadManager::recordActivity() {
   concurrency::Guard g(mutex_);
-  lastActivity_ = std::chrono::duration_cast<std::chrono::milliseconds>(
-    std::chrono::steady_clock::now().time_since_epoch());
+  lastActivity_ = std::chrono::steady_clock::now();
 }
 
 void SaslThreadManager::scheduleThreadManagerHealthCheck() {

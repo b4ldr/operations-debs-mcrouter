@@ -1,17 +1,23 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #include <wangle/acceptor/TransportInfo.h>
 
-#include <sys/socket.h>
 #include <sys/types.h>
 #include <folly/io/async/AsyncSocket.h>
+#include <folly/portability/Sockets.h>
 
 using std::chrono::microseconds;
 using std::map;
@@ -26,35 +32,28 @@ bool TransportInfo::initWithSocket(const folly::AsyncSocket* sock) {
     return false;
   }
   rtt = microseconds(tcpinfo.tcpi_rtt);
+  rtt_var = tcpinfo.tcpi_rttvar;
+  rtx_tm = tcpinfo.tcpi_retransmits;
+  rto = tcpinfo.tcpi_rto;
   cwnd = tcpinfo.tcpi_snd_cwnd;
   mss = tcpinfo.tcpi_snd_mss;
-  /* The ratio of packet retransmission (rtx) is a good indicator of network
-   * bandwidth condition. Unfortunately, the number of segmentOut is not
-   * available in current tcpinfo.  To workaround this limitation, totalBytes
-   * and MSS are used to estimate it.
-   */
+  ssthresh = tcpinfo.tcpi_snd_ssthresh;
 #if __GLIBC__ >= 2 && __GLIBC_MINOR__ >= 17
-  if (tcpinfo.tcpi_total_retrans == 0) {
-    rtx = 0;
-  } else if (tcpinfo.tcpi_total_retrans > 0 && tcpinfo.tcpi_snd_mss > 0 &&
-      totalBytes > 0) {
-    // numSegmentOut is the underestimation of the number of tcp packets sent
-    double numSegmentOut = double(totalBytes) / tcpinfo.tcpi_snd_mss;
-    // so rtx is the overestimation of actual packet retransmission rate
-    rtx = tcpinfo.tcpi_total_retrans / numSegmentOut;
-  } else {
-    rtx = -1;
-  }
+  rtx = tcpinfo.tcpi_total_retrans;
 #else
-    rtx = -1;
+  rtx = -1;
 #endif  // __GLIBC__ >= 2 && __GLIBC_MINOR__ >= 17
   validTcpinfo = true;
 #else
   tcpinfoErrno = EINVAL;
   rtt = microseconds(-1);
+  rtt_var = -1;
   rtx = -1;
+  rtx_tm = -1;
+  rto = -1;
   cwnd = -1;
   mss = -1;
+  ssthresh = -1;
 #endif
   return true;
 }

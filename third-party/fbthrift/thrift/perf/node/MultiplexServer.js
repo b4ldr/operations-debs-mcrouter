@@ -6,7 +6,6 @@ var options = require('optimist')
 
 var LoadTest = require('load/LoadTest');
 
-var fb303_types = require('fb303/fb303_types');
 var thrift = require('thrift');
 var ttransport = require('thrift/lib/thrift/transport');
 var TException = thrift.Thrift.TException;
@@ -87,9 +86,6 @@ var methods = {
   },
   add : function(a, b, callback) {
     callback(null, a + b);
-  },
-  getStatus: function(callback) {
-    callback(null, fb303_types.fb_status.ALIVE);
   }
 };
 
@@ -105,6 +101,15 @@ if (options.server == "multiplex") {
   app.listen(options.port, '::');
 } else if (options.server == "cpp") {
   var server = new ThriftServer(LoadTest, methods);
+  if (options.ssl_cert && options.ssl_key) {
+    var config = new ThriftServer.SSLConfig();
+    config.certPath = options.ssl_cert;
+    config.keyPath = options.ssl_key;
+    if (options.ticket_file) {
+      config.ticketFilePath = options.ticket_file;
+    }
+    server.setSSLConfig(config);
+  }
   server.listen(options.port);
 
 } else {

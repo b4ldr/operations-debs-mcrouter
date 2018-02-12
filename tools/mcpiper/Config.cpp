@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2015, Facebook, Inc.
+ *  Copyright (c) 2017, Facebook, Inc.
  *  All rights reserved.
  *
  *  This source code is licensed under the BSD-style license found in the
@@ -11,7 +11,25 @@
 
 #include <folly/Memory.h>
 
-namespace facebook { namespace memcache {
+#include "mcrouter/lib/network/gen/MemcacheRouterInfo.h"
+#include "mcrouter/lib/network/gen/MemcacheServer.h"
+#include "mcrouter/tools/mcpiper/MessagePrinter.h"
+#include "mcrouter/tools/mcpiper/SnifferParser.h"
+
+namespace facebook {
+namespace memcache {
+
+namespace detail {
+
+using RequestReplyRegistry = carbon::GetRequestReplyPairs<MemcacheRequestList>;
+
+template <class Reply>
+constexpr const char* MatchingRequest<Reply>::name() {
+  using Request = RequestFromReplyType<Reply, RequestReplyRegistry>;
+  return Request::name;
+}
+
+} // detail
 
 std::string getDefaultFifoRoot() {
   return "/var/mcrouter/fifos";
@@ -21,4 +39,35 @@ std::unique_ptr<ValueFormatter> createValueFormatter() {
   return folly::make_unique<ValueFormatter>();
 }
 
-}} // facebook::memcache
+std::string getVersion() {
+  return "mcpiper 1.0";
+}
+
+bool initCompression() {
+  return false;
+}
+
+const CompressionCodecMap* getCompressionCodecMap() {
+  return nullptr;
+}
+
+std::unordered_map<
+    uint64_t,
+    std::unique_ptr<SnifferParserBase<MessagePrinter>>>::iterator
+addCarbonSnifferParser(
+    std::string /* routerName */,
+    std::unordered_map<
+        uint64_t,
+        std::unique_ptr<SnifferParserBase<MessagePrinter>>>& parserMap,
+    uint64_t connectionId,
+    MessagePrinter& printer) {
+  return parserMap
+      .emplace(
+          connectionId,
+          folly::make_unique<SnifferParser<
+              MessagePrinter,
+              memcache::detail::MemcacheRequestList>>(printer))
+      .first;
+}
+}
+} // facebook::memcache

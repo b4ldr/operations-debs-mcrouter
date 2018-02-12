@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2012-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@
 #pragma once
 
 #include <folly/Fingerprint.h>
-#include <folly/detail/FingerprintPolynomial.h>
 #include <folly/Range.h>
+#include <folly/detail/FingerprintPolynomial.h>
 
 namespace folly {
 namespace detail {
@@ -76,7 +76,7 @@ class SlowFingerprint {
   void updateLSB(uint64_t val, int bits) {
     val <<= (64-bits);
     for (; bits != 0; --bits) {
-      updateBit(val & (1UL << 63));
+      updateBit(val & (1ULL << 63));
       val <<= 1;
     }
   }
@@ -85,5 +85,5 @@ class SlowFingerprint {
   FingerprintPolynomial<BITS-1> fp_;
 };
 
-}  // namespace detail
-}  // namespace folly
+} // namespace detail
+} // namespace folly

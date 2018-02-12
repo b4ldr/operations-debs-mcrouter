@@ -1,4 +1,6 @@
 /*
+ * Copyright 2004-present Facebook, Inc.
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements. See the NOTICE file
  * distributed with this work for additional information
@@ -179,7 +181,7 @@ uint32_t BinaryProtocolWriter::writeBinary(
   size_t size = str.computeChainDataLength();
   // leave room for size
   if (size > std::numeric_limits<uint32_t>::max() - serializedSizeI32()) {
-    throw TProtocolException(TProtocolException::SIZE_LIMIT);
+    TProtocolException::throwExceededSizeLimit();
   }
   uint32_t result = writeI32((int32_t)size);
   auto clone = str.clone();
@@ -210,128 +212,138 @@ uint32_t BinaryProtocolWriter::writeSerializedData(
  */
 
 uint32_t BinaryProtocolWriter::serializedMessageSize(
-  const std::string& name) {
+  const std::string& name) const {
   // I32{version} + String{name} + I32{seqid}
   return 2*serializedSizeI32() + serializedSizeString(name);
 }
 
 uint32_t BinaryProtocolWriter::serializedFieldSize(const char* /*name*/,
                                                    TType /*fieldType*/,
-                                                   int16_t /*fieldId*/) {
+                                                   int16_t /*fieldId*/) const {
   // byte + I16
   return serializedSizeByte() + serializedSizeI16();
 }
 
-uint32_t BinaryProtocolWriter::serializedStructSize(const char* /*name*/) {
+uint32_t BinaryProtocolWriter::serializedStructSize(
+  const char* /*name*/
+) const {
   return 0;
 }
 
 uint32_t BinaryProtocolWriter::serializedSizeMapBegin(TType /*keyType*/,
                                                       TType /*valType*/,
-                                                      uint32_t /*size*/) {
+                                                      uint32_t /*size*/) const {
   return serializedSizeByte() + serializedSizeByte() +
          serializedSizeI32();
 }
 
-uint32_t BinaryProtocolWriter::serializedSizeMapEnd() {
+uint32_t BinaryProtocolWriter::serializedSizeMapEnd() const {
   return 0;
 }
 
-uint32_t BinaryProtocolWriter::serializedSizeListBegin(TType /*elemType*/,
-                                                       uint32_t /*size*/) {
+uint32_t BinaryProtocolWriter::serializedSizeListBegin(
+  TType /*elemType*/,
+  uint32_t /*size*/
+) const {
   return serializedSizeByte() + serializedSizeI32();
 }
 
-uint32_t BinaryProtocolWriter::serializedSizeListEnd() {
+uint32_t BinaryProtocolWriter::serializedSizeListEnd() const {
   return 0;
 }
 
 uint32_t BinaryProtocolWriter::serializedSizeSetBegin(TType /*elemType*/,
-                                                      uint32_t /*size*/) {
+                                                      uint32_t /*size*/) const {
   return serializedSizeByte() + serializedSizeI32();
 }
 
-uint32_t BinaryProtocolWriter::serializedSizeSetEnd() {
+uint32_t BinaryProtocolWriter::serializedSizeSetEnd() const {
   return 0;
 }
 
-uint32_t BinaryProtocolWriter::serializedSizeStop() {
+uint32_t BinaryProtocolWriter::serializedSizeStop() const {
   return 1;
 }
 
-uint32_t BinaryProtocolWriter::serializedSizeBool(bool /*val*/) {
+uint32_t BinaryProtocolWriter::serializedSizeBool(bool /*val*/) const {
   return 1;
 }
 
-uint32_t BinaryProtocolWriter::serializedSizeByte(int8_t /*val*/) {
+uint32_t BinaryProtocolWriter::serializedSizeByte(int8_t /*val*/) const {
   return 1;
 }
 
-uint32_t BinaryProtocolWriter::serializedSizeI16(int16_t /*val*/) {
+uint32_t BinaryProtocolWriter::serializedSizeI16(int16_t /*val*/) const {
   return 2;
 }
 
-uint32_t BinaryProtocolWriter::serializedSizeI32(int32_t /*val*/) {
+uint32_t BinaryProtocolWriter::serializedSizeI32(int32_t /*val*/) const {
   return 4;
 }
 
-uint32_t BinaryProtocolWriter::serializedSizeI64(int64_t /*val*/) {
+uint32_t BinaryProtocolWriter::serializedSizeI64(int64_t /*val*/) const {
   return 8;
 }
 
-uint32_t BinaryProtocolWriter::serializedSizeDouble(double /*val*/) {
+uint32_t BinaryProtocolWriter::serializedSizeDouble(double /*val*/) const {
   return 8;
 }
 
-uint32_t BinaryProtocolWriter::serializedSizeFloat(float /*val*/) {
+uint32_t BinaryProtocolWriter::serializedSizeFloat(float /*val*/) const {
   return 4;
 }
 
-uint32_t BinaryProtocolWriter::serializedSizeString(folly::StringPiece str) {
+uint32_t BinaryProtocolWriter::serializedSizeString(
+  folly::StringPiece str) const {
   return serializedSizeBinary(str);
 }
 
-uint32_t BinaryProtocolWriter::serializedSizeBinary(folly::StringPiece str) {
+uint32_t BinaryProtocolWriter::serializedSizeBinary(
+  folly::StringPiece str) const {
   return serializedSizeBinary(folly::ByteRange(str));
 }
 
-uint32_t BinaryProtocolWriter::serializedSizeBinary(folly::ByteRange str) {
+uint32_t BinaryProtocolWriter::serializedSizeBinary(
+  folly::ByteRange str) const {
   // I32{length of string} + binary{string contents}
   return serializedSizeI32() + str.size();
 }
 
 uint32_t BinaryProtocolWriter::serializedSizeBinary(
-    const std::unique_ptr<folly::IOBuf>& v) {
+    std::unique_ptr<folly::IOBuf> const& v) const {
   return v ? serializedSizeBinary(*v) : 0;
 }
 
 uint32_t BinaryProtocolWriter::serializedSizeBinary(
-    const folly::IOBuf& v) {
+    folly::IOBuf const& v) const {
   size_t size = v.computeChainDataLength();
   if (size > std::numeric_limits<uint32_t>::max() - serializedSizeI32()) {
-    throw TProtocolException(TProtocolException::SIZE_LIMIT);
+    TProtocolException::throwExceededSizeLimit();
   }
   return serializedSizeI32() + size;
 }
 
-uint32_t BinaryProtocolWriter::serializedSizeZCBinary(folly::StringPiece str) {
+uint32_t BinaryProtocolWriter::serializedSizeZCBinary(
+  folly::StringPiece str) const {
   return serializedSizeZCBinary(folly::ByteRange(str));
 }
-uint32_t BinaryProtocolWriter::serializedSizeZCBinary(folly::ByteRange v) {
+uint32_t BinaryProtocolWriter::serializedSizeZCBinary(
+  folly::ByteRange v) const {
   return serializedSizeBinary(v);
 }
 uint32_t BinaryProtocolWriter::serializedSizeZCBinary(
-    const std::unique_ptr<folly::IOBuf>&) {
+    std::unique_ptr<folly::IOBuf> const&) const {
   // size only
   return serializedSizeI32();
 }
-uint32_t BinaryProtocolWriter::serializedSizeZCBinary(const folly::IOBuf&) {
+uint32_t BinaryProtocolWriter::serializedSizeZCBinary(
+  folly::IOBuf const&) const {
   // size only
   return serializedSizeI32();
 }
 
 uint32_t BinaryProtocolWriter::serializedSizeSerializedData(
-    const std::unique_ptr<IOBuf>& /*buf*/) {
+    std::unique_ptr<IOBuf> const& /*buf*/) const {
   // writeSerializedData's implementation just chains IOBufs together. Thus
   // we don't expect external buffer space for it.
   return 0;
@@ -341,266 +353,225 @@ uint32_t BinaryProtocolWriter::serializedSizeSerializedData(
  * Reading functions
  */
 
-uint32_t BinaryProtocolReader::readMessageBegin(std::string& name,
-                                                MessageType& messageType,
-                                                int32_t& seqid) {
-  uint32_t result = 0;
+void BinaryProtocolReader::readMessageBegin(
+    std::string& name,
+    MessageType& messageType,
+    int32_t& seqid) {
   int32_t sz;
-  result += readI32(sz);
+  readI32(sz);
 
   if (sz < 0) {
     // Check for correct version number
     int32_t version = sz & VERSION_MASK;
     if (version != VERSION_1) {
-      throw TProtocolException(TProtocolException::BAD_VERSION,
-                               "Bad version identifier, sz=" +
-                                 std::to_string(sz));
+      throwBadVersionIdentifier(sz);
     }
     messageType = (MessageType)(sz & 0x000000ff);
-    result += readString(name);
-    result += readI32(seqid);
+    readString(name);
+    readI32(seqid);
   } else {
     if (this->strict_read_) {
-      throw TProtocolException (
-        TProtocolException::BAD_VERSION,
-        "No version identifier... old protocol client in strict mode? sz=" +
-          std::to_string(sz));
+      throwMissingVersionIdentifier(sz);
     } else {
       // Handle pre-versioned input
       int8_t type;
-      result += readStringBody(name, sz);
-      result += readByte(type);
+      readStringBody(name, sz);
+      readByte(type);
       messageType = (MessageType)type;
-      result += readI32(seqid);
+      readI32(seqid);
     }
   }
-
-  return result;
 }
 
-uint32_t BinaryProtocolReader::readMessageEnd() {
-  return 0;
-}
+void BinaryProtocolReader::readMessageEnd() {}
 
-uint32_t BinaryProtocolReader::readStructBegin(std::string& name) {
+void BinaryProtocolReader::readStructBegin(std::string& name) {
   name = "";
-  return 0;
 }
 
-uint32_t BinaryProtocolReader::readStructEnd() {
-  return 0;
-}
+void BinaryProtocolReader::readStructEnd() {}
 
-uint32_t BinaryProtocolReader::readFieldBegin(std::string& /*name*/,
-                                              TType& fieldType,
-                                              int16_t& fieldId) {
-  uint32_t result = 0;
+void BinaryProtocolReader::readFieldBegin(
+    std::string& /*name*/,
+    TType& fieldType,
+    int16_t& fieldId) {
   int8_t type;
-  result += readByte(type);
+  readByte(type);
   fieldType = (TType)type;
   if (fieldType == TType::T_STOP) {
     fieldId = 0;
-    return result;
+    return;
   }
-  result += readI16(fieldId);
-  return result;
+  readI16(fieldId);
 }
 
-uint32_t BinaryProtocolReader::readFieldEnd() {
-  return 0;
-}
+void BinaryProtocolReader::readFieldEnd() {}
 
-uint32_t BinaryProtocolReader::readMapBegin(TType& keyType,
-                                            TType& valType,
-                                            uint32_t& size) {
+void BinaryProtocolReader::readMapBegin(
+    TType& keyType,
+    TType& valType,
+    uint32_t& size) {
   int8_t k, v;
-  uint32_t result = 0;
   int32_t sizei;
-  result += readByte(k);
+  readByte(k);
   keyType = (TType)k;
-  result += readByte(v);
+  readByte(v);
   valType = (TType)v;
-  result += readI32(sizei);
+  readI32(sizei);
   checkContainerSize(sizei);
   size = (uint32_t)sizei;
-  return result;
 }
 
-uint32_t BinaryProtocolReader::readMapEnd() {
-  return 0;
-}
+void BinaryProtocolReader::readMapEnd() {}
 
-uint32_t BinaryProtocolReader::readListBegin(TType& elemType,
-                                             uint32_t& size) {
+void BinaryProtocolReader::readListBegin(TType& elemType, uint32_t& size) {
   int8_t e;
-  uint32_t result = 0;
   int32_t sizei;
-  result += readByte(e);
+  readByte(e);
   elemType = (TType)e;
-  result += readI32(sizei);
+  readI32(sizei);
   checkContainerSize(sizei);
   size = (uint32_t)sizei;
-  return result;
 }
 
-uint32_t BinaryProtocolReader::readListEnd() {
-  return 0;
-}
+void BinaryProtocolReader::readListEnd() {}
 
-uint32_t BinaryProtocolReader::readSetBegin(TType& elemType,
-                                            uint32_t& size) {
+void BinaryProtocolReader::readSetBegin(TType& elemType, uint32_t& size) {
   int8_t e;
-  uint32_t result = 0;
   int32_t sizei;
-  result += readByte(e);
+  readByte(e);
   elemType = (TType)e;
-  result += readI32(sizei);
+  readI32(sizei);
   checkContainerSize(sizei);
   size = (uint32_t)sizei;
-  return result;
 }
 
-uint32_t BinaryProtocolReader::readSetEnd() {
-  return 0;
+void BinaryProtocolReader::readSetEnd() {}
+
+void BinaryProtocolReader::readBool(bool& value) {
+  auto byte = in_.read<uint8_t>();
+  if (byte >= 2) {
+    TProtocolException::throwBoolValueOutOfRange(byte);
+  }
+  value = static_cast<bool>(byte);
 }
 
-uint32_t BinaryProtocolReader::readBool(bool& value) {
-  value = in_.read<bool>();
-  return 1;
-}
-
-uint32_t BinaryProtocolReader::readBool(std::vector<bool>::reference value) {
+void BinaryProtocolReader::readBool(std::vector<bool>::reference value) {
   bool ret = false;
-  ret = in_.read<bool>();
+  readBool(ret);
   value = ret;
-  return 1;
 }
 
-uint32_t BinaryProtocolReader::readByte(int8_t& byte) {
+void BinaryProtocolReader::readByte(int8_t& byte) {
   byte = in_.read<int8_t>();
-  return 1;
 }
 
-uint32_t BinaryProtocolReader::readI16(int16_t& i16) {
+void BinaryProtocolReader::readI16(int16_t& i16) {
   i16 = in_.readBE<int16_t>();
-  return 2;
 }
 
-uint32_t BinaryProtocolReader::readI32(int32_t& i32) {
+void BinaryProtocolReader::readI32(int32_t& i32) {
   i32 = in_.readBE<int32_t>();
-  return 4;
 }
 
-uint32_t BinaryProtocolReader::readI64(int64_t& i64) {
+void BinaryProtocolReader::readI64(int64_t& i64) {
   i64 = in_.readBE<int64_t>();
-  return 8;
 }
 
-uint32_t BinaryProtocolReader::readDouble(double& dub) {
+void BinaryProtocolReader::readDouble(double& dub) {
   static_assert(sizeof(double) == sizeof(uint64_t), "");
   static_assert(std::numeric_limits<double>::is_iec559, "");
 
   uint64_t bits = in_.readBE<int64_t>();
   dub = bitwise_cast<double>(bits);
-  return 8;
 }
 
-uint32_t BinaryProtocolReader::readFloat(float& flt) {
+void BinaryProtocolReader::readFloat(float& flt) {
   static_assert(sizeof(float) == sizeof(uint32_t), "");
   static_assert(std::numeric_limits<double>::is_iec559, "");
 
   uint32_t bits = in_.readBE<int32_t>();
   flt = bitwise_cast<float>(bits);
-  return 4;
 }
 
 void BinaryProtocolReader::checkStringSize(int32_t size) {
   // Catch error cases
   if (size < 0) {
-    throw TProtocolException(TProtocolException::NEGATIVE_SIZE);
+    TProtocolException::throwNegativeSize();
   }
   if (string_limit_ > 0 && size > string_limit_) {
-    throw TProtocolException(TProtocolException::SIZE_LIMIT);
+    TProtocolException::throwExceededSizeLimit();
   }
 }
 
 void BinaryProtocolReader::checkContainerSize(int32_t size) {
   if (size < 0) {
-    throw TProtocolException(TProtocolException::NEGATIVE_SIZE);
+    TProtocolException::throwNegativeSize();
   } else if (this->container_limit_ && size > this->container_limit_) {
-    throw TProtocolException(TProtocolException::SIZE_LIMIT);
+    TProtocolException::throwExceededSizeLimit();
   }
-}
-
-template<typename StrType>
-uint32_t BinaryProtocolReader::readString(StrType& str) {
-  uint32_t result;
-  int32_t size;
-  result = readI32(size);
-  return result + readStringBody(str, size);
 }
 
 template <typename StrType>
-uint32_t BinaryProtocolReader::readBinary(StrType& str) {
-  return readString(str);
-}
-
-uint32_t BinaryProtocolReader::readBinary(std::unique_ptr<folly::IOBuf>& str) {
-  if (!str) {
-    str = folly::make_unique<folly::IOBuf>();
-  }
-  return readBinary(*str);
-}
-
-uint32_t BinaryProtocolReader::readBinary(folly::IOBuf& str) {
-  uint32_t result;
+void BinaryProtocolReader::readString(StrType& str) {
   int32_t size;
-  result = readI32(size);
+  readI32(size);
+  readStringBody(str, size);
+}
+
+template <typename StrType>
+void BinaryProtocolReader::readBinary(StrType& str) {
+  readString(str);
+}
+
+void BinaryProtocolReader::readBinary(std::unique_ptr<folly::IOBuf>& str) {
+  if (!str) {
+    str = std::make_unique<folly::IOBuf>();
+  }
+  readBinary(*str);
+}
+
+void BinaryProtocolReader::readBinary(folly::IOBuf& str) {
+  int32_t size;
+  readI32(size);
   checkStringSize(size);
 
   in_.clone(str, size);
   if (sharing_ != SHARE_EXTERNAL_BUFFER) {
     str.makeManaged();
   }
-  return result + (uint32_t)size;
 }
 
-template<typename StrType>
-uint32_t BinaryProtocolReader::readStringBody(StrType& str,
-                                              int32_t size) {
+template <typename StrType>
+void BinaryProtocolReader::readStringBody(StrType& str, int32_t size) {
   checkStringSize(size);
-
-  uint32_t result = 0;
 
   // Catch empty string case
   if (size == 0) {
     str.clear();
-    return result;
+    return;
   }
 
   str.reserve(size);
   str.clear();
   size_t size_left = size;
   while (size_left > 0) {
-    std::pair<const uint8_t*, size_t> data = in_.peek();
-    int32_t data_avail = std::min(data.second, size_left);
-    if (data.second <= 0) {
-      throw TProtocolException(TProtocolException::SIZE_LIMIT);
+    auto data = in_.peekBytes();
+    auto data_avail = std::min(data.size(), size_left);
+    if (data.empty()) {
+      TProtocolException::throwExceededSizeLimit();
     }
 
-    str.append((const char*)data.first, data_avail);
+    str.append((const char*)data.data(), data_avail);
     size_left -= data_avail;
-    in_.skip(data_avail);
+    in_.skipNoAdvance(data_avail);
   }
-
-  return (uint32_t) size;
 }
 
 uint32_t BinaryProtocolReader::readFromPositionAndAppend(
     Cursor& snapshot,
     std::unique_ptr<IOBuf>& ser) {
-
-  int32_t size = in_ - snapshot;
+  int32_t size = folly::io::Cursor(in_) - snapshot;
 
   if (ser) {
     std::unique_ptr<IOBuf> newBuf;
@@ -622,6 +593,54 @@ uint32_t BinaryProtocolReader::readFromPositionAndAppend(
   return (uint32_t) size;
 }
 
+bool BinaryProtocolReader::advanceToNextField(
+    int16_t nextFieldId,
+    TType nextFieldType,
+    StructReadState& state) {
+  if (nextFieldType == TType::T_STOP) {
+    if (in_.length() && *in_.data() == TType::T_STOP) {
+      in_.skipNoAdvance(1);
+      return true;
+    }
+  } else {
+    if (in_.length() >= 3) {
+      uint8_t type = *in_.data();
+      if (nextFieldType == type) {
+        int16_t fieldId =
+            folly::Endian::big(folly::loadUnaligned<int16_t>(in_.data() + 1));
+        in_.skipNoAdvance(3);
+        if (nextFieldId == fieldId) {
+          return true;
+        }
+        state.fieldType = (TType)type;
+        state.fieldId = fieldId;
+        return false;
+      }
+
+      state.fieldType = (TType)type;
+      if (type != TType::T_STOP) {
+        state.fieldId =
+            folly::Endian::big(folly::loadUnaligned<int16_t>(in_.data() + 1));
+        in_.skipNoAdvance(3);
+      } else {
+        in_.skipNoAdvance(1);
+      }
+      return false;
+    }
+  }
+  state.readFieldBeginNoInline(this);
+  return false;
+}
+
+void BinaryProtocolReader::readFieldBeginWithState(StructReadState& state) {
+  int8_t type;
+  readByte(type);
+  state.fieldType = (TType)type;
+  if (state.fieldType == TType::T_STOP) {
+    return;
+  }
+  readI16(state.fieldId);
+}
 }} // apache2::thrift
 
 #endif // #ifndef THRIFT2_PROTOCOL_TBINARYPROTOCOL_TCC_

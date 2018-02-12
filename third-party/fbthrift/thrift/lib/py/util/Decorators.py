@@ -25,14 +25,17 @@ from __future__ import unicode_literals
 import contextlib
 import logging
 import os
-import resource
 import six
 from concurrent.futures import Future
 from functools import partial
+try:
+    import resource
+except ImportError:
+    # Windows doesn't have this
+    resource = None
 
 
 from thrift.Thrift import (
-    TMessageType,
     TApplicationException,
     TException,
     TMessageType,
@@ -45,14 +48,14 @@ log = logging.getLogger(__name__)
 
 
 def get_memory_usage():
-    #this parses the resident set size from /proc/self/stat, which
-    #is the same approach the C++ FacebookBase takes
+    # this parses the resident set size from /proc/self/stat, which
+    # is the same approach the C++ FacebookBase takes
     with open('/proc/self/stat') as stat:
         stat_string = stat.read()
-    #rss is field number 23 in /proc/pid/stat, see man proc
-    #for the full list
+    # rss is field number 23 in /proc/pid/stat, see man proc
+    # for the full list
     rss_pages = int(stat_string.split()[23])
-    #/proc/pid/stat excludes 3 administrative pages from the count
+    # /proc/pid/stat excludes 3 administrative pages from the count
     rss_pages += 3
     return rss_pages * resource.getpagesize()
 
@@ -148,15 +151,27 @@ def process_method(argtype, oneway=False, twisted=False, asyncio=False):
                 fn_name,
                 server_ctx,
             )
-            args = self.readArgs(iprot, handler_ctx, fn_name, argtype)
-            if asyncio or twisted:
-                return func(self, args, handler_ctx, seqid, oprot, fn_name)
+            try:
+                args = self.readArgs(iprot, handler_ctx, fn_name, argtype)
+            except Exception as e:
+                args = argtype()
+                log.error(
+                    'Exception thrown while reading arguments: `%s`',
+                    str(e),
+                )
+                result = TApplicationException(message=str(e))
+                if not oneway:
+                    self.writeException(oprot, fn_name, seqid, result)
+            else:
+                if asyncio or twisted:
+                    return func(self, args, handler_ctx, seqid, oprot, fn_name)
 
-            set_request_context(self, iprot)
-            result = func(self, args, handler_ctx)
-            if not oneway:
-                self.writeReply(oprot, handler_ctx, fn_name, seqid, result)
-            reset_request_context(self)
+                set_request_context(self, iprot)
+                result = func(self, args, handler_ctx)
+                if not oneway:
+                    self.writeReply(
+                        oprot, handler_ctx, fn_name, seqid, result, server_ctx)
+                reset_request_context(self)
 
             _mem_after = _process_method_mem_usage()
             if _mem_after - _mem_before > MEMORY_WARNING_THRESHOLD:
@@ -172,6 +187,7 @@ def process_method(argtype, oneway=False, twisted=False, asyncio=False):
 
     return _decorator
 
+
 def future_process_main():
     """Decorator for process method of future processor."""
     def _decorator(func):
@@ -179,7 +195,7 @@ def future_process_main():
             name, seqid = self.readMessageBegin(iprot)
             if self.doesKnowFunction(name):
                 return self._processMap[name](self, seqid, iprot, oprot,
-                        server_ctx)
+                                              server_ctx)
             else:
                 self.skipMessageStruct(iprot)
                 exc = make_unknown_function_exception(name)
@@ -191,8 +207,44 @@ def future_process_main():
 
     return _decorator
 
+
+def write_result(result, reply_type, seqid,
+                  event_handler, handler_ctx, fn_name, oprot):
+
+    event_handler.preWrite(handler_ctx, fn_name, result)
+
+    try:
+        oprot.writeMessageBegin(fn_name, reply_type, seqid)
+
+        # Thrift serialization here could fail due to format error
+        result.write(oprot)
+
+        oprot.writeMessageEnd()
+        oprot.trans.flush()
+
+    except Exception as e:
+        # Handle any thrift serialization exceptions
+
+        # Transport is likely in a messed up state. Some data may already have
+        # been written and it may not be possible to recover. Doing nothing
+        # causes the client to wait until the request times out. Try to
+        # close the connection to trigger a quicker failure on client side
+        oprot.trans.close()
+
+        # Let application know that there has been an exception
+        event_handler.handlerError(handler_ctx, fn_name, e)
+
+        # We raise the exception again to avoid any further processing
+        raise
+
+    finally:
+        # Since we called preWrite, we should also call postWrite to
+        # allow application to properly log their requests
+        event_handler.postWrite(handler_ctx, fn_name, result)
+
+
 def _done(future, processor, handler_ctx, fn_name, oprot, reply_type, seqid,
-        oneway):
+          oneway):
     try:
         result = future.result()
     except TApplicationException as e:
@@ -207,12 +259,9 @@ def _done(future, processor, handler_ctx, fn_name, oprot, reply_type, seqid,
     if isinstance(result, TApplicationException):
         reply_type = TMessageType.EXCEPTION
 
-    processor._event_handler.preWrite(handler_ctx, fn_name, result)
-    oprot.writeMessageBegin(fn_name, reply_type, seqid)
-    result.write(oprot)
-    oprot.writeMessageEnd()
-    oprot.trans.flush()
-    processor._event_handler.postWrite(handler_ctx, fn_name, result)
+    write_result(result, reply_type, seqid,
+                 processor._event_handler, handler_ctx, fn_name, oprot)
+
 
 def future_process_method(argtype, oneway=False):
     """Decorator for process_xxx methods of futuer processor.
@@ -226,7 +275,7 @@ def future_process_method(argtype, oneway=False):
         def nested(self, seqid, iprot, oprot, server_ctx):
             fn_name = func.__name__.split('_', 1)[-1]
             handler_ctx = self._event_handler.getHandlerContext(fn_name,
-                    server_ctx)
+                                                                server_ctx)
             args = argtype()
             reply_type = TMessageType.REPLY
             self._event_handler.preRead(handler_ctx, fn_name, args)
@@ -259,6 +308,7 @@ def future_process_method(argtype, oneway=False):
 
     return _decorator
 
+
 def write_results_after_future(
     result, event_handler, handler_ctx, seqid, oprot, fn_name,
     known_exceptions, future,
@@ -270,10 +320,11 @@ def write_results_after_future(
             reply_type = TMessageType.REPLY
         except TException as e:
             for exc_name, exc_type in known_exceptions.items():
-                setattr(result, exc_name, e)
-                reply_type = TMessageType.REPLY
-                event_handler.handlerException(handler_ctx, fn_name, e)
-                break
+                if type(e) is exc_type:
+                    setattr(result, exc_name, e)
+                    reply_type = TMessageType.REPLY
+                    event_handler.handlerException(handler_ctx, fn_name, e)
+                    break
             else:
                 raise
     except Exception as e:
@@ -281,12 +332,8 @@ def write_results_after_future(
         reply_type = TMessageType.EXCEPTION
         event_handler.handlerError(handler_ctx, fn_name, e)
 
-    event_handler.preWrite(handler_ctx, fn_name, result)
-    oprot.writeMessageBegin(fn_name, reply_type, seqid)
-    result.write(oprot)
-    oprot.writeMessageEnd()
-    oprot.trans.flush()
-    event_handler.postWrite(handler_ctx, fn_name, result)
+    write_result(result, reply_type, seqid,
+                 event_handler, handler_ctx, fn_name, oprot)
 
 
 def write_results_success_callback(func):

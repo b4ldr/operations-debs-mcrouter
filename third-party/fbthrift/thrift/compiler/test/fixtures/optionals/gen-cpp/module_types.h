@@ -21,26 +21,29 @@ class Schema;
 enum Animal {
   DOG = 1,
   CAT = 2,
-  TARANTULA = 3
+  TARANTULA = 3,
 };
 
-extern const std::map<int, const char*> _Animal_VALUES_TO_NAMES;
+using _Animal_EnumMapFactory = apache::thrift::detail::TEnumMapFactory<Animal, int>;
 
-extern const std::map<const char*, int, apache::thrift::ltstr> _Animal_NAMES_TO_VALUES;
+extern const _Animal_EnumMapFactory::ValuesToNamesMapType _Animal_VALUES_TO_NAMES;
+
+extern const _Animal_EnumMapFactory::NamesToValuesMapType _Animal_NAMES_TO_VALUES;
 
 
-namespace apache { namespace thrift { 
-template<>
-struct TEnumTraits< ::Animal> : public TEnumTraitsBase< ::Animal>
-{
-inline static constexpr  ::Animal min() {
+namespace apache { namespace thrift {
+template <> struct TEnumDataStorage< ::Animal>;
+template <> const std::size_t TEnumTraits< ::Animal>::size;
+template <> const folly::Range<const  ::Animal*> TEnumTraits< ::Animal>::values;
+template <> const folly::Range<const folly::StringPiece*> TEnumTraits< ::Animal>::names;
+template <> inline constexpr  ::Animal TEnumTraits< ::Animal>::min() {
 return  ::Animal::DOG;
 }
-inline static constexpr  ::Animal max() {
+template <> inline constexpr  ::Animal TEnumTraits< ::Animal>::max() {
 return  ::Animal::TARANTULA;
 }
-};
-}} // apache:thrift
+}} // apache::thrift
+
 
 
 class Color;
@@ -53,7 +56,7 @@ typedef int64_t PersonID;
 
 void swap(Color &a, Color &b);
 
-class Color : public apache::thrift::TStructType<Color> {
+class Color final : public apache::thrift::TStructType<Color> {
  public:
 
   static const uint64_t _reflection_id = 11194926431654439212U;
@@ -119,9 +122,6 @@ class Color : public apache::thrift::TStructType<Color> {
   Color& operator=(Color&&) = default;
 
   void __clear();
-
-  virtual ~Color() throw() {}
-
   double red;
   double green;
   double blue;
@@ -151,6 +151,10 @@ class Color : public apache::thrift::TStructType<Color> {
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class Color;
@@ -158,12 +162,12 @@ void merge(const Color& from, Color& to);
 void merge(Color&& from, Color& to);
 void swap(Vehicle &a, Vehicle &b);
 
-class Vehicle : public apache::thrift::TStructType<Vehicle> {
+class Vehicle final : public apache::thrift::TStructType<Vehicle> {
  public:
 
   static const uint64_t _reflection_id = 11029503283921871788U;
   static void _reflection_register(::apache::thrift::reflection::Schema&);
-  Vehicle() {
+  Vehicle() : hasAC(false) {
   }
   template <
     typename T__ThriftWrappedArgument__Ctor,
@@ -217,6 +221,19 @@ class Vehicle : public apache::thrift::TStructType<Vehicle> {
     name = arg.move();
     __isset.name = true;
   }
+  template <
+    typename T__ThriftWrappedArgument__Ctor,
+    typename... Args__ThriftWrappedArgument__Ctor
+  >
+  explicit Vehicle(
+    ::apache::thrift::detail::argument_wrapper<5, T__ThriftWrappedArgument__Ctor> arg,
+    Args__ThriftWrappedArgument__Ctor&&... args
+  ):
+    Vehicle(std::forward<Args__ThriftWrappedArgument__Ctor>(args)...)
+  {
+    hasAC = arg.move();
+    __isset.hasAC = true;
+  }
 
   Vehicle(const Vehicle&) = default;
   Vehicle& operator=(const Vehicle& src)= default;
@@ -224,13 +241,11 @@ class Vehicle : public apache::thrift::TStructType<Vehicle> {
   Vehicle& operator=(Vehicle&&) = default;
 
   void __clear();
-
-  virtual ~Vehicle() throw() {}
-
   Color color;
   std::string licensePlate;
   std::string description;
   std::string name;
+  bool hasAC;
 
   struct __isset {
     __isset() { __clear(); } 
@@ -239,11 +254,13 @@ class Vehicle : public apache::thrift::TStructType<Vehicle> {
       licensePlate = false;
       description = false;
       name = false;
+      hasAC = false;
     }
     bool color;
     bool licensePlate;
     bool description;
     bool name;
+    bool hasAC;
   } __isset;
 
   bool operator == (const Vehicle &) const;
@@ -256,6 +273,10 @@ class Vehicle : public apache::thrift::TStructType<Vehicle> {
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class Vehicle;
@@ -263,7 +284,7 @@ void merge(const Vehicle& from, Vehicle& to);
 void merge(Vehicle&& from, Vehicle& to);
 void swap(Person &a, Person &b);
 
-class Person : public apache::thrift::TStructType<Person> {
+class Person final : public apache::thrift::TStructType<Person> {
  public:
 
   static const uint64_t _reflection_id = 17004913262661492556U;
@@ -407,9 +428,6 @@ class Person : public apache::thrift::TStructType<Person> {
   Person& operator=(Person&&) = default;
 
   void __clear();
-
-  virtual ~Person() throw() {}
-
   PersonID id;
   std::string name;
   int16_t age;
@@ -457,6 +475,10 @@ class Person : public apache::thrift::TStructType<Person> {
   uint32_t read(apache::thrift::protocol::TProtocol* iprot);
   uint32_t write(apache::thrift::protocol::TProtocol* oprot) const;
 
+  static void translateFieldName(
+      folly::StringPiece _fname,
+      int16_t& fid,
+      apache::thrift::protocol::TType& _ftype);
 };
 
 class Person;

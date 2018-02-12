@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2015-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-#include <gtest/gtest.h>
-
 #include <folly/futures/Future.h>
+#include <folly/portability/GTest.h>
+
+#include <memory>
 
 using namespace folly;
 
@@ -24,20 +25,23 @@ class TestData : public RequestData {
  public:
   explicit TestData(int data) : data_(data) {}
   ~TestData() override {}
+
+  bool hasCallback() override {
+    return false;
+  }
+
   int data_;
 };
 
 TEST(Context, basic) {
 
   // Start a new context
-  RequestContext::create();
+  folly::RequestContextScopeGuard rctx;
 
   EXPECT_EQ(nullptr, RequestContext::get()->getContextData("test"));
 
   // Set some test data
-  RequestContext::get()->setContextData(
-    "test",
-    std::unique_ptr<TestData>(new TestData(10)));
+  RequestContext::get()->setContextData("test", std::make_unique<TestData>(10));
 
   // Start a future
   Promise<Unit> p;

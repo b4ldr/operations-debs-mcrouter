@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #pragma once
@@ -14,8 +20,8 @@
 #include <wangle/deprecated/rx/Subject.h>
 #include <wangle/deprecated/rx/Subscription.h>
 
-#include <folly/RWSpinLock.h>
-#include <folly/SmallLocks.h>
+#include <folly/SharedMutex.h>
+#include <folly/synchronization/SmallLocks.h>
 #include <folly/ThreadLocal.h>
 #include <folly/small_vector.h>
 #include <folly/Executor.h>
@@ -70,7 +76,7 @@ class Observable {
       }
       newObservers_->push_back(observer);
     } else {
-      folly::RWSpinLock::WriteHolder{&observersLock_};
+      folly::SharedMutex::WriteHolder{&observersLock_};
       observers_.push_back(observer);
     }
   }
@@ -131,7 +137,7 @@ class Observable {
       Observable* observable_;
     };
 
-    return folly::make_unique<Subject_>(scheduler, this);
+    return std::make_unique<Subject_>(scheduler, this);
   }
 
  protected:
@@ -146,7 +152,7 @@ class Observable {
     *inCallback_ = true;
 
     {
-      folly::RWSpinLock::ReadHolder rh(observersLock_);
+      folly::SharedMutex::ReadHolder rh(observersLock_);
       for (auto o : observers_) {
         f(o);
       }
@@ -160,7 +166,7 @@ class Observable {
                  (newSubscribers_ && !newSubscribers_->empty()) ||
                  (oldSubscribers_ && !oldSubscribers_->empty()))) {
       {
-        folly::RWSpinLock::WriteHolder wh(observersLock_);
+        folly::SharedMutex::WriteHolder wh(observersLock_);
         if (newObservers_) {
           for (auto observer : *(newObservers_)) {
             observers_.push_back(observer);
@@ -194,7 +200,7 @@ class Observable {
       }
       newSubscribers_->insert(std::move(kv));
     } else {
-      folly::RWSpinLock::WriteHolder{&observersLock_};
+      folly::SharedMutex::WriteHolder{&observersLock_};
       subscribers_.insert(std::move(kv));
     }
     return subscription;
@@ -208,19 +214,19 @@ class Observable {
 
     void unsubscribe(uint64_t id) {
       CHECK(id > 0);
-      folly::RWSpinLock::ReadHolder guard(lock_);
+      folly::SharedMutex::ReadHolder guard(lock_);
       if (observable_) {
         observable_->unsubscribe(id);
       }
     }
 
     void disable() {
-      folly::RWSpinLock::WriteHolder guard(lock_);
+      folly::SharedMutex::WriteHolder guard(lock_);
       observable_ = nullptr;
     }
 
    private:
-    folly::RWSpinLock lock_;
+    folly::SharedMutex lock_;
     Observable* observable_;
   };
 
@@ -243,7 +249,7 @@ class Observable {
       }
       oldSubscribers_->push_back(id);
     } else {
-      folly::RWSpinLock::WriteHolder{&observersLock_};
+      folly::SharedMutex::WriteHolder{&observersLock_};
       subscribers_.erase(id);
     }
   }
@@ -263,7 +269,7 @@ class Observable {
   }
 
   std::atomic<uint64_t> nextSubscriptionId_;
-  folly::RWSpinLock observersLock_;
+  folly::SharedMutex observersLock_;
   folly::ThreadLocalPtr<bool> inCallback_;
 
   typedef folly::small_vector<Observer<T>*, InlineObservers> ObserverList;

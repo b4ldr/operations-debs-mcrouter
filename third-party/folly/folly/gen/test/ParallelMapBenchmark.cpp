@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2014-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-#include <unistd.h>
-#include <atomic>
 #include <algorithm>
+#include <atomic>
 #include <thread>
 #include <vector>
 
 #include <folly/Benchmark.h>
 #include <folly/gen/Base.h>
 #include <folly/gen/ParallelMap.h>
+#include <folly/portability/Unistd.h>
 
 using namespace folly::gen;
 

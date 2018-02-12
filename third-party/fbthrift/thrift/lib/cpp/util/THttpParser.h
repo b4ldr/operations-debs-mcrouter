@@ -46,6 +46,9 @@ class THttpParser {
   void getReadBuffer(void** bufReturn, size_t* lenReturn);
   bool readDataAvailable(size_t len);
   int getMinBytesRequired();
+  uint32_t getUnparsedDataLen() const {
+    return httpBufLen_ - httpPos_;
+  }
   void setDataBuffer(apache::thrift::transport::TMemoryBuffer* buffer) {
     dataBuf_ = buffer;
   }
@@ -86,8 +89,8 @@ class THttpParser {
   HttpParseResult parseChunkFooter();
   HttpParseResult parseTrailing();
 
-  virtual bool parseStatusLine(const char* status) = 0;
-  virtual void parseHeaderLine(const char* header) = 0;
+  virtual bool parseStatusLine(folly::StringPiece) = 0;
+  virtual void parseHeaderLine(folly::StringPiece) = 0;
 
   void shift();
   char* readLine();
@@ -142,8 +145,8 @@ class THttpClientParser : public THttpParser {
       const std::map<std::string, std::string>* extraWriteHeaders) override;
 
  protected:
-  void parseHeaderLine(const char* header) override;
-  bool parseStatusLine(const char* status) override;
+  void parseHeaderLine(folly::StringPiece) override;
+  bool parseStatusLine(folly::StringPiece) override;
 
  private:
   static void appendHeadersToQueue(

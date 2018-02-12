@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #include <wangle/client/ssl/SSLSessionCacheUtils.h>
 
@@ -101,10 +107,19 @@ folly::Optional<SSLSessionCacheData> getCacheDataForSession(SSL_SESSION* sess) {
   if (serviceIdentity) {
     result.serviceIdentity = std::move(*serviceIdentity);
   }
+#ifdef WANGLE_HAVE_SSL_SESSION_DUP
+  result.sessionDuplicateTemplate =
+      std::shared_ptr<SSL_SESSION>(SSL_SESSION_dup(sess), SessionDestructor{});
+#endif
   return result;
 }
 
 SSL_SESSION* getSessionFromCacheData(const SSLSessionCacheData& data) {
+#ifdef WANGLE_HAVE_SSL_SESSION_DUP
+  if (data.sessionDuplicateTemplate) {
+    return SSL_SESSION_dup(data.sessionDuplicateTemplate.get());
+  }
+#endif
   auto result = fbStringToSession(data.sessionData);
   if (!result) {
     return nullptr;
@@ -117,11 +132,16 @@ SSL_SESSION* cloneSSLSession(SSL_SESSION* toClone) {
   if (!toClone) {
     return nullptr;
   }
+
+#ifdef WANGLE_HAVE_SSL_SESSION_DUP
+  return SSL_SESSION_dup(toClone);
+#else
   auto sessionData = sessionToFbString(toClone);
   if (!sessionData) {
     return nullptr;
   }
   auto clone = fbStringToSession(std::move(*sessionData));
+
   if (!clone) {
     return nullptr;
   }
@@ -130,6 +150,7 @@ SSL_SESSION* cloneSSLSession(SSL_SESSION* toClone) {
     setSessionServiceIdentity(clone, serviceIdentity.value());
   }
   return clone;
+#endif
 }
 
 }

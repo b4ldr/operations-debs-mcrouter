@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2013-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,20 +22,21 @@
 #include <cinttypes>
 #include <cstddef>
 #include <cstring>
-#include <memory>
 #include <limits>
-#include <sys/uio.h>
+#include <memory>
 #include <type_traits>
 
 #include <boost/iterator/iterator_facade.hpp>
 
 #include <folly/FBString.h>
-#include <folly/Range.h>
 #include <folly/FBVector.h>
+#include <folly/Portability.h>
+#include <folly/Range.h>
+#include <folly/portability/SysUio.h>
 
 // Ignore shadowing warnings within this file, so includers can use -Wshadow.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wshadow"
+FOLLY_PUSH_WARNING
+FOLLY_GCC_DISABLE_WARNING("-Wshadow")
 
 namespace folly {
 
@@ -210,14 +211,11 @@ namespace folly {
  */
 namespace detail {
 // Is T a unique_ptr<> to a standard-layout type?
-template <class T, class Enable=void> struct IsUniquePtrToSL
-  : public std::false_type { };
-template <class T, class D>
-struct IsUniquePtrToSL<
-  std::unique_ptr<T, D>,
-  typename std::enable_if<std::is_standard_layout<T>::value>::type>
-  : public std::true_type { };
-}  // namespace detail
+template <typename T>
+struct IsUniquePtrToSL : std::false_type {};
+template <typename T, typename D>
+struct IsUniquePtrToSL<std::unique_ptr<T, D>> : std::is_standard_layout<T> {};
+} // namespace detail
 
 class IOBuf {
  public:
@@ -371,6 +369,16 @@ class IOBuf {
   static std::unique_ptr<IOBuf> wrapBuffer(ByteRange br) {
     return wrapBuffer(br.data(), br.size());
   }
+
+  /**
+   * Similar to wrapBuffer(), but returns IOBuf by value rather than
+   * heap-allocating it.
+   */
+  static IOBuf wrapBufferAsValue(const void* buf, uint64_t capacity);
+  static IOBuf wrapBufferAsValue(ByteRange br) {
+    return wrapBufferAsValue(br.data(), br.size());
+  }
+
   IOBuf(WrapBufferOp op, const void* buf, uint64_t capacity);
   IOBuf(WrapBufferOp op, ByteRange br);
 
@@ -497,7 +505,7 @@ class IOBuf {
    * Returns the number of bytes in the buffer before the start of the data.
    */
   uint64_t headroom() const {
-    return data_ - buffer();
+    return uint64_t(data_ - buffer());
   }
 
   /**
@@ -506,7 +514,7 @@ class IOBuf {
    * Returns the number of bytes in the buffer after the end of the data.
    */
   uint64_t tailroom() const {
-    return bufferEnd() - tail();
+    return uint64_t(bufferEnd() - tail());
   }
 
   /**
@@ -913,6 +921,10 @@ class IOBuf {
       return true;
     }
 
+    if (UNLIKELY(sharedInfo()->externallyShared)) {
+      return true;
+    }
+
     if (LIKELY(!(flags() & kFlagMaybeShared))) {
       return false;
     }
@@ -969,6 +981,30 @@ class IOBuf {
   void unshareOne() {
     if (isSharedOne()) {
       unshareOneSlow();
+    }
+  }
+
+  /**
+   * Mark the underlying buffers in this chain as shared with external memory
+   * management mechanism. This will make isShared() always returns true.
+   *
+   * This function is not thread-safe, and only safe to call immediately after
+   * creating an IOBuf, before it has been shared with other threads.
+   */
+  void markExternallyShared();
+
+  /**
+   * Mark the underlying buffer that this IOBuf refers to as shared with
+   * external memory management mechanism. This will make isSharedOne() always
+   * returns true.
+   *
+   * This function is not thread-safe, and only safe to call immediately after
+   * creating an IOBuf, before it has been shared with other threads.
+   */
+  void markExternallySharedOne() {
+    SharedInfo* info = sharedInfo();
+    if (info) {
+      info->externallyShared = true;
     }
   }
 
@@ -1084,6 +1120,26 @@ class IOBuf {
    * heap-allocating it.
    */
   IOBuf cloneOneAsValue() const;
+
+  /**
+   * Return a new unchained IOBuf that may share the same data as this chain.
+   *
+   * If the IOBuf chain is not chained then the new IOBuf will point to the same
+   * underlying data buffer as the original chain. Otherwise, it will clone and
+   * coalesce the IOBuf chain.
+   *
+   * The new IOBuf will have at least as much headroom as the first IOBuf in the
+   * chain, and at least as much tailroom as the last IOBuf in the chain.
+   *
+   * Throws std::bad_alloc on error.
+   */
+  std::unique_ptr<IOBuf> cloneCoalesced() const;
+
+  /**
+   * Similar to cloneCoalesced(). But returns IOBuf by value rather than
+   * heap-allocating it.
+   */
+  IOBuf cloneCoalescedAsValue() const;
 
   /**
    * Similar to Clone(). But use other as the head node. Other nodes in the
@@ -1213,6 +1269,7 @@ class IOBuf {
     FreeFunction freeFn;
     void* userData;
     std::atomic<uint32_t> refcount;
+    bool externallyShared{false};
   };
   // Helper structs for use by operator new and delete
   struct HeapPrefix;
@@ -1292,8 +1349,8 @@ class IOBuf {
   static inline uintptr_t packFlagsAndSharedInfo(uintptr_t flags,
                                                  SharedInfo* info) {
     uintptr_t uinfo = reinterpret_cast<uintptr_t>(info);
-    DCHECK_EQ(flags & ~kFlagMask, 0);
-    DCHECK_EQ(uinfo & kFlagMask, 0);
+    DCHECK_EQ(flags & ~kFlagMask, 0u);
+    DCHECK_EQ(uinfo & kFlagMask, 0u);
     return flags | uinfo;
   }
 
@@ -1303,7 +1360,7 @@ class IOBuf {
 
   inline void setSharedInfo(SharedInfo* info) {
     uintptr_t uinfo = reinterpret_cast<uintptr_t>(info);
-    DCHECK_EQ(uinfo & kFlagMask, 0);
+    DCHECK_EQ(uinfo & kFlagMask, 0u);
     flagsAndSharedInfo_ = (flagsAndSharedInfo_ & kFlagMask) | uinfo;
   }
 
@@ -1313,12 +1370,12 @@ class IOBuf {
 
   // flags_ are changed from const methods
   inline void setFlags(uintptr_t flags) const {
-    DCHECK_EQ(flags & ~kFlagMask, 0);
+    DCHECK_EQ(flags & ~kFlagMask, 0u);
     flagsAndSharedInfo_ |= flags;
   }
 
   inline void clearFlags(uintptr_t flags) const {
-    DCHECK_EQ(flags & ~kFlagMask, 0);
+    DCHECK_EQ(flags & ~kFlagMask, 0u);
     flagsAndSharedInfo_ &= ~flags;
   }
 
@@ -1337,7 +1394,7 @@ class IOBuf {
     typedef typename UniquePtr::deleter_type Deleter;
 
     explicit UniquePtrDeleter(Deleter deleter) : deleter_(std::move(deleter)){ }
-    void dispose(void* p) {
+    void dispose(void* p) override {
       try {
         deleter_(static_cast<Pointer>(p));
         delete this;
@@ -1400,7 +1457,9 @@ inline std::unique_ptr<IOBuf> IOBuf::copyBuffer(
   uint64_t capacity = headroom + size + minTailroom;
   std::unique_ptr<IOBuf> buf = create(capacity);
   buf->advance(headroom);
-  memcpy(buf->writableData(), data, size);
+  if (size != 0) {
+    memcpy(buf->writableData(), data, size);
+  }
   buf->append(size);
   return buf;
 }
@@ -1441,6 +1500,8 @@ class IOBuf::Iterator : public boost::iterator_facade<
     }
   }
 
+  Iterator() {}
+
  private:
   void setVal() {
     val_ = ByteRange(pos_->data(), pos_->tail());
@@ -1471,14 +1532,14 @@ class IOBuf::Iterator : public boost::iterator_facade<
     adjustForEnd();
   }
 
-  const IOBuf* pos_;
-  const IOBuf* end_;
+  const IOBuf* pos_{nullptr};
+  const IOBuf* end_{nullptr};
   ByteRange val_;
 };
 
 inline IOBuf::Iterator IOBuf::begin() const { return cbegin(); }
 inline IOBuf::Iterator IOBuf::end() const { return cend(); }
 
-} // folly
+} // namespace folly
 
-#pragma GCC diagnostic pop
+FOLLY_POP_WARNING

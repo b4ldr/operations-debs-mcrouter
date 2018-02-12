@@ -6,54 +6,180 @@
  */
 #include "thrift/compiler/test/fixtures/constants/gen-cpp/module_constants.h"
 
+#include <folly/Indestructible.h>
+
+
 
 
 constexpr int32_t const module_constants::myInt_;
 constexpr char const *const module_constants::name_;
 std::vector<std::map<std::string, int32_t> >  const &module_constants::states() {
-  static std::vector<std::map<std::string, int32_t> >  const instance = std::vector<std::map<std::string, int32_t> > {
-    std::map<std::string, int32_t> {
-      {"San Diego", 3211000},
-      {"Sacramento", 479600},
-      {"SF", 837400},
-    },
-    std::map<std::string, int32_t> {
-      {"New York", 8406000},
-      {"Albany", 98400},
-    },
+  static folly::Indestructible<std::vector<std::map<std::string, int32_t> > > const instance{
+    std::vector<std::map<std::string, int32_t> > {
+      std::map<std::string, int32_t> {
+        {"San Diego", 3211000},
+        {"Sacramento", 479600},
+        {"SF", 837400},
+      },
+      std::map<std::string, int32_t> {
+        {"New York", 8406000},
+        {"Albany", 98400},
+      },
+    }
   };
-  return instance;
+  return *instance;
 }
 constexpr double const module_constants::x_;
 constexpr double const module_constants::y_;
 constexpr double const module_constants::z_;
+constexpr double const module_constants::zeroDoubleValue_;
+constexpr double const module_constants::longDoubleValue_;
 Internship const &module_constants::instagram() {
-  static Internship const instance = Internship(
-    ::apache::thrift::detail::wrap_argument<1>(12),
-    ::apache::thrift::detail::wrap_argument<2>("Software Engineer"),
-    ::apache::thrift::detail::wrap_argument<3>((Company)3));
-  return instance;
+  static folly::Indestructible<Internship> const instance{
+    Internship(
+      ::apache::thrift::detail::wrap_argument<1>(12),
+      ::apache::thrift::detail::wrap_argument<2>("Software Engineer"),
+      ::apache::thrift::detail::wrap_argument<3>(Company::INSTAGRAM))
+  };
+  return *instance;
 }
 std::vector<Range>  const &module_constants::kRanges() {
-  static std::vector<Range>  const instance = std::vector<Range> {
-    Range(
-      ::apache::thrift::detail::wrap_argument<1>(1),
-      ::apache::thrift::detail::wrap_argument<2>(2)),
-    Range(
-      ::apache::thrift::detail::wrap_argument<1>(5),
-      ::apache::thrift::detail::wrap_argument<2>(6)),
+  static folly::Indestructible<std::vector<Range> > const instance{
+    std::vector<Range> {
+      Range(
+        ::apache::thrift::detail::wrap_argument<1>(1),
+        ::apache::thrift::detail::wrap_argument<2>(2)),
+      Range(
+        ::apache::thrift::detail::wrap_argument<1>(5),
+        ::apache::thrift::detail::wrap_argument<2>(6)),
+    }
   };
-  return instance;
+  return *instance;
 }
 std::vector<Internship>  const &module_constants::internList() {
-  static std::vector<Internship>  const instance = std::vector<Internship> {
-    Internship(module_constants::instagram()),
-    Internship(
-      ::apache::thrift::detail::wrap_argument<1>(10),
-      ::apache::thrift::detail::wrap_argument<2>("Sales Intern"),
-      ::apache::thrift::detail::wrap_argument<3>((Company)0)),
+  static folly::Indestructible<std::vector<Internship> > const instance{
+    std::vector<Internship> {
+      Internship(module_constants::instagram()),
+      Internship(
+        ::apache::thrift::detail::wrap_argument<1>(10),
+        ::apache::thrift::detail::wrap_argument<2>("Sales Intern"),
+        ::apache::thrift::detail::wrap_argument<3>(Company::FACEBOOK)),
+    }
   };
-  return instance;
+  return *instance;
+}
+struct1 const &module_constants::pod_0() {
+  static folly::Indestructible<struct1> const instance{
+    struct1()
+  };
+  return *instance;
+}
+struct1 const &module_constants::pod_1() {
+  static folly::Indestructible<struct1> const instance{
+    struct1(
+      ::apache::thrift::detail::wrap_argument<1>(10),
+      ::apache::thrift::detail::wrap_argument<2>("foo"))
+  };
+  return *instance;
+}
+struct2 const &module_constants::pod_2() {
+  static folly::Indestructible<struct2> const instance{
+    struct2(
+      ::apache::thrift::detail::wrap_argument<1>(98),
+      ::apache::thrift::detail::wrap_argument<2>("gaz"),
+      ::apache::thrift::detail::wrap_argument<3>(struct1(
+          ::apache::thrift::detail::wrap_argument<1>(12),
+          ::apache::thrift::detail::wrap_argument<2>("bar"))),
+      ::apache::thrift::detail::wrap_argument<4>(std::vector<int32_t> {
+          11,
+          22,
+          33,
+        }))
+  };
+  return *instance;
+}
+struct3 const &module_constants::pod_3() {
+  static folly::Indestructible<struct3> const instance{
+    struct3(
+      ::apache::thrift::detail::wrap_argument<1>("abc"),
+      ::apache::thrift::detail::wrap_argument<2>(456),
+      ::apache::thrift::detail::wrap_argument<3>(struct2(
+          ::apache::thrift::detail::wrap_argument<1>(888),
+          ::apache::thrift::detail::wrap_argument<3>(struct1(
+              ::apache::thrift::detail::wrap_argument<2>("gaz"))),
+          ::apache::thrift::detail::wrap_argument<4>(std::vector<int32_t> {
+              1,
+              2,
+              3,
+            }))))
+  };
+  return *instance;
+}
+union1 const &module_constants::u_1_1() {
+  static folly::Indestructible<union1> const instance{
+    union1(
+      ::apache::thrift::detail::wrap_argument<1>(97))
+  };
+  return *instance;
+}
+union1 const &module_constants::u_1_2() {
+  static folly::Indestructible<union1> const instance{
+    union1(
+      ::apache::thrift::detail::wrap_argument<2>(5.6))
+  };
+  return *instance;
+}
+union1 const &module_constants::u_1_3() {
+  static folly::Indestructible<union1> const instance{
+    union1()
+  };
+  return *instance;
+}
+union2 const &module_constants::u_2_1() {
+  static folly::Indestructible<union2> const instance{
+    union2(
+      ::apache::thrift::detail::wrap_argument<1>(51))
+  };
+  return *instance;
+}
+union2 const &module_constants::u_2_2() {
+  static folly::Indestructible<union2> const instance{
+    union2(
+      ::apache::thrift::detail::wrap_argument<2>(6.7))
+  };
+  return *instance;
+}
+union2 const &module_constants::u_2_3() {
+  static folly::Indestructible<union2> const instance{
+    union2(
+      ::apache::thrift::detail::wrap_argument<3>(struct1(
+          ::apache::thrift::detail::wrap_argument<1>(8),
+          ::apache::thrift::detail::wrap_argument<2>("abacabb"))))
+  };
+  return *instance;
+}
+union2 const &module_constants::u_2_4() {
+  static folly::Indestructible<union2> const instance{
+    union2(
+      ::apache::thrift::detail::wrap_argument<4>(union1(
+          ::apache::thrift::detail::wrap_argument<1>(43))))
+  };
+  return *instance;
+}
+union2 const &module_constants::u_2_5() {
+  static folly::Indestructible<union2> const instance{
+    union2(
+      ::apache::thrift::detail::wrap_argument<4>(union1(
+          ::apache::thrift::detail::wrap_argument<2>(9.8))))
+  };
+  return *instance;
+}
+union2 const &module_constants::u_2_6() {
+  static folly::Indestructible<union2> const instance{
+    union2(
+      ::apache::thrift::detail::wrap_argument<4>(union1()))
+  };
+  return *instance;
 }
 constexpr char const *const module_constants::apostrophe_;
 constexpr char const *const module_constants::tripleApostrophe_;
@@ -61,34 +187,38 @@ constexpr char const *const module_constants::quotationMark_;
 constexpr char const *const module_constants::backslash_;
 constexpr char const *const module_constants::escaped_a_;
 std::map<std::string, int32_t>  const &module_constants::char2ascii() {
-  static std::map<std::string, int32_t>  const instance = std::map<std::string, int32_t> {
-    {"'", 39},
-    {"\"", 34},
-    {"\\", 92},
-    {"\x61", 97},
+  static folly::Indestructible<std::map<std::string, int32_t> > const instance{
+    std::map<std::string, int32_t> {
+      {"'", 39},
+      {"\"", 34},
+      {"\\", 92},
+      {"\x61", 97},
+    }
   };
-  return instance;
+  return *instance;
 }
 std::vector<std::string>  const &module_constants::escaped_strings() {
-  static std::vector<std::string>  const instance = std::vector<std::string> {
-    "\x61",
-    "\xab",
-    "\x6a",
-    "\xa6",
-    "\x61yyy",
-    "\xabyyy",
-    "\x6ayyy",
-    "\xa6yyy",
-    "zzz\x61",
-    "zzz\xab",
-    "zzz\x6a",
-    "zzz\xa6",
-    "zzz\x61yyy",
-    "zzz\xabyyy",
-    "zzz\x6ayyy",
-    "zzz\xa6yyy",
+  static folly::Indestructible<std::vector<std::string> > const instance{
+    std::vector<std::string> {
+      "\x61",
+      "\xab",
+      "\x6a",
+      "\xa6",
+      "\x61yyy",
+      "\xabyyy",
+      "\x6ayyy",
+      "\xa6yyy",
+      "zzz\x61",
+      "zzz\xab",
+      "zzz\x6a",
+      "zzz\xa6",
+      "zzz\x61yyy",
+      "zzz\xabyyy",
+      "zzz\x6ayyy",
+      "zzz\xa6yyy",
+    }
   };
-  return instance;
+  return *instance;
 }
 constexpr bool const module_constants::false_c_;
 constexpr bool const module_constants::true_c_;
@@ -99,77 +229,54 @@ constexpr int64_t const module_constants::zero64_;
 constexpr double const module_constants::zero_dot_zero_;
 constexpr char const *const module_constants::empty_string_;
 std::vector<int32_t>  const &module_constants::empty_int_list() {
-  static std::vector<int32_t>  const instance = std::vector<int32_t> {};
-  return instance;
+  static folly::Indestructible<std::vector<int32_t> > const instance{
+    std::vector<int32_t> {}
+  };
+  return *instance;
 }
 std::vector<std::string>  const &module_constants::empty_string_list() {
-  static std::vector<std::string>  const instance = std::vector<std::string> {};
-  return instance;
+  static folly::Indestructible<std::vector<std::string> > const instance{
+    std::vector<std::string> {}
+  };
+  return *instance;
 }
 std::set<int32_t>  const &module_constants::empty_int_set() {
-  static std::set<int32_t>  const instance = std::set<int32_t> {};
-  return instance;
+  static folly::Indestructible<std::set<int32_t> > const instance{
+    std::set<int32_t> {}
+  };
+  return *instance;
 }
 std::set<std::string>  const &module_constants::empty_string_set() {
-  static std::set<std::string>  const instance = std::set<std::string> {};
-  return instance;
+  static folly::Indestructible<std::set<std::string> > const instance{
+    std::set<std::string> {}
+  };
+  return *instance;
 }
 std::map<int32_t, int32_t>  const &module_constants::empty_int_int_map() {
-  static std::map<int32_t, int32_t>  const instance = std::map<int32_t, int32_t> {};
-  return instance;
+  static folly::Indestructible<std::map<int32_t, int32_t> > const instance{
+    std::map<int32_t, int32_t> {}
+  };
+  return *instance;
 }
 std::map<int32_t, std::string>  const &module_constants::empty_int_string_map() {
-  static std::map<int32_t, std::string>  const instance = std::map<int32_t, std::string> {};
-  return instance;
+  static folly::Indestructible<std::map<int32_t, std::string> > const instance{
+    std::map<int32_t, std::string> {}
+  };
+  return *instance;
 }
 std::map<std::string, int32_t>  const &module_constants::empty_string_int_map() {
-  static std::map<std::string, int32_t>  const instance = std::map<std::string, int32_t> {};
-  return instance;
+  static folly::Indestructible<std::map<std::string, int32_t> > const instance{
+    std::map<std::string, int32_t> {}
+  };
+  return *instance;
 }
 std::map<std::string, std::string>  const &module_constants::empty_string_string_map() {
-  static std::map<std::string, std::string>  const instance = std::map<std::string, std::string> {};
-  return instance;
+  static folly::Indestructible<std::map<std::string, std::string> > const instance{
+    std::map<std::string, std::string> {}
+  };
+  return *instance;
 }
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-
-moduleConstants::moduleConstants() {
-  myInt = module_constants::myInt();
-  name = module_constants::name();
-  states = module_constants::states();
-  x = module_constants::x();
-  y = module_constants::y();
-  z = module_constants::z();
-  instagram = module_constants::instagram();
-  kRanges = module_constants::kRanges();
-  internList = module_constants::internList();
-  apostrophe = module_constants::apostrophe();
-  tripleApostrophe = module_constants::tripleApostrophe();
-  quotationMark = module_constants::quotationMark();
-  backslash = module_constants::backslash();
-  escaped_a = module_constants::escaped_a();
-  char2ascii = module_constants::char2ascii();
-  escaped_strings = module_constants::escaped_strings();
-  false_c = module_constants::false_c();
-  true_c = module_constants::true_c();
-  zero_byte = module_constants::zero_byte();
-  zero16 = module_constants::zero16();
-  zero32 = module_constants::zero32();
-  zero64 = module_constants::zero64();
-  zero_dot_zero = module_constants::zero_dot_zero();
-  empty_string = module_constants::empty_string();
-  empty_int_list = module_constants::empty_int_list();
-  empty_string_list = module_constants::empty_string_list();
-  empty_int_set = module_constants::empty_int_set();
-  empty_string_set = module_constants::empty_string_set();
-  empty_int_int_map = module_constants::empty_int_int_map();
-  empty_int_string_map = module_constants::empty_int_string_map();
-  empty_string_int_map = module_constants::empty_string_int_map();
-  empty_string_string_map = module_constants::empty_string_string_map();
-}
-
-#pragma GCC diagnostic pop
 
 
 

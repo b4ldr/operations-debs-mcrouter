@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2004-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,7 @@
 #include <memory>
 #include <stdio.h>
 #include <iostream>
-#include <sys/time.h>
-#include <unistd.h>
 
-#include <thrift/lib/cpp/async/TEventServer.h>
 #include <thrift/lib/cpp/async/TSyncToAsyncProcessor.h>
 #include <thrift/lib/cpp/concurrency/FunctionRunner.h>
 #include <thrift/lib/cpp/concurrency/ThreadManager.h>
@@ -29,23 +26,20 @@
 #include <thrift/lib/cpp/protocol/TCompactProtocol.h>
 #include <thrift/lib/cpp/protocol/THeaderProtocol.h>
 #include <thrift/lib/cpp/server/example/TThreadedServer.h>
-#include <thrift/lib/cpp/server/example/TThreadPoolServer.h>
 #include <thrift/lib/cpp/server/TServer.h>
 #include <thrift/lib/cpp/server/TConnectionContext.h>
-#include <thrift/lib/cpp/server/example/TSimpleServer.h>
 #include <thrift/lib/cpp/transport/TBufferTransports.h>
 #include <thrift/lib/cpp/transport/THttpClient.h>
-#include <thrift/lib/cpp/transport/TTransportUtils.h>
 #include <thrift/lib/cpp/transport/TSocket.h>
 #include <thrift/lib/cpp/transport/TSSLSocket.h>
 #include <thrift/lib/cpp/util/ScopedServerThread.h>
 #include <thrift/lib/cpp/util/ServerCreatorBase.h>
-#include <thrift/lib/cpp/util/TEventServerCreator.h>
-#include <thrift/lib/cpp/util/example/TSimpleServerCreator.h>
 #include <thrift/lib/cpp/util/TThreadedServerCreator.h>
-#include <thrift/lib/cpp/util/example/TThreadPoolServerCreator.h>
 
 #include <thrift/test/gen-cpp/Service.h>
+
+#include <folly/portability/SysTime.h>
+#include <folly/portability/Unistd.h>
 
 #include <gtest/gtest.h>
 
@@ -93,8 +87,9 @@ public:
     : iprot_(),
       oprot_() {}
 
-  void* getContext(const char* fn_name,
-                   TConnectionContext* connectionContext) override {
+  void* getContext(
+      const char* /* fn_name */,
+      TConnectionContext* connectionContext) override {
     iprot_ = dynamic_pointer_cast<THeaderProtocol>
       (connectionContext->getInputProtocol());
     oprot_ = dynamic_pointer_cast<THeaderProtocol>
@@ -107,7 +102,7 @@ public:
    * Before writing, get the input headers and replay them to the output
    * headers
    */
-  void preWrite(void* ctx, const char* fn_name) override {
+  void preWrite(void* /* ctx */, const char* /* fn_name */) override {
     if (iprot_.get() != nullptr && oprot_.get() != nullptr) {
       auto headers = iprot_->getHeaders();
       oprot_->setHeaders(headers);
@@ -129,13 +124,10 @@ enum ClientType {
 };
 
 enum ServerType {
-  SERVER_TYPE_SIMPLE = 0,
   SERVER_TYPE_THREADED = 1,
-  SERVER_TYPE_THREADPOOL = 2,
-  SERVER_TYPE_EVENT = 5,
 };
 
-void runClient(ClientType clientType, ServerType sType, int port) {
+void runClient(ClientType clientType, ServerType, int port) {
   auto socket = make_shared<TSocket>("localhost", port);
   shared_ptr<TTransport> transport;
   shared_ptr<TProtocol> protocol;
@@ -281,29 +273,9 @@ void runTestCase(ServerType sType, ClientType clientType) {
 
   shared_ptr<ServerCreatorBase> serverCreator;
   switch(sType) {
-    case SERVER_TYPE_SIMPLE:
-      // "Testing TSimpleServerCreator"
-      #pragma GCC diagnostic push
-      #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-      serverCreator = make_shared<TSimpleServerCreator>(
-          testProcessor, port, false);
-      #pragma GCC diagnostic pop
-      break;
     case SERVER_TYPE_THREADED:
       serverCreator = make_shared<TThreadedServerCreator>(
           testProcessor, port, false);
-      break;
-    case SERVER_TYPE_THREADPOOL:
-      // "Testing TThreadPoolServerCreator"
-      #pragma GCC diagnostic push
-      #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-      serverCreator = make_shared<TThreadPoolServerCreator>(
-          testProcessor, port, false);
-      #pragma GCC diagnostic pop
-      break;
-    case SERVER_TYPE_EVENT:
-      serverCreator = make_shared<TEventServerCreator>(
-          testAsyncProcessor, port);
       break;
   }
   serverCreator->setDuplexProtocolFactory(protocolFactory);
@@ -315,76 +287,24 @@ void runTestCase(ServerType sType, ClientType clientType) {
 
 // Listed individually to make it easy to see in the unit runner
 
-TEST(THeaderTest, simpleServerUnframed) {
-  runTestCase(SERVER_TYPE_SIMPLE, CLIENT_TYPE_UNFRAMED);
-}
-
 TEST(THeaderTest, threadedServerUnframed) {
   runTestCase(SERVER_TYPE_THREADED, CLIENT_TYPE_UNFRAMED);
-}
-
-TEST(THeaderTest, threadPoolServerUnframed) {
-  runTestCase(SERVER_TYPE_THREADPOOL, CLIENT_TYPE_UNFRAMED);
-}
-
-TEST(THeaderTest, simpleServerFramed) {
-  runTestCase(SERVER_TYPE_SIMPLE, CLIENT_TYPE_FRAMED);
 }
 
 TEST(THeaderTest, threadedServerFramed) {
   runTestCase(SERVER_TYPE_THREADED, CLIENT_TYPE_FRAMED);
 }
 
-TEST(THeaderTest, threadPoolServerFramed) {
-  runTestCase(SERVER_TYPE_THREADPOOL, CLIENT_TYPE_FRAMED);
-}
-
-TEST(THeaderTest, eventServerFramed) {
-  runTestCase(SERVER_TYPE_EVENT, CLIENT_TYPE_FRAMED);
-}
-
-TEST(THeaderTest, simpleServerHeader) {
-  runTestCase(SERVER_TYPE_SIMPLE, CLIENT_TYPE_HEADER);
-}
-
 TEST(THeaderTest, threadedServerHeader) {
   runTestCase(SERVER_TYPE_THREADED, CLIENT_TYPE_HEADER);
-}
-
-TEST(THeaderTest, threadPoolServerHeader) {
-  runTestCase(SERVER_TYPE_THREADPOOL, CLIENT_TYPE_HEADER);
-}
-
-TEST(THeaderTest, eventServerHeader) {
-  runTestCase(SERVER_TYPE_EVENT, CLIENT_TYPE_HEADER);
-}
-
-TEST(THeaderTest, simpleServerHttp) {
-  runTestCase(SERVER_TYPE_SIMPLE, CLIENT_TYPE_HTTP);
 }
 
 TEST(THeaderTest, threadedServerHttp) {
   runTestCase(SERVER_TYPE_THREADED, CLIENT_TYPE_HTTP);
 }
 
-TEST(THeaderTest, threadPoolServerHttp) {
-  runTestCase(SERVER_TYPE_THREADPOOL, CLIENT_TYPE_HTTP);
-}
-
-TEST(THeaderTest, simpleServerCompactFramed) {
-  runTestCase(SERVER_TYPE_SIMPLE, CLIENT_TYPE_FRAMED_COMPACT);
-}
-
 TEST(THeaderTest, threadedServerCompactFramed) {
   runTestCase(SERVER_TYPE_THREADED, CLIENT_TYPE_FRAMED_COMPACT);
-}
-
-TEST(THeaderTest, threadPoolServerCompactFramed) {
-  runTestCase(SERVER_TYPE_THREADPOOL, CLIENT_TYPE_FRAMED_COMPACT);
-}
-
-TEST(THeaderTest, eventServerCompactFramed) {
-  runTestCase(SERVER_TYPE_EVENT, CLIENT_TYPE_FRAMED_COMPACT);
 }
 
 TEST(THeaderTest, unframedBadRead) {
@@ -406,4 +326,29 @@ TEST(THeaderTest, unframedBadRead) {
   EXPECT_THROW(
       protocol->readMessageBegin(name, messageType, seqId),
       TTransportException);
+}
+
+TEST(THeaderTest, removeBadHeaderStringSize) {
+  uint8_t badHeader[] = {
+    0x00, 0x00, 0x00, 0x13, // Frame size is corrupted here
+    0x0F, 0xFF, 0x00, 0x00, // THRIFT_HEADER_CLIENT_TYPE
+    0x00, 0x00, 0x00, 0x00,
+    0x00, 0x01, // Header size
+    0x00, // Proto ID
+    0x00, // Num transforms
+    0x01, // Info ID Key value
+    0x01, // Num headers
+    0xFF, 0xFF, 0xFF, 0xFF, // Malformed varint32 string size
+    0x00 // String should go here
+  };
+  folly::IOBufQueue queue;
+  queue.append(folly::IOBuf::wrapBuffer(badHeader, sizeof(badHeader)));
+  // Try to remove the bad header
+  THeader header;
+  size_t needed;
+  std::map<std::string, std::string> persistentHeaders;
+  EXPECT_THROW(
+    auto buf = header.removeHeader(&queue, needed, persistentHeaders),
+    TTransportException
+  );
 }

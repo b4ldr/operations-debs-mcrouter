@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
+ *  Copyright (c) 2017, Facebook, Inc.
  *  All rights reserved.
  *
  *  This source code is licensed under the BSD-style license found in the
@@ -24,7 +24,8 @@ namespace folly {
 struct dynamic;
 } // folly
 
-namespace facebook { namespace memcache {
+namespace facebook {
+namespace memcache {
 
 class McrouterOptions;
 
@@ -57,8 +58,8 @@ class ConfigApi : public ConfigApiIf {
    *
    * @return true on success, false otherwise
    */
-  bool get(ConfigType type, const std::string& path,
-           std::string& contents) override;
+  bool get(ConfigType type, const std::string& path, std::string& contents)
+      override;
 
   /**
    * All files we 'get' after this call will be marked as 'tracked'. Once
@@ -82,9 +83,10 @@ class ConfigApi : public ConfigApiIf {
    * Reads configuration file according to mcrouter options.
    *
    * @param[out] config Will contain contents of configuration file on success
+   * @param[out] path Will contain path of configuration file we tried to read
    * @return true on success, false otherwise
    */
-  bool getConfigFile(std::string& config) override;
+  bool getConfigFile(std::string& config, std::string& path) override;
 
   /**
    * @return dynamic object with information about files used in configuration.
@@ -103,6 +105,19 @@ class ConfigApi : public ConfigApiIf {
 
   virtual ~ConfigApi();
 
+  /**
+   * Enable a behavior that forces this class to read config from
+   * backup files instead of from the original source.
+   * When this feature is enabled, the original source will only be read if
+   * the backup file is not found.
+   *
+   * NOTE: This behavior is automacally disabled after a successful config.
+   *
+   * @throw logic_error   When trying to enable this feature for configurations
+   *                      other than the first.
+   */
+  void enableReadingFromBackupFiles();
+
  protected:
   const McrouterOptions& opts_;
   CallbackPool<> callbacks_;
@@ -118,6 +133,44 @@ class ConfigApi : public ConfigApiIf {
    */
   virtual bool checkFileUpdate();
 
+  /**
+   * Save a piece of config source to disk.
+   *
+   * @param sourcePrefix  Where this config comes from (e.g. file).
+   * @param name          Name of this peice of config.
+   *                      NOTE: sourcePrefix + name should uniquely identify
+   *                      this config source.
+   * @param contents      The actual config.
+   * @param md5OrVersion  A piece of metadata that can "uniquely" identify the
+   *                      "contents" provided.
+   */
+  void dumpConfigSourceToDisk(
+      const std::string& sourcePrefix,
+      const std::string& name,
+      const std::string& contents,
+      const std::string& md5OrVersion);
+
+  /**
+   * Tells whether or not we should read config sources from backup files.
+   */
+  bool shouldReadFromBackupFiles() const;
+
+  /**
+   * Reads the given config source from backup file.
+   *
+   * @param sourcePrefix  Where this config comes from (e.g. file).
+   * @param name          Name of this peice of config.
+   * @param contents      Output parameter that will hold the content of the
+   *                      backup file
+   *
+   * @return              True if the file was read successfully.
+   *                      False otherwise.
+   */
+  bool readFromBackupFile(
+      const std::string& sourcePrefix,
+      const std::string& name,
+      std::string& contents) const;
+
  private:
   struct FileInfo {
     std::string path;
@@ -125,6 +178,7 @@ class ConfigApi : public ConfigApiIf {
     ConfigType type{ConfigType::ConfigFile};
     std::unique_ptr<FileDataProvider> provider;
     time_t lastMd5Check{0}; // last hash check in seconds since epoch
+    std::string content;
 
     bool checkMd5Changed();
   };
@@ -139,9 +193,19 @@ class ConfigApi : public ConfigApiIf {
   std::condition_variable finishCV_;
   std::atomic<bool> finish_;
 
+  // file path -> md5
+  std::unordered_map<std::string, std::string> backupFiles_;
+
   bool isFirstConfig_{true};
 
-  void configThreadRun();
-};
+  const bool dumpConfigToDisk_{false};
+  bool readFromBackupFiles_{false};
+  bool lastConfigFromBackupFiles_{false};
 
-}}} // facebook::memcache::mcrouter
+  void configThreadRun();
+
+  bool readFile(const std::string& path, std::string& contents);
+};
+}
+}
+} // facebook::memcache::mcrouter

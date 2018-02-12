@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2004-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,6 +35,10 @@ static constexpr folly::StringPiece kTypeNameMap("map");
 static constexpr folly::StringPiece kTypeNameList("lst");
 static constexpr folly::StringPiece kTypeNameSet("set");
 
+[[noreturn]] void throwNegativeSize(int64_t size);
+[[noreturn]] void throwExceededSizeLimit(int64_t size, int64_t sizeMax);
+[[noreturn]] void throwUnrecognizedType();
+
 static folly::StringPiece getTypeNameForTypeID(TType typeID) {
   using namespace apache::thrift::protocol;
   switch (typeID) {
@@ -63,16 +67,14 @@ static folly::StringPiece getTypeNameForTypeID(TType typeID) {
   case TType::T_LIST:
     return kTypeNameList;
   default:
-    throw TProtocolException(TProtocolException::NOT_IMPLEMENTED,
-                             "Unrecognized type");
+    throwUnrecognizedType();
   }
 }
 
 static protocol::TType getTypeIDForTypeName(folly::StringPiece name) {
   using namespace apache::thrift::protocol;
   auto fail = [] {
-    throw TProtocolException(TProtocolException::NOT_IMPLEMENTED,
-                             "Unrecognized type");
+    throwUnrecognizedType();
     return TType::T_STOP;
   };
   if (name.size() <= 1) {
@@ -105,15 +107,11 @@ static protocol::TType getTypeIDForTypeName(folly::StringPiece name) {
 
 static uint32_t clampSize(int64_t size) {
   if (size < 0) {
-    throw TProtocolException(
-        TProtocolException::NEGATIVE_SIZE,
-        folly::to<std::string>(size, " < 0"));
+    throwNegativeSize(size);
   }
   constexpr auto sizeMax = std::numeric_limits<uint32_t>::max();
   if (size > sizeMax) {
-    throw TProtocolException(
-        TProtocolException::SIZE_LIMIT,
-        folly::to<std::string>(size, " is too large (", sizeMax, ")"));
+    throwExceededSizeLimit(size, sizeMax);
   }
   return uint32_t(size);
 }
@@ -124,7 +122,7 @@ static uint32_t clampSize(int64_t size) {
  * Public writing methods
  */
 
-uint32_t JSONProtocolWriter::writeStructBegin(const char* name) {
+uint32_t JSONProtocolWriter::writeStructBegin(const char* /*name*/) {
   auto ret = writeContext();
   ret += beginContext(ContextType::MAP);
   return ret;
@@ -208,56 +206,57 @@ uint32_t JSONProtocolWriter::writeBool(bool value) {
  */
 
 uint32_t JSONProtocolWriter::serializedMessageSize(
-    const std::string& name) {
+    const std::string& name) const {
   return 2 // list begin and end
     + serializedSizeI32() * 3
     + serializedSizeString(name);
 }
 
-uint32_t JSONProtocolWriter::serializedFieldSize(const char* name,
-                                                 TType /*fieldType*/,
-                                                 int16_t /*fieldId*/) {
+uint32_t JSONProtocolWriter::serializedFieldSize(
+    const char* /*name*/,
+    TType /*fieldType*/,
+    int16_t /*fieldId*/) const {
   // string plus ":"
   return folly::constexpr_strlen(R"(,"32767":{"typ":})");
 }
 
-uint32_t JSONProtocolWriter::serializedStructSize(const char* /*name*/) {
+uint32_t JSONProtocolWriter::serializedStructSize(const char* /*name*/) const {
   return folly::constexpr_strlen(R"({})");
 }
 
 uint32_t JSONProtocolWriter::serializedSizeMapBegin(TType /*keyType*/,
                                                     TType /*valType*/,
-                                                    uint32_t /*size*/) {
+                                                    uint32_t /*size*/) const {
   return folly::constexpr_strlen(R"(["typ","typ",4294967295,{)");
 }
 
-uint32_t JSONProtocolWriter::serializedSizeMapEnd() {
+uint32_t JSONProtocolWriter::serializedSizeMapEnd() const {
   return folly::constexpr_strlen(R"(}])");
 }
 
 uint32_t JSONProtocolWriter::serializedSizeListBegin(TType /*elemType*/,
-                                                           uint32_t /*size*/) {
+                                                     uint32_t /*size*/) const {
   return folly::constexpr_strlen(R"(["typ",4294967295)");
 }
 
-uint32_t JSONProtocolWriter::serializedSizeListEnd() {
+uint32_t JSONProtocolWriter::serializedSizeListEnd() const {
   return folly::constexpr_strlen(R"(])");
 }
 
 uint32_t JSONProtocolWriter::serializedSizeSetBegin(TType /*elemType*/,
-                                                          uint32_t /*size*/) {
+                                                    uint32_t /*size*/) const {
   return folly::constexpr_strlen(R"(["typ",4294967295)");
 }
 
-uint32_t JSONProtocolWriter::serializedSizeSetEnd() {
+uint32_t JSONProtocolWriter::serializedSizeSetEnd() const {
   return folly::constexpr_strlen(R"(])");
 }
 
-uint32_t JSONProtocolWriter::serializedSizeStop() {
+uint32_t JSONProtocolWriter::serializedSizeStop() const {
   return 0;
 }
 
-uint32_t JSONProtocolWriter::serializedSizeBool(bool /*val*/) {
+uint32_t JSONProtocolWriter::serializedSizeBool(bool /*val*/) const {
   return 2;
 }
 
@@ -269,7 +268,7 @@ uint32_t JSONProtocolWriter::serializedSizeBool(bool /*val*/) {
  * Public reading functions
  */
 
-uint32_t JSONProtocolReader::readStructBegin(std::string& name) {
+uint32_t JSONProtocolReader::readStructBegin(std::string& /*name*/) {
   uint32_t ret = 0;
   ret += ensureAndBeginContext(ContextType::MAP);
   return ret;
@@ -281,9 +280,10 @@ uint32_t JSONProtocolReader::readStructEnd() {
   return ret;
 }
 
-uint32_t JSONProtocolReader::readFieldBegin(std::string& name,
-                                            TType& fieldType,
-                                            int16_t& fieldId) {
+uint32_t JSONProtocolReader::readFieldBegin(
+    std::string& /*name*/,
+    TType& fieldType,
+    int16_t& fieldId) {
   skipWhitespace();
   auto peek = *in_.peek().first;
   if (peek == TJSONProtocol::kJSONObjectEnd) {
@@ -363,9 +363,7 @@ uint32_t JSONProtocolReader::readBool(bool& value) {
   int8_t tmp = false;
   auto ret = readInContext<int8_t>(tmp);
   if (tmp < 0 || tmp > 1) {
-    throw TProtocolException(
-      TProtocolException::INVALID_DATA,
-      folly::to<std::string>(tmp, " is not a valid bool"));
+    throwUnrecognizableAsBoolean(tmp);
   }
   value = bool(tmp);
   return ret;

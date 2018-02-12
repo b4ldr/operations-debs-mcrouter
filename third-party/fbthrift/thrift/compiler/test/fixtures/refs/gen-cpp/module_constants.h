@@ -11,13 +11,12 @@
 
 
 struct module_constants {
+  static StructWithRef const& kStructWithRef();
+  static StructWithRefTypeUnique const& kStructWithRefTypeUnique();
+  static StructWithRefTypeShared const& kStructWithRefTypeShared();
+  static StructWithRefTypeSharedConst const& kStructWithRefTypeSharedConst();
 };
 
-class __attribute__((__deprecated__("moduleConstants suffers from the 'static initialization order fiasco' (https://isocpp.org/wiki/faq/ctors#static-init-order) and may CRASH your program. Instead, use module_constants::CONSTANT_NAME()"))) moduleConstants {
-public:
-  moduleConstants();
-
-};
 
 
 

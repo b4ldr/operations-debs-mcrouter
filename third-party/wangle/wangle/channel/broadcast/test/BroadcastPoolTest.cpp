@@ -1,20 +1,27 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
-#include "wangle/channel/Handler.h"
 #include <wangle/bootstrap/ServerBootstrap.h>
 #include <wangle/channel/broadcast/BroadcastPool.h>
 #include <wangle/channel/broadcast/test/Mocks.h>
 
-using namespace wangle;
+#include "wangle/channel/Handler.h"
+
 using namespace folly;
 using namespace testing;
+using namespace wangle;
 
 class BroadcastPoolTest : public Test {
  public:
@@ -24,8 +31,11 @@ class BroadcastPoolTest : public Test {
 
     pipelineFactory =
         std::make_shared<StrictMock<MockBroadcastPipelineFactory>>();
-    pool = folly::make_unique<BroadcastPool<int, std::string>>(serverPool,
-                                                               pipelineFactory);
+
+    pool = std::make_unique<BroadcastPool<int, std::string>>(
+        serverPool,
+        pipelineFactory,
+        std::make_shared<ClientBootstrapFactory>());
 
     startServer();
   }
@@ -46,7 +56,7 @@ class BroadcastPoolTest : public Test {
   class ServerPipelineFactory : public PipelineFactory<DefaultPipeline> {
    public:
     DefaultPipeline::Ptr newPipeline(
-        std::shared_ptr<AsyncTransportWrapper> sock) override {
+        std::shared_ptr<AsyncTransportWrapper>) override {
       auto pipeline = DefaultPipeline::create();
       pipeline->addBack(new BytesToBytesHandler());
       pipeline->finalize();
@@ -55,7 +65,7 @@ class BroadcastPoolTest : public Test {
   };
 
   void startServer() {
-    server = folly::make_unique<ServerBootstrap<DefaultPipeline>>();
+    server = std::make_unique<ServerBootstrap<DefaultPipeline>>();
     server->childPipeline(std::make_shared<ServerPipelineFactory>());
     server->bind(0);
     server->getSockets()[0]->getAddress(addr.get());
@@ -79,6 +89,8 @@ TEST_F(BroadcastPoolTest, BasicConnect) {
   std::string routingData2 = "url2";
   BroadcastHandler<int, std::string>* handler1 = nullptr;
   BroadcastHandler<int, std::string>* handler2 = nullptr;
+  uint64_t handler1Id = 0;
+  uint64_t handler2Id = 0;
   auto base = EventBaseManager::get()->getEventBase();
 
   InSequence dummy;
@@ -89,18 +101,21 @@ TEST_F(BroadcastPoolTest, BasicConnect) {
   pool->getHandler(routingData1)
       .then([&](BroadcastHandler<int, std::string>* h) {
         handler1 = h;
+        handler1Id = handler1->getArbitraryIdentifier();
         handler1->subscribe(&subscriber);
       });
   EXPECT_TRUE(handler1 == nullptr);
   EXPECT_CALL(*pipelineFactory, setRoutingData(_, "url1")).Times(1);
   base->loopOnce(); // Do async connect
   EXPECT_TRUE(handler1 != nullptr);
+  EXPECT_NE(0, handler1Id);
   EXPECT_TRUE(pool->isBroadcasting(routingData1));
 
   // Broadcast available for routingData1. Test that the same handler
   // is returned.
   pool->getHandler(routingData1)
       .then([&](BroadcastHandler<int, std::string>* h) {
+        EXPECT_EQ(handler1Id, h->getArbitraryIdentifier());
         EXPECT_TRUE(h == handler1);
       })
       .wait();
@@ -116,6 +131,7 @@ TEST_F(BroadcastPoolTest, BasicConnect) {
   pool->getHandler(routingData1)
       .then([&](BroadcastHandler<int, std::string>* h) {
         handler1 = h;
+        handler1Id = handler1->getArbitraryIdentifier();
         handler1->subscribe(&subscriber);
       });
   EXPECT_TRUE(handler1 == nullptr);
@@ -133,13 +149,14 @@ TEST_F(BroadcastPoolTest, BasicConnect) {
   pool->getHandler(routingData2)
       .then([&](BroadcastHandler<int, std::string>* h) {
         handler2 = h;
+        handler2Id = handler2->getArbitraryIdentifier();
         handler2->subscribe(&subscriber);
       });
   EXPECT_TRUE(handler2 == nullptr);
   EXPECT_CALL(*pipelineFactory, setRoutingData(_, "url2")).Times(1);
   base->loopOnce(); // Do async connect
   EXPECT_TRUE(handler2 != nullptr);
-  EXPECT_TRUE(handler2 != handler1);
+  EXPECT_TRUE(handler2Id != handler1Id);
   EXPECT_TRUE(pool->isBroadcasting(routingData2));
 
   // Cleanup
@@ -219,7 +236,7 @@ TEST_F(BroadcastPoolTest, ConnectError) {
       .then([&](BroadcastHandler<int, std::string>* h) {
         handler1 = h;
       })
-      .onError([&] (const std::exception& ex) {
+      .onError([&] (const std::exception&) {
         handler1Error = true;
         EXPECT_FALSE(pool->isBroadcasting(routingData));
       });
@@ -232,7 +249,7 @@ TEST_F(BroadcastPoolTest, ConnectError) {
       .then([&](BroadcastHandler<int, std::string>* h) {
         handler2 = h;
       })
-      .onError([&] (const std::exception& ex) {
+      .onError([&] (const std::exception&) {
         handler2Error = true;
         EXPECT_FALSE(pool->isBroadcasting(routingData));
       });
@@ -286,7 +303,7 @@ TEST_F(BroadcastPoolTest, ConnectErrorServerPool) {
       .then([&](BroadcastHandler<int, std::string>* h) {
         handler1 = h;
       })
-      .onError([&] (const std::exception& ex) {
+      .onError([&] (const std::exception&) {
         handler1Error = true;
         EXPECT_FALSE(pool->isBroadcasting(routingData));
       });
@@ -310,13 +327,44 @@ TEST_F(BroadcastPoolTest, RoutingDataException) {
       .then([&](BroadcastHandler<int, std::string>* h) {
         handler = h;
       })
-      .onError([&] (const std::exception& ex) {
+      .onError([&] (const std::exception&) {
         handlerError = true;
         EXPECT_FALSE(pool->isBroadcasting(routingData));
       });
   EXPECT_TRUE(handler == nullptr);
   EXPECT_CALL(*pipelineFactory, setRoutingData(_, "url"))
       .WillOnce(Throw(std::exception()));
+  base->loopOnce(); // Do async connect
+  EXPECT_TRUE(handler == nullptr);
+  EXPECT_TRUE(handlerError);
+  EXPECT_FALSE(pool->isBroadcasting(routingData));
+}
+
+TEST_F(BroadcastPoolTest, RoutingDataPipelineDeletion) {
+  // Test when the broadcast pipeline gets deleted inline while setting
+  // routing data after the socket connection succeeds.
+  std::string routingData = "url";
+  BroadcastHandler<int, std::string>* handler = nullptr;
+  bool handlerError = false;
+  auto base = EventBaseManager::get()->getEventBase();
+
+  InSequence dummy;
+
+  EXPECT_FALSE(pool->isBroadcasting(routingData));
+  pool->getHandler(routingData)
+      .then([&](BroadcastHandler<int, std::string>* h) {
+        handler = h;
+      })
+      .onError([&] (const std::exception&) {
+        handlerError = true;
+        EXPECT_FALSE(pool->isBroadcasting(routingData));
+      });
+  EXPECT_TRUE(handler == nullptr);
+  EXPECT_CALL(*pipelineFactory, setRoutingData(_, "url"))
+      .WillOnce(Invoke(
+          [&](DefaultPipeline* pipeline, const std::string&) {
+            pipeline->readException(std::runtime_error("upstream error"));
+          }));
   base->loopOnce(); // Do async connect
   EXPECT_TRUE(handler == nullptr);
   EXPECT_TRUE(handlerError);
@@ -368,7 +416,7 @@ TEST_F(BroadcastPoolTest, SubscriberDeletionBeforeConnect) {
   // No broadcast available for routingData. Kick off a connect request.
   EXPECT_FALSE(pool->isBroadcasting(routingData));
   pool->getHandler(routingData)
-      .then([&](BroadcastHandler<int, std::string>* h) {
+      .then([&](BroadcastHandler<int, std::string>*) {
         handler1Connected = true;
         // Do not subscribe to the handler. This will simulate
         // the caller going away before we get here.
@@ -379,7 +427,7 @@ TEST_F(BroadcastPoolTest, SubscriberDeletionBeforeConnect) {
   // Invoke getHandler() for the same routing data when a connect request
   // is outstanding
   pool->getHandler(routingData)
-      .then([&](BroadcastHandler<int, std::string>* h) {
+      .then([&](BroadcastHandler<int, std::string>*) {
         handler2Connected = true;
         // Do not subscribe to the handler.
       });
@@ -401,7 +449,7 @@ TEST_F(BroadcastPoolTest, SubscriberDeletionBeforeConnect) {
   handler1Connected = false;
   handler2Connected = false;
   pool->getHandler(routingData)
-      .then([&](BroadcastHandler<int, std::string>* h) {
+      .then([&](BroadcastHandler<int, std::string>*) {
         handler1Connected = true;
         // Do not subscribe to the handler. This will simulate
         // the caller going away before we get here.
@@ -438,6 +486,7 @@ TEST_F(BroadcastPoolTest, ThreadLocalPool) {
   MockObservingPipelineFactory factory1(serverPool, pipelineFactory);
   MockObservingPipelineFactory factory2(serverPool, pipelineFactory);
   BroadcastHandler<int, std::string>* broadcastHandler = nullptr;
+  uint64_t broadcastHandlerId = 0;
   const std::string kUrl = "url";
 
   InSequence dummy;
@@ -450,6 +499,7 @@ TEST_F(BroadcastPoolTest, ThreadLocalPool) {
   EXPECT_CALL(*pipelineFactory, setRoutingData(_, kUrl))
       .WillOnce(Invoke([&](DefaultPipeline* pipeline, const std::string&) {
         broadcastHandler = pipelineFactory->getBroadcastHandler(pipeline);
+        broadcastHandlerId = broadcastHandler->getArbitraryIdentifier();
       }));
   auto pipeline1 = factory1.newPipeline(nullptr, kUrl, nullptr, nullptr);
   pipeline1->transportActive();
@@ -475,8 +525,10 @@ TEST_F(BroadcastPoolTest, ThreadLocalPool) {
 
     EXPECT_CALL(*pipelineFactory, setRoutingData(_, kUrl))
         .WillOnce(Invoke([&](DefaultPipeline* pipeline, const std::string&) {
-          EXPECT_NE(pipelineFactory->getBroadcastHandler(pipeline),
-                    broadcastHandler);
+          EXPECT_NE(
+              pipelineFactory->getBroadcastHandler(pipeline)
+                  ->getArbitraryIdentifier(),
+              broadcastHandlerId);
         }));
     auto pipeline3 = factory1.newPipeline(nullptr, kUrl, nullptr, nullptr);
     pipeline3->transportActive();
@@ -493,8 +545,10 @@ TEST_F(BroadcastPoolTest, ThreadLocalPool) {
   // handler since a different thread-local BroadcastPool is used.
   EXPECT_CALL(*pipelineFactory, setRoutingData(_, kUrl))
       .WillOnce(Invoke([&](DefaultPipeline* pipeline, const std::string&) {
-        EXPECT_NE(pipelineFactory->getBroadcastHandler(pipeline),
-                  broadcastHandler);
+        EXPECT_NE(
+            pipelineFactory->getBroadcastHandler(pipeline)
+                ->getArbitraryIdentifier(),
+            broadcastHandlerId);
       }));
   auto pipeline4 = factory2.newPipeline(nullptr, kUrl, nullptr, nullptr);
   pipeline4->transportActive();

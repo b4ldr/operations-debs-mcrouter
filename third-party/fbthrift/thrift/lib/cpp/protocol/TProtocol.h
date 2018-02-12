@@ -17,15 +17,14 @@
 #ifndef THRIFT_PROTOCOL_TPROTOCOL_H_
 #define THRIFT_PROTOCOL_TPROTOCOL_H_ 1
 
+#include <folly/portability/Sockets.h>
 #include <thrift/lib/cpp/transport/TTransport.h>
 #include <thrift/lib/cpp/protocol/TType.h>
 #include <thrift/lib/cpp/protocol/TProtocolException.h>
 #include <thrift/lib/cpp/util/BitwiseCast.h>
-#include <thrift/lib/cpp/util/shared_ptr_util.h>
 
 #include <memory>
 
-#include <netinet/in.h>
 #include <sys/types.h>
 #include <string>
 #include <map>
@@ -238,6 +237,74 @@ uint32_t skip(Protocol_& prot, TType arg_type) {
     }
   default:
     return 0;
+  }
+}
+
+// TODO(denplusplus): remove.
+// DO NOT USE.
+template <typename Protocol_, typename T>
+uint32_t readIntegral(Protocol_& prot, TType arg_type, T& value) {
+  switch (arg_type) {
+    case TType::T_BOOL: {
+      bool boolv;
+      auto res = prot.readBool(boolv);
+      value = static_cast<T>(boolv);
+      return res;
+    }
+    case TType::T_BYTE: {
+      int8_t bytev;
+      auto res = prot.readByte(bytev);
+      value = static_cast<T>(bytev);
+      return res;
+    }
+    case TType::T_I16: {
+      int16_t i16;
+      auto res = prot.readI16(i16);
+      value = static_cast<T>(i16);
+      return res;
+    }
+    case TType::T_I32: {
+      int32_t i32;
+      auto res = prot.readI32(i32);
+      value = static_cast<T>(i32);
+      return res;
+    }
+    case TType::T_I64: {
+      int64_t i64;
+      auto res = prot.readI64(i64);
+      value = static_cast<T>(i64);
+      return res;
+    }
+    default: {
+      throw TProtocolException(
+          std::string("Cannot parse integral number of ") +
+          std::to_string(arg_type) + " type");
+    }
+  }
+}
+
+// TODO(denplusplus): remove.
+// DO NOT USE.
+template <typename Protocol_, typename T>
+uint32_t readFloatingPoint(Protocol_& prot, TType arg_type, T& value) {
+  switch (arg_type) {
+    case TType::T_DOUBLE: {
+      double dub;
+      auto res = prot.readDouble(dub);
+      value = static_cast<T>(dub);
+      return res;
+    }
+    case TType::T_FLOAT: {
+      float flt;
+      auto res = prot.readFloat(flt);
+      value = static_cast<T>(flt);
+      return res;
+    }
+    default: {
+      throw TProtocolException(
+          std::string("Cannot parse floating number of ") +
+          std::to_string(arg_type) + " type");
+    }
   }
 }
 
@@ -724,7 +791,7 @@ class TProtocol {
    * valid for the lifetime of the TProtocol object.
    */
   explicit TProtocol(TTransport* ptrans):
-    ptrans_(ptrans, NoopPtrDestructor<TTransport>()) {
+    ptrans_(ptrans, [](TTransport*) {}) {
   }
 
   std::shared_ptr<TTransport> ptrans_;

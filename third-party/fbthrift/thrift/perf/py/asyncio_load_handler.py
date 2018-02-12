@@ -1,8 +1,6 @@
-# @lint-avoid-python-3-compatibility-imports
-# @lint-avoid-pyflakes2
-
-from apache.thrift.test.load import LoadTest
-from apache.thrift.test.load.ttypes import LoadError
+#!/usr/bin/env python3
+from apache.thrift.test.asyncio.load import LoadTest
+from apache.thrift.test.asyncio.load.ttypes import LoadError
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
 import pickle
@@ -91,3 +89,13 @@ class LoadHandler(LoadTest.Iface):
 
     def add(self, a, b):
         return a + b
+
+    def largeContainer(self, data):
+        pass
+
+    async def iterAllFields(self, data):
+        for item in data:
+            _ = item.stringField
+            for _ in item.stringList:
+                pass
+        return data

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2004-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -60,23 +60,23 @@ class JSONProtocolWriter : public JSONProtocolWriterCommon {
    * Functions that return the serialized size
    */
 
-  inline uint32_t serializedMessageSize(const std::string& name);
+  inline uint32_t serializedMessageSize(const std::string& name) const;
   inline uint32_t serializedFieldSize(const char* name,
                                       TType fieldType,
-                                      int16_t fieldId);
-  inline uint32_t serializedStructSize(const char* name);
+                                      int16_t fieldId) const;
+  inline uint32_t serializedStructSize(const char* name) const;
   inline uint32_t serializedSizeMapBegin(TType keyType,
                                          TType valType,
-                                         uint32_t size);
-  inline uint32_t serializedSizeMapEnd();
+                                         uint32_t size) const;
+  inline uint32_t serializedSizeMapEnd() const;
   inline uint32_t serializedSizeListBegin(TType elemType,
-                                            uint32_t size);
-  inline uint32_t serializedSizeListEnd();
+                                            uint32_t size) const;
+  inline uint32_t serializedSizeListEnd() const;
   inline uint32_t serializedSizeSetBegin(TType elemType,
-                                           uint32_t size);
-  inline uint32_t serializedSizeSetEnd();
-  inline uint32_t serializedSizeStop();
-  inline uint32_t serializedSizeBool(bool = false);
+                                           uint32_t size) const;
+  inline uint32_t serializedSizeSetEnd() const;
+  inline uint32_t serializedSizeStop() const;
+  inline uint32_t serializedSizeBool(bool = false) const;
 };
 
 class JSONProtocolReader : public JSONProtocolReaderCommon {
@@ -91,6 +91,14 @@ class JSONProtocolReader : public JSONProtocolReaderCommon {
 
   static constexpr ProtocolType protocolType() {
     return ProtocolType::T_JSON_PROTOCOL;
+  }
+
+  static constexpr bool kUsesFieldNames() {
+    return false;
+  }
+
+  static constexpr bool kOmitsContainerSizes() {
+    return false;
   }
 
   inline uint32_t readStructBegin(std::string& name);
@@ -112,8 +120,11 @@ class JSONProtocolReader : public JSONProtocolReaderCommon {
   inline bool peekMap();
   inline bool peekSet();
   inline bool peekList();
+
+ private:
+  [[noreturn]] static void throwUnrecognizableAsBoolean(int8_t byte);
 };
 
 }} // apache::thrift
 
-#include "JSONProtocol.tcc"
+#include <thrift/lib/cpp2/protocol/JSONProtocol.tcc>

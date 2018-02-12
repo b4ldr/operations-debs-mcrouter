@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #pragma once
 
@@ -84,9 +90,19 @@ struct ServerSocketConfig {
   uint32_t acceptBacklog{1024};
 
   /**
+   * The maximum number of pending connections each io worker thread can hold.
+   */
+  uint32_t maxNumPendingConnectionsPerWorker{1024};
+
+  /**
    * The number of milliseconds a connection can be idle before we close it.
    */
   std::chrono::milliseconds connectionIdleTimeout{600000};
+
+  /**
+   * The number of milliseconds a ssl handshake can timeout (60s)
+   */
+  std::chrono::milliseconds sslHandshakeTimeout{60000};
 
   /**
    * The address to bind to.
@@ -97,6 +113,13 @@ struct ServerSocketConfig {
    * Options for controlling the SSL cache.
    */
   SSLCacheOptions sslCacheOptions{std::chrono::seconds(0), 20480, 200};
+
+  /**
+   * Determines whether or not to allow insecure connections over a secure
+   * port. Can be used to multiplex TLS and plaintext on the same port for
+   * some services.
+   */
+  bool allowInsecureConnectionsOnSecureServer{false};
 
   /**
    * The initial TLS ticket seeds.
@@ -118,6 +141,19 @@ struct ServerSocketConfig {
    * Maximum number of concurrent pending SSL handshakes
    */
   uint32_t maxConcurrentSSLHandshakes{30720};
+
+  /**
+   * Whether to enable TCP fast open. Before turning this
+   * option on, for it to work, it must also be enabled on the
+   * machine via /proc/sys/net/ipv4/tcp_fastopen, and the keys for
+   * TFO should also be set at /proc/sys/net/ipv4/tcp_fastopen_key
+   */
+  bool enableTCPFastOpen{false};
+
+  /**
+   * Limit on size of queue of TFO requests by clients.
+   */
+  uint32_t fastOpenQueueSize{100};
 
  private:
   folly::AsyncSocket::OptionMap socketOptions_;

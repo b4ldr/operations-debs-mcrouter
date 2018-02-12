@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2016-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
 // This file only exists because without it there would be
 // a circular dependency between SysUio.h, Sockets.h, and Unistd.h
 #ifndef _WIN32
+#include <limits.h>
 #include <sys/uio.h>
 #else
 #include <stdlib.h>

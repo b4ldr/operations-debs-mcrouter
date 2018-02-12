@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2011-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,29 +17,24 @@
 #pragma once
 #define FOLLY_STRING_H_
 
+#include <cstdarg>
 #include <exception>
-#include <stdarg.h>
 #include <string>
-#include <boost/type_traits.hpp>
-#include <boost/regex/pending/unicode_iterator.hpp>
-
-#ifdef FOLLY_HAVE_DEPRECATED_ASSOC
-#ifdef _GLIBCXX_SYMVER
-#include <ext/hash_set>
-#include <ext/hash_map>
-#endif
-#endif
-
-#include <unordered_set>
 #include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
+#include <boost/regex/pending/unicode_iterator.hpp>
+#include <boost/type_traits.hpp>
 
 #include <folly/Conv.h>
-#include <folly/Demangle.h>
+#include <folly/ExceptionString.h>
 #include <folly/FBString.h>
 #include <folly/FBVector.h>
 #include <folly/Portability.h>
 #include <folly/Range.h>
 #include <folly/ScopeGuard.h>
+#include <folly/Traits.h>
 
 // Compatibility function, to make sure toStdString(s) can be called
 // to convert a std::string or fbstring variable s into type std::string
@@ -217,12 +212,15 @@ std::string& stringVAppendf(std::string* out, const char* format, va_list ap);
  * C++, use cEscape instead.  This function is for display purposes
  * only.
  */
-template <class String1, class String2>
-void backslashify(const String1& input, String2& output, bool hex_style=false);
+template <class OutputString>
+void backslashify(
+    folly::StringPiece input,
+    OutputString& output,
+    bool hex_style = false);
 
-template <class String>
-String backslashify(const String& input, bool hex_style=false) {
-  String output;
+template <class OutputString = std::string>
+OutputString backslashify(StringPiece input, bool hex_style = false) {
+  OutputString output;
   backslashify(input, output, hex_style);
   return output;
 }
@@ -255,16 +253,42 @@ String humanify(const String& input) {
  * If append_output is true, append data to the output rather than
  * replace it.
  */
-template<class InputString, class OutputString>
+template <class InputString, class OutputString>
 bool hexlify(const InputString& input, OutputString& output,
              bool append=false);
+
+template <class OutputString = std::string>
+OutputString hexlify(ByteRange input) {
+  OutputString output;
+  if (!hexlify(input, output)) {
+    // hexlify() currently always returns true, so this can't really happen
+    throw std::runtime_error("hexlify failed");
+  }
+  return output;
+}
+
+template <class OutputString = std::string>
+OutputString hexlify(StringPiece input) {
+  return hexlify<OutputString>(ByteRange{input});
+}
 
 /**
  * Same functionality as Python's binascii.unhexlify.  Returns true
  * on successful conversion.
  */
-template<class InputString, class OutputString>
+template <class InputString, class OutputString>
 bool unhexlify(const InputString& input, OutputString& output);
+
+template <class OutputString = std::string>
+OutputString unhexlify(StringPiece input) {
+  OutputString output;
+  if (!unhexlify(input, output)) {
+    // unhexlify() fails if the input has non-hexidecimal characters,
+    // or if it doesn't consist of a whole number of bytes
+    throw std::domain_error("unhexlify() called with non-hex input");
+  }
+  return output;
+}
 
 /*
  * A pretty-printer for numbers that appends suffixes of units of the
@@ -360,45 +384,6 @@ std::string hexDump(const void* ptr, size_t size);
  */
 fbstring errnoStr(int err);
 
-/**
- * Debug string for an exception: include type and what(), if
- * defined.
- */
-inline fbstring exceptionStr(const std::exception& e) {
-#ifdef FOLLY_HAS_RTTI
-  return folly::to<fbstring>(demangle(typeid(e)), ": ", e.what());
-#else
-  return folly::to<fbstring>("Exception (no RTTI available): ", e.what());
-#endif
-}
-
-// Empirically, this indicates if the runtime supports
-// std::exception_ptr, as not all (arm, for instance) do.
-#if defined(__GNUC__) && defined(__GCC_ATOMIC_INT_LOCK_FREE) && \
-  __GCC_ATOMIC_INT_LOCK_FREE > 1
-inline fbstring exceptionStr(std::exception_ptr ep) {
-  try {
-    std::rethrow_exception(ep);
-  } catch (const std::exception& e) {
-    return exceptionStr(e);
-  } catch (...) {
-    return "<unknown exception>";
-  }
-}
-#endif
-
-template<typename E>
-auto exceptionStr(const E& e)
-  -> typename std::enable_if<!std::is_base_of<std::exception, E>::value,
-                             fbstring>::type
-{
-#ifdef FOLLY_HAS_RTTI
-  return folly::to<fbstring>(demangle(typeid(e)));
-#else
-  return "Exception (no RTTI available)";
-#endif
-}
-
 /*
  * Split a string into a list of tokens by delimiter.
  *
@@ -428,20 +413,23 @@ auto exceptionStr(const E& e)
  * or not (generating empty tokens).
  */
 
-template<class Delim, class String, class OutputType>
+template <class Delim, class String, class OutputType>
 void split(const Delim& delimiter,
            const String& input,
            std::vector<OutputType>& out,
            const bool ignoreEmpty = false);
 
-template<class Delim, class String, class OutputType>
+template <class Delim, class String, class OutputType>
 void split(const Delim& delimiter,
            const String& input,
            folly::fbvector<OutputType>& out,
            const bool ignoreEmpty = false);
 
-template<class OutputValueType, class Delim, class String,
-         class OutputIterator>
+template <
+    class OutputValueType,
+    class Delim,
+    class String,
+    class OutputIterator>
 void splitTo(const Delim& delimiter,
              const String& input,
              OutputIterator out,
@@ -481,55 +469,22 @@ void splitTo(const Delim& delimiter,
  * Note that this will likely not work if the last field's target is of numeric
  * type, in which case folly::to<> will throw an exception.
  */
-template <class T, class Enable = void>
-struct IsSomeVector {
-  enum { value = false };
-};
+namespace detail {
+template <typename Void, typename OutputType>
+struct IsConvertible : std::false_type {};
 
-template <class T>
-struct IsSomeVector<std::vector<T>, void> {
-  enum { value = true };
-};
-
-template <class T>
-struct IsSomeVector<fbvector<T>, void> {
-  enum { value = true };
-};
-
-template <class T, class Enable = void>
-struct IsConvertible {
-  enum { value = false };
-};
-
-template <class T>
+template <typename OutputType>
 struct IsConvertible<
-    T,
-    decltype(parseTo(std::declval<folly::StringPiece>(), std::declval<T&>()))> {
-  enum { value = true };
-};
-
-template <class... Types>
-struct AllConvertible;
-
-template <class Head, class... Tail>
-struct AllConvertible<Head, Tail...> {
-  enum { value = IsConvertible<Head>::value && AllConvertible<Tail...>::value };
-};
-
-template <>
-struct AllConvertible<> {
-  enum { value = true };
-};
-
-static_assert(AllConvertible<float>::value, "");
-static_assert(AllConvertible<int>::value, "");
-static_assert(AllConvertible<bool>::value, "");
-static_assert(AllConvertible<int>::value, "");
-static_assert(!AllConvertible<std::vector<int>>::value, "");
+    void_t<decltype(parseTo(StringPiece{}, std::declval<OutputType&>()))>,
+    OutputType> : std::true_type {};
+} // namespace detail
+template <typename OutputType>
+struct IsConvertible : detail::IsConvertible<void, OutputType> {};
 
 template <bool exact = true, class Delim, class... OutputTypes>
 typename std::enable_if<
-    AllConvertible<OutputTypes...>::value && sizeof...(OutputTypes) >= 1,
+    StrictConjunction<IsConvertible<OutputTypes>...>::value &&
+        sizeof...(OutputTypes) >= 1,
     bool>::type
 split(const Delim& delimiter, StringPiece input, OutputTypes&... outputs);
 
@@ -576,11 +531,12 @@ std::string join(const Delim& delimiter,
   return output;
 }
 
-template <class Delim,
-          class Iterator,
-          typename std::enable_if<std::is_same<
-              typename std::iterator_traits<Iterator>::iterator_category,
-              std::random_access_iterator_tag>::value>::type* = nullptr>
+template <
+    class Delim,
+    class Iterator,
+    typename std::enable_if<std::is_same<
+        typename std::iterator_traits<Iterator>::iterator_category,
+        std::random_access_iterator_tag>::value>::type* = nullptr>
 std::string join(const Delim& delimiter, Iterator begin, Iterator end) {
   std::string output;
   join(delimiter, begin, end, output);
@@ -632,7 +588,7 @@ std::string stripLeftMargin(std::string s);
  * Leaves all other characters unchanged, including those with the 0x80
  * bit set.
  * @param str String to convert
- * @param len Length of str, in bytes
+ * @param length Length of str, in bytes
  */
 void toLowerAscii(char* str, size_t length);
 
@@ -640,8 +596,14 @@ inline void toLowerAscii(MutableStringPiece str) {
   toLowerAscii(str.begin(), str.size());
 }
 
-template <class Iterator = const char*,
-          class Base = folly::Range<boost::u8_to_u32_iterator<Iterator>>>
+inline void toLowerAscii(std::string& str) {
+  // str[0] is legal also if the string is empty.
+  toLowerAscii(&str[0], str.size());
+}
+
+template <
+    class Iterator = const char*,
+    class Base = folly::Range<boost::u8_to_u32_iterator<Iterator>>>
 class UTF8Range : public Base {
  public:
   /* implicit */ UTF8Range(const folly::Range<Iterator> baseRange)
@@ -656,13 +618,5 @@ class UTF8Range : public Base {
 using UTF8StringPiece = UTF8Range<const char*>;
 
 } // namespace folly
-
-// Hook into boost's type traits
-namespace boost {
-template <class T>
-struct has_nothrow_constructor<folly::basic_fbstring<T> > : true_type {
-  enum { value = true };
-};
-} // namespace boost
 
 #include <folly/String-inl.h>

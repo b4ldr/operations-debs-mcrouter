@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2004-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -70,23 +70,23 @@ class SimpleJSONProtocolWriter : public JSONProtocolWriterCommon {
    * Functions that return the serialized size
    */
 
-  inline uint32_t serializedMessageSize(const std::string& name);
+  inline uint32_t serializedMessageSize(const std::string& name) const;
   inline uint32_t serializedFieldSize(const char* name,
                                       TType fieldType,
-                                      int16_t fieldId);
-  inline uint32_t serializedStructSize(const char* name);
+                                      int16_t fieldId) const;
+  inline uint32_t serializedStructSize(const char* name) const;
   inline uint32_t serializedSizeMapBegin(TType keyType,
                                          TType valType,
-                                         uint32_t size);
-  inline uint32_t serializedSizeMapEnd();
+                                         uint32_t size) const;
+  inline uint32_t serializedSizeMapEnd() const;
   inline uint32_t serializedSizeListBegin(TType elemType,
-                                            uint32_t size);
-  inline uint32_t serializedSizeListEnd();
+                                            uint32_t size) const;
+  inline uint32_t serializedSizeListEnd() const;
   inline uint32_t serializedSizeSetBegin(TType elemType,
-                                           uint32_t size);
-  inline uint32_t serializedSizeSetEnd();
-  inline uint32_t serializedSizeStop();
-  inline uint32_t serializedSizeBool(bool = false);
+                                           uint32_t size) const;
+  inline uint32_t serializedSizeSetEnd() const;
+  inline uint32_t serializedSizeStop() const;
+  inline uint32_t serializedSizeBool(bool = false) const;
 };
 
 class SimpleJSONProtocolReader : public JSONProtocolReaderCommon {
@@ -101,6 +101,14 @@ class SimpleJSONProtocolReader : public JSONProtocolReaderCommon {
 
   static constexpr ProtocolType protocolType() {
     return ProtocolType::T_SIMPLE_JSON_PROTOCOL;
+  }
+
+  static constexpr bool kUsesFieldNames() {
+    return true;
+  }
+
+  static constexpr bool kOmitsContainerSizes() {
+    return true;
   }
 
   /**
@@ -129,6 +137,6 @@ class SimpleJSONProtocolReader : public JSONProtocolReaderCommon {
 
 }} // apache::thrift
 
-#include "SimpleJSONProtocol.tcc"
+#include <thrift/lib/cpp2/protocol/SimpleJSONProtocol.tcc>
 
 #endif // #ifndef CPP2_PROTOCOL_TSIMPLEJSONPROTOCOL_H_

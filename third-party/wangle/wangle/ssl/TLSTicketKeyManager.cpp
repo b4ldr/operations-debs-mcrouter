@@ -1,11 +1,17 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #include <wangle/ssl/TLSTicketKeyManager.h>
 
@@ -15,6 +21,7 @@
 #include <openssl/aes.h>
 #include <openssl/rand.h>
 #include <openssl/ssl.h>
+#include <wangle/ssl/TLSTicketKeySeeds.h>
 #include <wangle/ssl/SSLStats.h>
 #include <wangle/ssl/SSLUtil.h>
 
@@ -34,9 +41,10 @@ namespace wangle {
 // TLSTicketKeyManager Implementation
 int32_t TLSTicketKeyManager::sExDataIndex_ = -1;
 
-TLSTicketKeyManager::TLSTicketKeyManager(folly::SSLContext* ctx, SSLStats* stats)
-  : ctx_(ctx),
-    stats_(stats) {
+TLSTicketKeyManager::TLSTicketKeyManager(
+    folly::SSLContext* ctx,
+    SSLStats* stats)
+    : ctx_(ctx), stats_(stats) {
   SSLUtil::getSSLCtxExIndex(&sExDataIndex_);
   SSL_CTX_set_ex_data(ctx_->getSSLCtx(), sExDataIndex_, this);
 }
@@ -55,13 +63,12 @@ TLSTicketKeyManager::callback(SSL* ssl, unsigned char* keyName,
 
   if (manager == nullptr) {
     LOG(FATAL) << "Null TLSTicketKeyManager in callback" ;
-    return -1;
   }
   return manager->processTicket(ssl, keyName, iv, cipherCtx, hmacCtx, encrypt);
 }
 
 int
-TLSTicketKeyManager::processTicket(SSL* ssl, unsigned char* keyName,
+TLSTicketKeyManager::processTicket(SSL*, unsigned char* keyName,
                                    unsigned char* iv,
                                    EVP_CIPHER_CTX* cipherCtx,
                                    HMAC_CTX* hmacCtx, int encrypt) {
@@ -84,7 +91,10 @@ TLSTicketKeyManager::processTicket(SSL* ssl, unsigned char* keyName,
       SSLUtil::hexlify(key->keyName_);
 
     // Get a random salt and write out key name
-    RAND_pseudo_bytes(salt, (int)sizeof(salt));
+    if (RAND_bytes(salt, (int)sizeof(salt)) != 1 &&
+        ERR_GET_LIB(ERR_peek_error()) == ERR_LIB_RAND) {
+      ERR_get_error();
+    }
     memcpy(keyName, key->keyName_.data(), kTLSTicketKeyNameLen);
     memcpy(keyName + kTLSTicketKeyNameLen, salt, kTLSTicketKeySaltLen);
 
@@ -96,7 +106,10 @@ TLSTicketKeyManager::processTicket(SSL* ssl, unsigned char* keyName,
     aesKey = output + SHA256_DIGEST_LENGTH / 2;
 
     // Initialize iv and cipher/mac CTX
-    RAND_pseudo_bytes(iv, AES_BLOCK_SIZE);
+    if (RAND_bytes(iv, AES_BLOCK_SIZE) != 1 &&
+        ERR_GET_LIB(ERR_peek_error()) == ERR_LIB_RAND) {
+      ERR_get_error();
+    }
     HMAC_Init_ex(hmacCtx, hmacKey, SHA256_DIGEST_LENGTH / 2,
                  EVP_sha256(), nullptr);
     EVP_EncryptInit_ex(cipherCtx, EVP_aes_128_cbc(), nullptr, aesKey, iv);
@@ -146,6 +159,8 @@ TLSTicketKeyManager::setTLSTicketKeySeeds(
     const std::vector<std::string>& currentSeeds,
     const std::vector<std::string>& newSeeds) {
 
+  recordTlsTicketRotation(oldSeeds, currentSeeds, newSeeds);
+
   bool result = true;
 
   activeKeys_.clear();
@@ -184,6 +199,45 @@ TLSTicketKeyManager::setTLSTicketKeySeeds(
   return true;
 }
 
+bool
+TLSTicketKeyManager::getTLSTicketKeySeeds(
+    std::vector<std::string>& oldSeeds,
+    std::vector<std::string>& currentSeeds,
+    std::vector<std::string>& newSeeds) const {
+  oldSeeds.clear();
+  currentSeeds.clear();
+  newSeeds.clear();
+  bool allGot = true;
+  for (const auto& seed : ticketSeeds_) {
+    std::string hexSeed;
+    if (!folly::hexlify(seed->seed_, hexSeed)) {
+      allGot = false;
+      continue;
+    }
+    if (seed->type_ == TLSTicketSeedType::SEED_OLD) {
+      oldSeeds.push_back(hexSeed);
+    } else if(seed->type_ == TLSTicketSeedType::SEED_CURRENT) {
+      currentSeeds.push_back(hexSeed);
+    } else {
+      newSeeds.push_back(hexSeed);
+    }
+  }
+  return allGot;
+}
+
+void TLSTicketKeyManager::recordTlsTicketRotation(
+    const std::vector<std::string>& oldSeeds,
+    const std::vector<std::string>& currentSeeds,
+    const std::vector<std::string>& newSeeds) {
+  if (stats_) {
+    TLSTicketKeySeeds next{oldSeeds, currentSeeds, newSeeds};
+    TLSTicketKeySeeds current;
+    getTLSTicketKeySeeds(
+        current.oldSeeds, current.currentSeeds, current.newSeeds);
+    stats_->recordTLSTicketRotation(current.isValidRotation(next));
+  }
+}
+
 string
 TLSTicketKeyManager::makeKeyName(TLSTicketSeed* seed, uint32_t n,
                                  unsigned char* nameBuf) {
@@ -216,7 +270,8 @@ TLSTicketKeyManager::insertNewKey(TLSTicketSeed* seed, uint32_t hashCount,
   newKey->hashCount_ = hashCount;
   newKey->keyName_ = makeKeyName(seed, hashCount, nameBuf);
   newKey->type_ = seed->type_;
-  auto it = ticketKeys_.insert(std::make_pair(newKey->keyName_,
+  auto newKeyName = newKey->keyName_;
+  auto it = ticketKeys_.insert(std::make_pair(std::move(newKeyName),
         std::move(newKey)));
 
   auto key = it.first->second.get();
@@ -271,7 +326,8 @@ TLSTicketKeyManager::findEncryptionKey() {
   // likely only 1.
   size_t numKeys = activeKeys_.size();
   if (numKeys > 0) {
-    result = activeKeys_[folly::Random::rand32() % numKeys];
+    auto const i = numKeys == 1 ? 0ul : folly::Random::rand32(numKeys);
+    result = activeKeys_[i];
   }
   return result;
 }

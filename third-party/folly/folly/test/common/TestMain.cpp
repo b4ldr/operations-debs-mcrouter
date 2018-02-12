@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Facebook, Inc.
+ * Copyright 2016-present Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,9 @@
 
 #include <folly/init/Init.h>
 
-#include <gtest/gtest.h>
+#include <folly/Portability.h>
+#include <folly/portability/GFlags.h>
+#include <folly/portability/GTest.h>
 
 /*
  * This is the recommended main function for all tests.
@@ -26,7 +28,14 @@
 int main(int argc, char** argv) __attribute__((__weak__));
 
 int main(int argc, char** argv) {
+#if FOLLY_HAVE_LIBGFLAGS
+  // Enable glog logging to stderr by default.
+  gflags::SetCommandLineOptionWithMode(
+      "logtostderr", "1", gflags::SET_FLAGS_DEFAULT);
+#endif
+
   ::testing::InitGoogleTest(&argc, argv);
-  folly::init(&argc, &argv);
+  folly::Init init(&argc, &argv);
+
   return RUN_ALL_TESTS();
 }

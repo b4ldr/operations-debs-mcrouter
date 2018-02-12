@@ -1,19 +1,26 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
- *  All rights reserved.
+ * Copyright 2017-present Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #pragma once
 
 #include <wangle/ssl/SSLCacheProvider.h>
 #include <wangle/ssl/SSLStats.h>
 
-#include <folly/EvictingCacheMap.h>
+#include <folly/container/EvictingCacheMap.h>
 #include <mutex>
+#include <folly/hash/Hash.h>
 #include <folly/io/async/AsyncSSLSocket.h>
 
 namespace wangle {
@@ -56,74 +63,17 @@ class LocalSSLSessionCache: private boost::noncopyable {
 class ShardedLocalSSLSessionCache : private boost::noncopyable {
  public:
   ShardedLocalSSLSessionCache(uint32_t n_buckets, uint32_t maxCacheSize,
-                              uint32_t cacheCullSize) {
-    CHECK(n_buckets > 0);
-    maxCacheSize = (uint32_t)(((double)maxCacheSize) / n_buckets);
-    cacheCullSize = (uint32_t)(((double)cacheCullSize) / n_buckets);
-    if (maxCacheSize == 0) {
-      maxCacheSize = 1;
-    }
-    if (cacheCullSize == 0) {
-      cacheCullSize = 1;
-    }
-    for (uint32_t i = 0; i < n_buckets; i++) {
-      caches_.push_back(
-        std::unique_ptr<LocalSSLSessionCache>(
-          new LocalSSLSessionCache(maxCacheSize, cacheCullSize)));
-    }
-  }
+                              uint32_t cacheCullSize);
 
-  SSL_SESSION* lookupSession(const std::string& sessionId) {
-    size_t bucket = hash(sessionId);
-    SSL_SESSION* session = nullptr;
-    std::lock_guard<std::mutex> g(caches_[bucket]->lock);
-
-    auto itr = caches_[bucket]->sessionCache.find(sessionId);
-    if (itr != caches_[bucket]->sessionCache.end()) {
-      session = itr->second;
-    }
-
-    if (session) {
-      CRYPTO_add(&session->references, 1, CRYPTO_LOCK_SSL_SESSION);
-    }
-    return session;
-  }
+  SSL_SESSION* lookupSession(const std::string& sessionId);
 
   void storeSession(const std::string& sessionId, SSL_SESSION* session,
-                    SSLStats* stats) {
-    size_t bucket = hash(sessionId);
-    SSL_SESSION* oldSession = nullptr;
-    std::lock_guard<std::mutex> g(caches_[bucket]->lock);
+                    SSLStats* stats);
 
-    auto itr = caches_[bucket]->sessionCache.find(sessionId);
-    if (itr != caches_[bucket]->sessionCache.end()) {
-      oldSession = itr->second;
-    }
+  void removeSession(const std::string& sessionId);
 
-    if (oldSession) {
-      // LRUCacheMap doesn't free on overwrite, so 2x the work for us
-      // This can happen in race conditions
-      SSL_SESSION_free(oldSession);
-    }
-    caches_[bucket]->removedSessions_ = 0;
-    caches_[bucket]->sessionCache.set(sessionId, session, true);
-    if (stats) {
-      stats->recordSSLSessionFree(caches_[bucket]->removedSessions_);
-    }
-  }
-
-  void removeSession(const std::string& sessionId) {
-    size_t bucket = hash(sessionId);
-    std::lock_guard<std::mutex> g(caches_[bucket]->lock);
-    caches_[bucket]->sessionCache.erase(sessionId);
-  }
-
- private:
-
-  /* SSL session IDs are 32 bytes of random data, hash based on first 16 bits */
   size_t hash(const std::string& key) {
-    CHECK(key.length() >= 2);
-    return (key[0] << 8 | key[1]) % caches_.size();
+    return folly::Hash()(key) % caches_.size();
   }
 
   std::vector< std::unique_ptr<LocalSSLSessionCache> > caches_;
@@ -195,9 +145,7 @@ class SSLSessionCacheManager : private boost::noncopyable {
     uint32_t maxCacheSize,
     uint32_t cacheCullSize,
     folly::SSLContext* ctx,
-    const folly::SocketAddress& sockaddr,
     const std::string& context,
-    folly::EventBase* eventBase,
     SSLStats* stats,
     const std::shared_ptr<SSLCacheProvider>& externalCache);
 
@@ -300,8 +248,18 @@ class SSLSessionCacheManager : private boost::noncopyable {
    */
   static int newSessionCallback(SSL* ssl, SSL_SESSION* session);
   static void removeSessionCallback(SSL_CTX* ctx, SSL_SESSION* session);
-  static SSL_SESSION* getSessionCallback(SSL* ssl, unsigned char* session_id,
-                                         int id_len, int* copyflag);
+
+#if FOLLY_OPENSSL_IS_110
+  using session_callback_arg_session_id_t = const unsigned char*;
+#else
+  using session_callback_arg_session_id_t = unsigned char*;
+#endif
+
+  static SSL_SESSION* getSessionCallback(
+      SSL* ssl,
+      session_callback_arg_session_id_t session_id,
+      int id_len,
+      int* copyflag);
 
   static int32_t sExDataIndex_;
   static std::shared_ptr<ShardedLocalSSLSessionCache> sCache_;
