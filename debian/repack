@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -e
 set -x
-version=${1:-0.24.0}
+version=${1:-0.37.0}
 wrkdir="$(mktemp -d)"
-
 # Trap exit to cleanup the workdir
 exit_sigspecs="ERR EXIT SIGTERM SIGHUP SIGINT SIGQUIT"
 
@@ -18,34 +17,34 @@ function cleanup_exit() {
 }
 trap cleanup_exit $exit_sigspecs
 
+
+
+
 function clone_repos {
 
     for repo in https://github.com/facebook/mcrouter.git \
                     https://github.com/facebook/folly.git \
-                    https://github.com/facebook/wangle.git \
-                    https://github.com/facebook/fbthrift.git;
+                    https://github.com/facebook/wangle.git
     do
-        (cd ${wrkdir} && git clone $repo)
+        (cd "$wrkdir" && git clone $repo)
     done
-
-    echo "Checking out version ${version}"
-    (cd ${wrkdir}/mcrouter && git checkout v${version})
 }
 
 function prepare  {
     srcdir=${wrkdir}/mcrouter/mcrouter
     tpdir=${srcdir}/third-party
     # Copy additional repos to third-party
-    mkdir -p ${tpdir}
-    for repo in folly wangle fbthrift;
-    do
-        # Store the revision of the dependent repos so that we know it
-        (cd ${wrkdir}/${repo} && \
-                git rev-parse --verify HEAD > ${srcdir}/${repo}_version)
-        cp -ax ${wrkdir}/${repo} ${tpdir}
+    for repo in folly wangle; do
+        _src=${wrkdir}/${repo}
+        _dst=${tpdir}/$repo
+        mkdir -p "${_dst}"
+        # use the latest tagged version of the repo
+        tp_version=$(git -C "$_src" describe --abbrev=0)
+        echo -n $tp_version >> "${srcdir}/${repo}_version"
+        git -C "$_src" archive --format tar "$tp_version" | tar -C "$_dst" -xf -
     done
     # Copy files and external repos
-    for i in LICENSE PATENTS README.md;
+    for i in LICENSE README.md;
     do
         mv ${wrkdir}/mcrouter/${i} ${srcdir}
     done
