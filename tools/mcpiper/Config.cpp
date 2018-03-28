@@ -1,15 +1,13 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "Config.h"
 
-#include <folly/Memory.h>
+#include <memory>
 
 #include "mcrouter/lib/network/gen/MemcacheRouterInfo.h"
 #include "mcrouter/lib/network/gen/MemcacheServer.h"
@@ -36,7 +34,7 @@ std::string getDefaultFifoRoot() {
 }
 
 std::unique_ptr<ValueFormatter> createValueFormatter() {
-  return folly::make_unique<ValueFormatter>();
+  return std::make_unique<ValueFormatter>();
 }
 
 std::string getVersion() {
@@ -64,10 +62,11 @@ addCarbonSnifferParser(
   return parserMap
       .emplace(
           connectionId,
-          folly::make_unique<SnifferParser<
+          std::make_unique<SnifferParser<
               MessagePrinter,
               memcache::detail::MemcacheRequestList>>(printer))
       .first;
 }
-}
-} // facebook::memcache
+
+} // memcache
+} // facebook

@@ -15,12 +15,16 @@
  */
 
 #include <folly/hash/Hash.h>
-#include <folly/MapUtil.h>
-#include <folly/portability/GTest.h>
+
 #include <stdint.h>
+
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+
+#include <folly/MapUtil.h>
+#include <folly/Range.h>
+#include <folly/portability/GTest.h>
 
 using namespace folly::hash;
 
@@ -76,17 +80,12 @@ TEST(Hash, Fnv64) {
   int32_t t4_c = 0xAB12CD34;
   const char* t4_d = "Unum";
   uint64_t t4_res = 15571330457339273965ULL;
-  uint64_t t4_hash1 = fnv64_buf(t4_a,
-                                strlen(t4_a));
-  uint64_t t4_hash2 = fnv64_buf(reinterpret_cast<void*>(&t4_b),
-                                sizeof(int64_t),
-                                t4_hash1);
-  uint64_t t4_hash3 = fnv64_buf(reinterpret_cast<void*>(&t4_c),
-                                sizeof(int32_t),
-                                t4_hash2);
-  uint64_t t4_hash4 = fnv64_buf(t4_d,
-                                strlen(t4_d),
-                                t4_hash3);
+  uint64_t t4_hash1 = fnv64_buf(t4_a, strlen(t4_a));
+  uint64_t t4_hash2 =
+      fnv64_buf(reinterpret_cast<void*>(&t4_b), sizeof(int64_t), t4_hash1);
+  uint64_t t4_hash3 =
+      fnv64_buf(reinterpret_cast<void*>(&t4_c), sizeof(int32_t), t4_hash2);
+  uint64_t t4_hash4 = fnv64_buf(t4_d, strlen(t4_d), t4_hash3);
   EXPECT_EQ(t4_hash4, t4_res);
   // note: These are probabalistic, not determinate, but c'mon.
   // These hash values should be different, or something's not
@@ -181,7 +180,7 @@ TEST(Hash, Jenkins_Rev_Unmix32) {
 
 TEST(Hash, hasher) {
   // Basically just confirms that things compile ok.
-  std::unordered_map<int32_t,int32_t,folly::hasher<int32_t>> m;
+  std::unordered_map<int32_t, int32_t, folly::hasher<int32_t>> m;
   m.insert(std::make_pair(4, 5));
   EXPECT_EQ(get_default(m, 4), 5);
 }
@@ -214,8 +213,35 @@ TEST(Hash, integral_types) {
   hashes.insert(hasher((int64_t)22));
   hashes.insert(hasher((uint64_t)23));
   hashes.insert(hasher((size_t)24));
-  EXPECT_EQ(24, hashes.size());
+
+  size_t setSize = 24;
+#if FOLLY_HAVE_INT128_T
+  hashes.insert(hasher((__int128_t)25));
+  hashes.insert(hasher((__uint128_t)26));
+  setSize += 2;
+#endif
+  EXPECT_EQ(setSize, hashes.size());
 }
+
+TEST(Hash, integer_conversion) {
+  folly::hasher<uint64_t> h;
+  uint64_t k = 10;
+  EXPECT_EQ(h(k), h(10));
+}
+
+#if FOLLY_HAVE_INT128_T
+TEST(Hash, int128_std_hash) {
+  std::unordered_set<__int128> hs;
+  hs.insert(__int128_t{1});
+  hs.insert(__int128_t{2});
+  EXPECT_EQ(2, hs.size());
+
+  std::set<unsigned __int128> s;
+  s.insert(static_cast<unsigned __int128>(1));
+  s.insert(static_cast<unsigned __int128>(2));
+  EXPECT_EQ(2, s.size());
+}
+#endif
 
 TEST(Hash, float_types) {
   folly::Hash hasher;
@@ -253,38 +279,27 @@ TEST(Hash, pair) {
   auto b = std::make_pair(3, 4);
   auto c = std::make_pair(1, 2);
   auto d = std::make_pair(2, 1);
-  EXPECT_EQ(hash_combine(a),
-            hash_combine(c));
-  EXPECT_NE(hash_combine(b),
-            hash_combine(c));
-  EXPECT_NE(hash_combine(d),
-            hash_combine(c));
+  EXPECT_EQ(hash_combine(a), hash_combine(c));
+  EXPECT_NE(hash_combine(b), hash_combine(c));
+  EXPECT_NE(hash_combine(d), hash_combine(c));
 
   // With composition
-  EXPECT_EQ(hash_combine(a, b),
-            hash_combine(c, b));
+  EXPECT_EQ(hash_combine(a, b), hash_combine(c, b));
   // Test order dependence
-  EXPECT_NE(hash_combine(a, b),
-            hash_combine(b, a));
+  EXPECT_NE(hash_combine(a, b), hash_combine(b, a));
 
   // Test with custom hasher
-  EXPECT_EQ(hash_combine_test(a),
-            hash_combine_test(c));
+  EXPECT_EQ(hash_combine_test(a), hash_combine_test(c));
   // 3 + 4 != 1 + 2
-  EXPECT_NE(hash_combine_test(b),
-            hash_combine_test(c));
+  EXPECT_NE(hash_combine_test(b), hash_combine_test(c));
   // This time, thanks to a terrible hash function, these are equal
-  EXPECT_EQ(hash_combine_test(d),
-            hash_combine_test(c));
+  EXPECT_EQ(hash_combine_test(d), hash_combine_test(c));
   // With composition
-  EXPECT_EQ(hash_combine_test(a, b),
-            hash_combine_test(c, b));
+  EXPECT_EQ(hash_combine_test(a, b), hash_combine_test(c, b));
   // Test order dependence
-  EXPECT_NE(hash_combine_test(a, b),
-            hash_combine_test(b, a));
+  EXPECT_NE(hash_combine_test(a, b), hash_combine_test(b, a));
   // Again, 1 + 2 == 2 + 1
-  EXPECT_EQ(hash_combine_test(a, b),
-            hash_combine_test(d, b));
+  EXPECT_EQ(hash_combine_test(a, b), hash_combine_test(d, b));
 }
 
 TEST(Hash, hash_combine) {
@@ -392,18 +407,15 @@ TEST(Hash, std_tuple_different_hash) {
   tuple3 t2(9, "bar", 3);
   tuple3 t3(42, "foo", 3);
 
-  EXPECT_NE(std::hash<tuple3>()(t1),
-            std::hash<tuple3>()(t2));
-  EXPECT_NE(std::hash<tuple3>()(t1),
-            std::hash<tuple3>()(t3));
+  EXPECT_NE(std::hash<tuple3>()(t1), std::hash<tuple3>()(t2));
+  EXPECT_NE(std::hash<tuple3>()(t1), std::hash<tuple3>()(t3));
 }
 
 TEST(Hash, Strings) {
   using namespace folly;
 
-  StringPiece a1 = "10050517", b1 = "51107032",
-              a2 = "10050518", b2 = "51107033",
-              a3 = "10050519", b3 = "51107034",
+  StringPiece a1 = "10050517", b1 = "51107032", a2 = "10050518",
+              b2 = "51107033", a3 = "10050519", b3 = "51107034",
               a4 = "10050525", b4 = "51107040";
   Range<const wchar_t*> w1 = range(L"10050517"), w2 = range(L"51107032"),
                         w3 = range(L"10050518"), w4 = range(L"51107033");
@@ -435,8 +447,8 @@ struct FNVTestParam {
 class FNVTest : public ::testing::TestWithParam<FNVTestParam> {};
 
 TEST_P(FNVTest, Fnva64Buf) {
-  EXPECT_EQ(GetParam().out,
-            fnva64_buf(GetParam().in.data(), GetParam().in.size()));
+  EXPECT_EQ(
+      GetParam().out, fnva64_buf(GetParam().in.data(), GetParam().in.size()));
 }
 
 TEST_P(FNVTest, Fnva64) {
@@ -447,9 +459,10 @@ TEST_P(FNVTest, Fnva64Partial) {
   size_t partialLen = GetParam().in.size() / 2;
   auto data = GetParam().in.data();
   auto partial = fnva64_buf(data, partialLen);
-  EXPECT_EQ(GetParam().out,
-            fnva64_buf(
-                data + partialLen, GetParam().in.size() - partialLen, partial));
+  EXPECT_EQ(
+      GetParam().out,
+      fnva64_buf(
+          data + partialLen, GetParam().in.size() - partialLen, partial));
 }
 
 // Taken from http://www.isthe.com/chongo/src/fnv/test_fnv.c
@@ -468,3 +481,265 @@ INSTANTIATE_TEST_CASE_P(
             0xd9b957fb7fe794c5},
         (FNVTestParam){"http://norvig.com/21-days.html", // 136
                        0x07aaa640476e0b9a}));
+
+namespace {
+enum class TestEnum {
+  MIN = 0,
+  ITEM = 1,
+  MAX = 2,
+};
+
+enum class TestBigEnum : uint64_t {
+  ITEM = 1,
+};
+
+struct TestStruct {};
+} // namespace
+
+namespace std {
+template <>
+struct hash<TestEnum> : hash<int> {};
+
+template <>
+struct hash<TestStruct> {
+  std::size_t operator()(TestStruct const&) const {
+    return 0;
+  }
+};
+} // namespace std
+
+//////// static checks
+
+static_assert(!folly::IsAvalanchingHasher<std::hash<int>, int>::value, "");
+static_assert(
+    !folly::IsAvalanchingHasher<std::hash<char const*>, char const*>::value,
+    "");
+static_assert(!folly::IsAvalanchingHasher<std::hash<float>, float>::value, "");
+static_assert(
+    !folly::IsAvalanchingHasher<std::hash<double>, double>::value,
+    "");
+static_assert(
+    !folly::IsAvalanchingHasher<std::hash<long double>, long double>::value,
+    "");
+static_assert(
+    folly::IsAvalanchingHasher<std::hash<std::string>, std::string>::value,
+    "");
+static_assert(
+    !folly::IsAvalanchingHasher<std::hash<TestEnum>, TestEnum>::value,
+    "");
+static_assert(
+    !folly::IsAvalanchingHasher<std::hash<TestStruct>, TestStruct>::value,
+    "");
+
+// these come from folly/hash/Hash.h
+static_assert(
+    folly::IsAvalanchingHasher<
+        std::hash<std::pair<int, int>>,
+        std::pair<int, int>>::value,
+    "");
+static_assert(
+    !folly::IsAvalanchingHasher<std::hash<std::tuple<int>>, std::tuple<int>>::
+        value,
+    "");
+static_assert(
+    folly::IsAvalanchingHasher<
+        std::hash<std::tuple<std::string>>,
+        std::tuple<std::string>>::value,
+    "");
+static_assert(
+    folly::IsAvalanchingHasher<
+        std::hash<std::tuple<int, int>>,
+        std::tuple<int, int>>::value,
+    "");
+static_assert(
+    folly::IsAvalanchingHasher<
+        std::hash<std::tuple<int, int, int>>,
+        std::tuple<int, int, int>>::value,
+    "");
+
+static_assert(!folly::IsAvalanchingHasher<folly::Hash, uint8_t>::value, "");
+static_assert(!folly::IsAvalanchingHasher<folly::Hash, char>::value, "");
+static_assert(!folly::IsAvalanchingHasher<folly::Hash, uint16_t>::value, "");
+static_assert(!folly::IsAvalanchingHasher<folly::Hash, int16_t>::value, "");
+static_assert(!folly::IsAvalanchingHasher<folly::Hash, uint32_t>::value, "");
+static_assert(!folly::IsAvalanchingHasher<folly::Hash, int32_t>::value, "");
+static_assert(folly::IsAvalanchingHasher<folly::Hash, uint64_t>::value, "");
+static_assert(folly::IsAvalanchingHasher<folly::Hash, int64_t>::value, "");
+static_assert(
+    folly::IsAvalanchingHasher<folly::Hash, folly::StringPiece>::value,
+    "");
+static_assert(folly::IsAvalanchingHasher<folly::Hash, std::string>::value, "");
+static_assert(!folly::IsAvalanchingHasher<folly::Hash, TestEnum>::value, "");
+static_assert(folly::IsAvalanchingHasher<folly::Hash, TestBigEnum>::value, "");
+
+static_assert(
+    !folly::IsAvalanchingHasher<folly::hasher<uint8_t>, uint8_t>::value,
+    "");
+static_assert(
+    !folly::IsAvalanchingHasher<folly::hasher<char>, char>::value,
+    "");
+static_assert(
+    !folly::IsAvalanchingHasher<folly::hasher<uint16_t>, uint16_t>::value,
+    "");
+static_assert(
+    !folly::IsAvalanchingHasher<folly::hasher<int16_t>, int16_t>::value,
+    "");
+static_assert(
+    !folly::IsAvalanchingHasher<folly::hasher<uint32_t>, uint32_t>::value,
+    "");
+static_assert(
+    !folly::IsAvalanchingHasher<folly::hasher<int32_t>, int32_t>::value,
+    "");
+static_assert(
+    folly::IsAvalanchingHasher<folly::hasher<uint64_t>, uint64_t>::value,
+    "");
+static_assert(
+    folly::IsAvalanchingHasher<folly::hasher<int64_t>, int64_t>::value,
+    "");
+static_assert(
+    folly::IsAvalanchingHasher<folly::hasher<float>, float>::value,
+    "");
+static_assert(
+    folly::IsAvalanchingHasher<folly::hasher<double>, double>::value,
+    "");
+static_assert(
+    folly::IsAvalanchingHasher<folly::hasher<std::string>, std::string>::value,
+    "");
+static_assert(
+    folly::IsAvalanchingHasher<folly::hasher<folly::StringPiece>, std::string>::
+        value,
+    "");
+
+static_assert(
+    folly::IsAvalanchingHasher<folly::hasher<std::string>, std::string>::value,
+    "");
+static_assert(
+    folly::IsAvalanchingHasher<
+        folly::hasher<std::pair<int, int>>,
+        std::pair<int, int>>::value,
+    "");
+static_assert(
+    !folly::IsAvalanchingHasher<
+        folly::hasher<std::tuple<int>>,
+        std::tuple<int>>::value,
+    "");
+static_assert(
+    folly::IsAvalanchingHasher<
+        folly::hasher<std::tuple<std::string>>,
+        std::tuple<std::string>>::value,
+    "");
+static_assert(
+    folly::IsAvalanchingHasher<
+        folly::hasher<std::tuple<int, int>>,
+        std::tuple<int, int>>::value,
+    "");
+static_assert(
+    folly::IsAvalanchingHasher<
+        folly::hasher<std::tuple<int, int, int>>,
+        std::tuple<int, int, int>>::value,
+    "");
+static_assert(
+    !folly::IsAvalanchingHasher<folly::hasher<TestEnum>, TestEnum>::value,
+    "");
+static_assert(
+    folly::IsAvalanchingHasher<folly::hasher<TestBigEnum>, TestBigEnum>::value,
+    "");
+
+//////// dynamic checks
+
+namespace {
+template <typename H, typename T, typename F>
+void verifyAvalanching(T initialValue, F const& advance) {
+  // This doesn't check probabilities, but does verify that every bit
+  // changed independently of every other bit, in both directions, when
+  // traversing a sequence of dependent changes.  Note that it is NOT
+  // sufficient to just use a random sequence here, because even the
+  // identity function will pass.  As constructed this will require
+  // 2^63 steps to complete for an identity hash, because none of the
+  // transitions with on == 63 will occur until then.
+  H const hasher;
+  constexpr std::size_t N = sizeof(decltype(hasher(initialValue))) * 8;
+
+  // seen[i][j] if we have seen i flip on at the same time as j went off
+  bool seen[N][N] = {};
+  std::size_t unseenCount = N * (N - 1);
+  auto v = initialValue;
+  auto h = hasher(v);
+  std::size_t steps = 0;
+  // wait for 95% coverage
+  while (unseenCount > (N * (N - 1)) / 95) {
+    ++steps;
+    auto hPrev = h;
+    advance(v);
+    h = hasher(v);
+
+    uint64_t delta = hPrev ^ h;
+    for (std::size_t i = 0; i < N - 1; ++i) {
+      if (((delta >> i) & 1) == 0) {
+        continue;
+      }
+      // we know i flipped
+      for (std::size_t j = i + 1; j < N; ++j) {
+        if (((delta >> j) & 1) == 0) {
+          continue;
+        }
+        // we know j flipped
+        bool iOn = ((hPrev >> i) & 1) == 0;
+        bool jOn = ((hPrev >> j) & 1) == 0;
+        if (iOn != jOn) {
+          auto on = iOn ? i : j;
+          auto off = iOn ? j : i;
+          if (!seen[on][off]) {
+            seen[on][off] = true;
+            --unseenCount;
+          }
+        }
+      }
+    }
+
+    // we should actually only need a couple hundred
+    ASSERT_LT(steps, 1000) << unseenCount << " of " << (N * (N - 1))
+                           << " pair transitions unseen";
+  }
+}
+} // namespace
+
+TEST(Traits, stdHashPairAvalances) {
+  verifyAvalanching<std::hash<std::pair<int, int>>>(
+      std::make_pair(0, 0), [](std::pair<int, int>& v) { v.first++; });
+}
+
+TEST(Traits, stdHashTuple2Avalances) {
+  verifyAvalanching<std::hash<std::tuple<int, int>>>(
+      std::make_tuple(0, 0),
+      [](std::tuple<int, int>& v) { std::get<0>(v) += 1; });
+}
+
+TEST(Traits, stdHashStringAvalances) {
+  verifyAvalanching<std::hash<std::string>, std::string>(
+      "00000000000000000000000000000", [](std::string& str) {
+        std::size_t i = 0;
+        while (str[i] == '1') {
+          str[i] = '0';
+          ++i;
+        }
+        str[i] = '1';
+      });
+}
+
+TEST(Traits, follyHashUint64Avalances) {
+  verifyAvalanching<folly::Hash>(uint64_t{0}, [](uint64_t& v) { v++; });
+}
+
+TEST(Traits, follyHasherInt64Avalances) {
+  verifyAvalanching<folly::hasher<int64_t>>(
+      int64_t{0}, [](int64_t& v) { v++; });
+}
+
+TEST(Traits, follyHasherFloatAvalanches) {
+  verifyAvalanching<folly::hasher<float>>(0.0f, [](float& v) { v += 1; });
+}
+
+TEST(Traits, follyHasherDoubleAvalanches) {
+  verifyAvalanching<folly::hasher<double>>(0.0, [](double& v) { v += 1; });
+}

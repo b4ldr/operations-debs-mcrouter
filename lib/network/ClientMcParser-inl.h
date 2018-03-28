@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include <folly/Format.h>
@@ -68,7 +66,7 @@ ClientMcParser<Callback>::expectNext() {
       debugFifo_->startMessage(
           MessageDirection::Received, ReplyT<Request>::typeId);
     }
-  } else if (parser_.protocol() == mc_umbrella_protocol) {
+  } else if (parser_.protocol() == mc_umbrella_protocol_DONOTUSE) {
     umbrellaOrCaretForwarder_ =
         &ClientMcParser<Callback>::forwardUmbrellaReply<Request>;
   } else if (parser_.protocol() == mc_caret_protocol) {
@@ -97,7 +95,8 @@ void ClientMcParser<Callback>::forwardAsciiReply() {
       ReplyStatsContext(
           0 /* usedCodecId  */,
           replySize /* reply size before compression */,
-          replySize /* reply size after compression */));
+          replySize /* reply size after compression */,
+          ServerLoad::zero()));
   replyForwarder_ = nullptr;
 }
 
@@ -117,7 +116,8 @@ void ClientMcParser<Callback>::forwardUmbrellaReply(
   callback_.replyReady(
       std::move(reply),
       reqId,
-      ReplyStatsContext(0 /* usedCodecId */, info.bodySize, info.bodySize));
+      ReplyStatsContext(
+          0 /* usedCodecId */, info.bodySize, info.bodySize, info.serverLoad));
 }
 
 template <class Callback>
@@ -143,8 +143,7 @@ void ClientMcParser<Callback>::forwardCaretReply(
   carbon::CarbonProtocolReader reader(cur);
   reply.deserialize(reader);
 
-  callback_.replyReady(
-      std::move(reply), reqId, getCompressionStats(headerInfo));
+  callback_.replyReady(std::move(reply), reqId, getReplyStats(headerInfo));
 }
 
 template <class Callback>
@@ -170,7 +169,7 @@ template <class Callback>
 bool ClientMcParser<Callback>::umMessageReady(
     const UmbrellaMessageInfo& info,
     const folly::IOBuf& buffer) {
-  if (UNLIKELY(parser_.protocol() != mc_umbrella_protocol)) {
+  if (UNLIKELY(parser_.protocol() != mc_umbrella_protocol_DONOTUSE)) {
     std::string reason = folly::sformat(
         "Expected {} protocol, but received umbrella!",
         mc_protocol_to_string(parser_.protocol()));
@@ -208,7 +207,9 @@ bool ClientMcParser<Callback>::caretMessageReady(
 
   try {
     const size_t reqId = headerInfo.reqId;
-    if (callback_.nextReplyAvailable(reqId)) {
+    if (UNLIKELY(reqId == kCaretConnectionControlReqId)) {
+      callback_.handleConnectionControlMessage(headerInfo);
+    } else if (callback_.nextReplyAvailable(reqId)) {
       (this->*umbrellaOrCaretForwarder_)(headerInfo, buffer, reqId);
     }
     return true;
@@ -288,7 +289,7 @@ bool ClientMcParser<Callback>::shouldReadToAsciiBuffer() const {
 }
 
 template <class Callback>
-ReplyStatsContext ClientMcParser<Callback>::getCompressionStats(
+ReplyStatsContext ClientMcParser<Callback>::getReplyStats(
     const UmbrellaMessageInfo& headerInfo) const {
   ReplyStatsContext replyStatsContext;
   if (headerInfo.usedCodecId > 0) {
@@ -309,6 +310,7 @@ ReplyStatsContext ClientMcParser<Callback>::getCompressionStats(
         replyStatsContext.replySizeBeforeCompression;
   }
   replyStatsContext.usedCodecId = headerInfo.usedCodecId;
+  replyStatsContext.serverLoad = headerInfo.serverLoad;
   return replyStatsContext;
 }
 
@@ -324,5 +326,5 @@ double ClientMcParser<Callback>::getDropProbability() const {
   }
   return 0.0;
 }
-}
-} // facebook::memcache
+} // memcache
+} // facebook

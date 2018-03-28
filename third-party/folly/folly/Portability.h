@@ -174,11 +174,17 @@ constexpr bool kIsSanitize = false;
 #endif
 
 #ifdef FOLLY_HAVE_SHADOW_LOCAL_WARNINGS
-#define FOLLY_GCC_DISABLE_NEW_SHADOW_WARNINGS        \
+#define FOLLY_GCC_DISABLE_NEW_SHADOW_WARNINGS            \
   FOLLY_GCC_DISABLE_WARNING("-Wshadow-compatible-local") \
-  FOLLY_GCC_DISABLE_WARNING("-Wshadow-local")
+  FOLLY_GCC_DISABLE_WARNING("-Wshadow-local")            \
+  FOLLY_GCC_DISABLE_WARNING("-Wshadow")
 #else
 #define FOLLY_GCC_DISABLE_NEW_SHADOW_WARNINGS /* empty */
+#endif
+
+// Globally disable -Wshadow for gcc < 5.
+#if __GNUC__ == 4 && !__clang__
+FOLLY_GCC_DISABLE_NEW_SHADOW_WARNINGS
 #endif
 
 /* Platform specific TLS support
@@ -341,10 +347,29 @@ constexpr auto kIsLinux = false;
 
 #if defined(_WIN32)
 constexpr auto kIsWindows = true;
-constexpr auto kMscVer = _MSC_VER;
 #else
 constexpr auto kIsWindows = false;
+#endif
+
+#if _MSC_VER
+constexpr auto kMscVer = _MSC_VER;
+#else
 constexpr auto kMscVer = 0;
+#endif
+
+// TODO: Remove when removing support for gcc4.9
+#if __GLIBCXX__ && __GLIBCXX__ == 20150123
+constexpr auto kIsGlib49 = true;
+#else
+constexpr auto kIsGlib49 = false;
+#endif
+
+// cpplib is an implementation of the standard library, and is the one typically
+// used with the msvc compiler
+#if _CPPLIB_VER
+constexpr auto kCpplibVer = _CPPLIB_VER;
+#else
+constexpr auto kCpplibVer = 0;
 #endif
 } // namespace folly
 

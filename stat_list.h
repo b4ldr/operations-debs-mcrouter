@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2015, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 // @nolint
@@ -22,8 +20,14 @@ STUI(num_servers_new, 0, 1)
 STUI(num_servers_up, 0, 1)
 STUI(num_servers_down, 0, 1)
 STUI(num_servers_closed, 0, 1)
+STUI(num_ssl_servers_up, 0, 1)
 STUI(num_clients, 0, 1)
+// Current number of open SSL connections
 STUI(num_suspect_servers, 0, 1)
+// Running total of successful SSL connection attempts
+STUI(num_ssl_connection_successes, 0, 1)
+STUI(num_ssl_resumption_attempts, 0, 1)
+STUI(num_ssl_resumption_successes, 0, 1)
 #undef GROUP
 #define GROUP mcproxy_stats | rate_stats
 STUI(destination_batches_sum, 0, 1)
@@ -95,6 +99,7 @@ STUI(destination_max_inflight_reqs, 0, 1)
 #undef GROUP
 #define GROUP ods_stats | detailed_stats | count_stats
 STUI(rate_limited_log_count, 0, 1)
+STUI(load_balancer_load_reset_count, 0, 1)
 #undef GROUP
 #define GROUP ods_stats | count_stats
 STUI(redirected_lease_set_count, 0, 1)
@@ -135,6 +140,12 @@ STUIR(failover_all, 0, 1)
 STUIR(failover_conditional, 0, 1)
 STUIR(failover_all_failed, 0, 1)
 STUIR(failover_rate_limited, 0, 1)
+STUIR(failover_inorder_policy, 0, 1)
+STUIR(failover_inorder_policy_failed, 0, 1)
+STUIR(failover_least_failures_policy, 0, 1)
+STUIR(failover_least_failures_policy_failed, 0, 1)
+STUIR(failover_custom_policy, 0, 1)
+STUIR(failover_custom_policy_failed, 0, 1)
 #undef GROUP
 #define GROUP ods_stats | count_stats
 STUI(result_error_count, 0, 1)
@@ -153,6 +164,7 @@ STUI(result_local_error_count, 0, 1)
 STUI(result_local_error_all_count, 0, 1)
 #undef GROUP
 #define GROUP ods_stats | detailed_stats | rate_stats
+STUIR(final_result_error, 0, 1)
 STUIR(result_error, 0, 1)
 STUIR(result_error_all, 0, 1)
 STUIR(result_connect_error, 0, 1)

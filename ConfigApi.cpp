@@ -1,18 +1,17 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "ConfigApi.h"
 
+#include <memory>
+
 #include <boost/filesystem.hpp>
 
 #include <folly/FileUtil.h>
-#include <folly/Memory.h>
 #include <folly/String.h>
 #include <folly/dynamic.h>
 
@@ -120,7 +119,7 @@ ConfigApi::CallbackHandle ConfigApi::subscribe(Callback callback) {
 void ConfigApi::startObserving() {
   assert(!finish_);
   if (!opts_.disable_reload_configs) {
-    configThread_ = std::thread(std::bind(&ConfigApi::configThreadRun, this));
+    configThread_ = std::thread([this]() { configThreadRun(); });
   }
 }
 
@@ -348,7 +347,7 @@ void ConfigApi::subscribeToTrackedSources() {
           }
         }
         if (!file.provider) {
-          file.provider = folly::make_unique<FileDataProvider>(file.path);
+          file.provider = std::make_unique<FileDataProvider>(file.path);
         }
       } catch (const std::exception& e) {
         // it's not that bad, we will check for change in hash

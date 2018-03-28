@@ -33,6 +33,12 @@
 #include <sys/types.h>
 #include <thread>
 
+#if FOLLY_HAVE_VLA
+#define FOLLY_HAVE_VLA_01 1
+#else
+#define FOLLY_HAVE_VLA_01 0
+#endif
+
 using std::string;
 using std::unique_ptr;
 
@@ -57,8 +63,7 @@ const AsyncSocketException socketShutdownForWritesEx(
 
 // TODO: It might help performance to provide a version of BytesWriteRequest that
 // users could derive from, so we can avoid the extra allocation for each call
-// to write()/writev().  We could templatize TFramedAsyncChannel just like the
-// protocols are currently templatized for transports.
+// to write()/writev().
 //
 // We would need the version for external users where they provide the iovec
 // storage space, and only our internal version would allocate it at the end of
@@ -984,7 +989,7 @@ void AsyncSocket::writeChain(WriteCallback* callback, unique_ptr<IOBuf>&& buf,
     // suppress "warning: variable length array 'vec' is used [-Wvla]"
     FOLLY_PUSH_WARNING
     FOLLY_GCC_DISABLE_WARNING("-Wvla")
-    iovec vec[BOOST_PP_IF(FOLLY_HAVE_VLA, count, kSmallSizeMax)];
+    iovec vec[BOOST_PP_IF(FOLLY_HAVE_VLA_01, count, kSmallSizeMax)];
     FOLLY_POP_WARNING
 
     writeChainImpl(callback, vec, count, std::move(buf), flags);

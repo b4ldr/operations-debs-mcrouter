@@ -19,6 +19,7 @@
 #include <folly/experimental/logging/LogConfigParser.h>
 #include <folly/experimental/logging/LogHandlerFactory.h>
 #include <folly/experimental/logging/LoggerDB.h>
+#include <folly/experimental/logging/test/ConfigHelpers.h>
 #include <folly/experimental/logging/test/TestLogHandler.h>
 #include <folly/json.h>
 #include <folly/portability/GMock.h>
@@ -49,39 +50,6 @@ auto MatchLogHandler(const LogHandlerConfig& config) {
 }
 
 } // namespace
-
-namespace folly {
-/**
- * Print TestLogHandler objects nicely in test failure messages
- */
-std::ostream& operator<<(
-    std::ostream& os,
-    const std::shared_ptr<LogHandler>& handler) {
-  auto configHandler = std::dynamic_pointer_cast<TestLogHandler>(handler);
-  if (!configHandler) {
-    os << "unknown handler type";
-    return os;
-  }
-
-  auto config = configHandler->getConfig();
-  os << "ConfigHandler(" << (config.type ? config.type.value() : "[no type]");
-  for (const auto& entry : config.options) {
-    os << ", " << entry.first << "=" << entry.second;
-  }
-  os << ")";
-  return os;
-}
-
-std::ostream& operator<<(std::ostream& os, const LogConfig& config) {
-  os << toPrettyJson(logConfigToDynamic(config));
-  return os;
-}
-
-std::ostream& operator<<(std::ostream& os, const LogHandlerConfig& config) {
-  os << toPrettyJson(logConfigToDynamic(config));
-  return os;
-}
-} // namespace folly
 
 TEST(ConfigUpdate, updateLogLevels) {
   LoggerDB db{LoggerDB::TESTING};
@@ -376,4 +344,45 @@ TEST(ConfigUpdate, getConfigAnonymousHandlers) {
                      "anonymousHandler1=handlerA: key=value; "
                      "anonymousHandler2=foo: abc=xyz"),
       db.getConfig());
+}
+
+TEST(ConfigUpdate, getFullConfig) {
+  LoggerDB db{LoggerDB::TESTING};
+  db.registerHandlerFactory(
+      std::make_unique<TestLogHandlerFactory>("handlerA"));
+  db.registerHandlerFactory(
+      std::make_unique<TestLogHandlerFactory>("handlerB"));
+  EXPECT_EQ(parseLogConfig(".:=ERROR:"), db.getConfig());
+
+  db.getCategory("src.libfoo.foo.c");
+  db.getCategory("src.libfoo.foo.h");
+  db.getCategory("src.libfoo.bar.h");
+  db.getCategory("src.libfoo.bar.c");
+  db.getCategory("test.foo.test.c");
+
+  db.updateConfig(
+      parseLogConfig(".=ERR:stdout,"
+                     "src.libfoo=dbg5; "
+                     "stdout=handlerA:stream=stdout"));
+  EXPECT_EQ(
+      parseLogConfig(".:=ERR:stdout,"
+                     "src.libfoo=dbg5:; "
+                     "stdout=handlerA:stream=stdout"),
+      db.getConfig());
+  EXPECT_EQ(
+      parseLogConfig(".:=ERR:stdout,"
+                     "src=FATAL:, "
+                     "src.libfoo=dbg5:, "
+                     "src.libfoo.foo=FATAL:, "
+                     "src.libfoo.foo.c=FATAL:, "
+                     "src.libfoo.foo.h=FATAL:, "
+                     "src.libfoo.bar=FATAL:, "
+                     "src.libfoo.bar.c=FATAL:, "
+                     "src.libfoo.bar.h=FATAL:, "
+                     "test=FATAL:, "
+                     "test.foo=FATAL:, "
+                     "test.foo.test=FATAL:, "
+                     "test.foo.test.c=FATAL:; "
+                     "stdout=handlerA:stream=stdout"),
+      db.getFullConfig());
 }

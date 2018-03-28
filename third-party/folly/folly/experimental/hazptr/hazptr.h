@@ -90,6 +90,8 @@ class hazptr_domain {
   template <typename T, typename D = std::default_delete<T>>
   void retire(T* obj, D reclaim = {});
   void cleanup();
+  void priv_add(hazptr_priv* rec);
+  void priv_remove(hazptr_priv* rec);
 
  private:
   friend class hazptr_obj_batch;
@@ -326,7 +328,7 @@ class hazptr_local {
 
  private:
   aligned_hazptr_holder raw_[M];
-  bool need_destruct_{false};
+  bool slow_path_{false};
 };
 
 } // namespace hazptr

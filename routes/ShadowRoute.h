@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -15,14 +13,18 @@
 #include <utility>
 #include <vector>
 
+#include <folly/Function.h>
 #include <folly/Optional.h>
 
-#include "mcrouter/Proxy.h"
+#include "mcrouter/McrouterFiberContext.h"
+#include "mcrouter/McrouterLogFailure.h"
+#include "mcrouter/ProxyBase.h"
 #include "mcrouter/lib/Operation.h"
 #include "mcrouter/lib/RouteHandleTraverser.h"
-#include "mcrouter/route.h"
 #include "mcrouter/routes/DefaultShadowPolicy.h"
+#include "mcrouter/routes/McRouteHandleBuilder.h"
 #include "mcrouter/routes/ShadowRouteIf.h"
+#include "mcrouter/routes/ShadowSettings.h"
 
 namespace folly {
 struct dynamic;
@@ -68,34 +70,52 @@ class ShadowRoute {
       const Request& req,
       const RouteHandleTraverser<RouteHandleIf>& t) const {
     t(*normal_, req);
-    for (auto& shadowData : shadowData_) {
-      t(*shadowData.first, req);
-    }
+    fiber_local<RouterInfo>::runWithLocals([this, &req, &t]() mutable {
+      fiber_local<RouterInfo>::addRequestClass(RequestClass::kShadow);
+      for (auto& shadowData : shadowData_) {
+        t(*shadowData.first, req);
+      }
+    });
   }
 
   template <class Request>
   ReplyT<Request> route(const Request& req) const {
-    std::shared_ptr<Request> adjustedReq;
+    std::shared_ptr<const Request> adjustedNormalReq;
     folly::Optional<ReplyT<Request>> normalReply;
     for (const auto& iter : shadowData_) {
       if (shouldShadow(req, iter.second.get())) {
-        if (!adjustedReq) {
-          adjustedReq = std::make_shared<Request>(
-              shadowPolicy_.updateRequestForShadowing(req));
-        }
-        if (!normalReply && shadowPolicy_.shouldDelayShadow(req)) {
-          normalReply = normal_->route(*adjustedReq);
-        }
         auto shadow = iter.first;
-        dispatchShadowRequest(std::move(shadow), adjustedReq);
+        if (!shadow) {
+          if (auto& reqCtx = fiber_local<RouterInfo>::getSharedCtx()) {
+            MC_LOG_FAILURE(
+                reqCtx->proxy().router().opts(),
+                failure::Category::kInvalidConfig,
+                "ShadowRoute: ShadowData has unexpected nullptr route handle");
+          }
+          continue;
+        }
+
+        if (!adjustedNormalReq) {
+          adjustedNormalReq = shadowPolicy_.makeAdjustedNormalRequest(req);
+          assert(adjustedNormalReq);
+        }
+
+        if (!normalReply &&
+            shadowPolicy_.template shouldDelayShadow<Request>()) {
+          normalReply = normal_->route(*adjustedNormalReq);
+        }
+
+        dispatchShadowRequest(
+            std::move(shadow),
+            shadowPolicy_.makeShadowRequest(adjustedNormalReq),
+            normalReply ? shadowPolicy_.makePostShadowReplyFn(*normalReply)
+                        : nullptr);
       }
     }
 
-    if (normalReply) {
-      return std::move(*normalReply);
-    } else {
-      return normal_->route(adjustedReq ? *adjustedReq : req);
-    }
+    return normalReply
+        ? std::move(*normalReply)
+        : normal_->route(adjustedNormalReq ? *adjustedNormalReq : req);
   }
 
  private:
@@ -105,28 +125,34 @@ class ShadowRoute {
 
   template <class Request>
   bool shouldShadow(const Request& req, ShadowSettings* settings) const {
-    // If configured to use an explicit list of keys to be shadowed, check for
-    // req.key() in that list. Otherwise, decide to shadow based on keyRange().
-    const auto& keysToShadow = settings->keysToShadow();
-    if (!keysToShadow.empty()) {
-      const auto hashAndKeyToFind =
-          std::make_tuple(req.key().routingKeyHash(), req.key().routingKey());
-      return std::binary_search(
-          keysToShadow.begin(),
-          keysToShadow.end(),
-          hashAndKeyToFind,
-          std::less<std::tuple<uint32_t, folly::StringPiece>>());
+    auto& ctx = fiber_local<RouterInfo>::getSharedCtx();
+
+    if (!settings) {
+      if (ctx) {
+        MC_LOG_FAILURE(
+            ctx->proxy().router().opts(),
+            failure::Category::kInvalidConfig,
+            "ShadowRoute: ShadowSettings is nullptr");
+      }
+      return false;
     }
 
-    auto range = settings->keyRange();
-    return range.first <= req.key().routingKeyHash() &&
-        req.key().routingKeyHash() <= range.second;
+    if (!ctx) {
+      LOG_FAILURE(
+          "mcrouter",
+          failure::Category::kInvalidConfig,
+          "ShadowRoute: ProxyRequestContext is nullptr. Ignoring randomness.");
+      return settings->shouldShadowKey(req);
+    }
+
+    return settings->shouldShadow(req, ctx->proxy().randomGenerator());
   }
 
   template <class Request>
   void dispatchShadowRequest(
       std::shared_ptr<RouteHandleIf> shadow,
-      std::shared_ptr<Request> adjustedReq) const;
+      std::shared_ptr<Request> adjustedReq,
+      folly::Function<void(const ReplyT<Request>&)> postShadowReplyFn) const;
 };
 
 template <class RouterInfo>

@@ -50,11 +50,20 @@
 #include <folly/Portability.h>
 #include <folly/Traits.h>
 #include <folly/lang/Assume.h>
+#include <folly/lang/Exception.h>
 #include <folly/memory/Malloc.h>
-#include <folly/portability/BitsFunctexcept.h>
 #include <folly/portability/Malloc.h>
 #include <folly/portability/TypeTraits.h>
-#include <folly/synchronization/SmallLocks.h>
+
+#if (FOLLY_X64 || FOLLY_PPC64)
+#define FOLLY_SV_PACK_ATTR FOLLY_PACK_ATTR
+#define FOLLY_SV_PACK_PUSH FOLLY_PACK_PUSH
+#define FOLLY_SV_PACK_POP FOLLY_PACK_POP
+#else
+#define FOLLY_SV_PACK_ATTR
+#define FOLLY_SV_PACK_PUSH
+#define FOLLY_SV_PACK_POP
+#endif
 
 // Ignore shadowing warnings within this file, so includers can use -Wshadow.
 FOLLY_PUSH_WARNING
@@ -381,7 +390,7 @@ inline void* shiftPointer(void* p, size_t sizeBytes) {
 } // namespace detail
 
 //////////////////////////////////////////////////////////////////////
-FOLLY_PACK_PUSH
+FOLLY_SV_PACK_PUSH
 template <
     class Value,
     std::size_t RequestedMaxInline = 1,
@@ -872,14 +881,14 @@ class small_vector : public detail::small_vector_base<
 
   reference at(size_type i) {
     if (i >= size()) {
-      std::__throw_out_of_range("index out of range");
+      throw_exception<std::out_of_range>("index out of range");
     }
     return (*this)[i];
   }
 
   const_reference at(size_type i) const {
     if (i >= size()) {
-      std::__throw_out_of_range("index out of range");
+      throw_exception<std::out_of_range>("index out of range");
     }
     return (*this)[i];
   }
@@ -1094,7 +1103,7 @@ class small_vector : public detail::small_vector_base<
     void setCapacity(InternalSizeType c) {
       capacity_ = c;
     }
-  } FOLLY_PACK_ATTR;
+  } FOLLY_SV_PACK_ATTR;
 
   struct HeapPtr {
     // Lower order bit of heap_ is used as flag to indicate whether capacity is
@@ -1108,7 +1117,7 @@ class small_vector : public detail::small_vector_base<
     void setCapacity(InternalSizeType c) {
       *static_cast<InternalSizeType*>(detail::pointerFlagClear(heap_)) = c;
     }
-  } FOLLY_PACK_ATTR;
+  } FOLLY_SV_PACK_ATTR;
 
 #if (FOLLY_X64 || FOLLY_PPC64)
   typedef unsigned char InlineStorageDataType[sizeof(value_type) * MaxInline];
@@ -1180,9 +1189,9 @@ class small_vector : public detail::small_vector_base<
       auto vp = detail::pointerFlagClear(pdata_.heap_);
       free(vp);
     }
-  } FOLLY_PACK_ATTR u;
-} FOLLY_PACK_ATTR;
-FOLLY_PACK_POP
+  } FOLLY_SV_PACK_ATTR u;
+} FOLLY_SV_PACK_ATTR;
+FOLLY_SV_PACK_POP
 
 //////////////////////////////////////////////////////////////////////
 
@@ -1209,3 +1218,7 @@ struct IndexableTraits<small_vector<T, M, A, B, C>>
 } // namespace folly
 
 FOLLY_POP_WARNING
+
+#undef FOLLY_SV_PACK_ATTR
+#undef FOLLY_SV_PACK_PUSH
+#undef FOLLY_SV_PACK_POP

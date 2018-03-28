@@ -1,2 +1,0 @@
-mstch_pyi src/shared.thrift
-mstch_pyi:asyncio src/shared.thrift

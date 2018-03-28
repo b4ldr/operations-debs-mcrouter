@@ -17,6 +17,7 @@
 
 #include <set>
 
+#include <folly/CPortability.h>
 #include <folly/Conv.h>
 #include <folly/FileUtil.h>
 #include <folly/String.h>
@@ -28,7 +29,6 @@
 #include <folly/experimental/logging/Logger.h>
 #include <folly/experimental/logging/RateLimiter.h>
 #include <folly/experimental/logging/StreamHandlerFactory.h>
-#include <folly/portability/Config.h>
 
 using std::string;
 
@@ -40,10 +40,7 @@ namespace folly {
  * This is defined as a weak symbol to allow programs to provide their own
  * alternative definition if desired.
  */
-#if FOLLY_HAVE_WEAK_SYMBOLS
-void initializeLoggerDB(LoggerDB& db) __attribute__((weak));
-#endif
-void initializeLoggerDB(LoggerDB& db) {
+FOLLY_ATTR_WEAK void initializeLoggerDB(LoggerDB& db) {
   // Register the StreamHandlerFactory
   //
   // This is the only LogHandlerFactory that we register by default.  We
@@ -159,6 +156,14 @@ void LoggerDB::setLevel(LogCategory* category, LogLevel level, bool inherit) {
 }
 
 LogConfig LoggerDB::getConfig() const {
+  return getConfigImpl(/* includeAllCategories = */ false);
+}
+
+LogConfig LoggerDB::getFullConfig() const {
+  return getConfigImpl(/* includeAllCategories = */ true);
+}
+
+LogConfig LoggerDB::getConfigImpl(bool includeAllCategories) const {
   auto handlerInfo = handlerInfo_.rlock();
 
   LogConfig::HandlerConfigMap handlerConfigs;
@@ -193,9 +198,10 @@ LogConfig LoggerDB::getConfig() const {
       auto levelInfo = category->getLevelInfo();
       auto handlers = category->getHandlers();
 
-      // Don't report categories that have default settings.
-      if (handlers.empty() && levelInfo.first == LogLevel::MAX_LEVEL &&
-          levelInfo.second) {
+      // Don't report categories that have default settings
+      // if includeAllCategories is false
+      if (!includeAllCategories && handlers.empty() &&
+          levelInfo.first == LogLevel::MAX_LEVEL && levelInfo.second) {
         continue;
       }
 

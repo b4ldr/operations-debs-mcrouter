@@ -59,9 +59,18 @@ nobase_follyinclude_HEADERS = \
 	container/Access.h \
 	container/Array.h \
 	container/detail/BitIteratorDetail.h \
+	container/detail/F14Defaults.h \
+	container/detail/F14IntrinsicsAvailability.h \
+	container/detail/F14Memory.h \
+	container/detail/F14Policy.h \
+	container/detail/F14Table.h \
 	container/Iterator.h \
 	container/Enumerate.h \
 	container/EvictingCacheMap.h \
+	container/F14Map-pre.h \
+	container/F14Map.h \
+	container/F14Set-pre.h \
+	container/F14Set.h \
 	container/Foreach.h \
 	container/Foreach-inl.h \
 	container/SparseByteSet.h \
@@ -81,6 +90,7 @@ nobase_follyinclude_HEADERS = \
 	detail/PolyDetail.h \
 	detail/RangeCommon.h \
 	detail/RangeSse42.h \
+	detail/Singleton.h \
 	detail/SlowFingerprint.h \
 	detail/SocketFastOpen.h \
 	detail/StaticSingletonManager.h \
@@ -101,6 +111,7 @@ nobase_follyinclude_HEADERS = \
 	executors/IOThreadPoolExecutor.h \
 	executors/NotificationQueueExecutor.h \
 	executors/ScheduledExecutor.h \
+	executors/SequencedExecutor.h \
 	executors/SerialExecutor.h \
 	executors/ThreadPoolExecutor.h \
 	executors/ThreadedExecutor.h \
@@ -276,6 +287,7 @@ nobase_follyinclude_HEADERS = \
 	io/async/AsyncPipe.h \
 	io/async/AsyncTimeout.h \
 	io/async/AsyncTransport.h \
+	io/async/AsyncTransportCertificate.h \
 	io/async/AsyncUDPServerSocket.h \
 	io/async/AsyncUDPSocket.h \
 	io/async/AsyncServerSocket.h \
@@ -328,9 +340,11 @@ nobase_follyinclude_HEADERS = \
 	lang/Assume.h \
 	lang/Bits.h \
 	lang/ColdClass.h \
+	lang/Exception.h \
 	lang/Launder.h \
 	lang/RValueReferenceWrapper.h \
 	lang/SafeAssert.h \
+	lang/UncaughtExceptions.h \
 	Lazy.h \
 	Likely.h \
 	LockTraits.h \
@@ -363,7 +377,6 @@ nobase_follyinclude_HEADERS = \
 	Portability.h \
 	portability/Asm.h \
 	portability/Atomic.h \
-	portability/BitsFunctexcept.h \
 	portability/Builtins.h \
 	portability/Config.h \
 	portability/Constexpr.h \
@@ -438,6 +451,7 @@ nobase_follyinclude_HEADERS = \
 	synchronization/Baton.h \
 	synchronization/CallOnce.h \
 	synchronization/LifoSem.h \
+	synchronization/MicroSpinLock.h \
 	synchronization/ParkingLot.h \
 	synchronization/PicoSpinLock.h \
 	synchronization/RWSpinLock.h \
@@ -460,7 +474,8 @@ nobase_follyinclude_HEADERS = \
 	Synchronized.h \
 	SynchronizedPtr.h \
 	test/FBStringTestBenchmarks.cpp.h \
-	test/FBVectorTestBenchmarks.cpp.h \
+	test/FBVectorBenchmarks.cpp.h \
+	test/FBVectorTests.cpp.h \
 	test/function_benchmark/benchmark_impl.h \
 	test/function_benchmark/test_functions.h \
 	test/SynchronizedTestLib.h \
@@ -477,7 +492,6 @@ nobase_follyinclude_HEADERS = \
 	Try.h \
 	Unicode.h \
 	Function.h \
-	UncaughtExceptions.h \
 	Unit.h \
 	Uri.h \
 	Uri-inl.h \
@@ -496,7 +510,6 @@ libfollybase_la_SOURCES = \
 	Format.cpp \
 	FormatArg.cpp \
 	memory/MallctlHelper.cpp \
-	portability/BitsFunctexcept.cpp \
 	String.cpp \
 	Unicode.cpp
 
@@ -506,6 +519,7 @@ libfolly_la_SOURCES = \
 	compression/Counters.cpp \
 	compression/Zlib.cpp \
 	concurrency/CacheLocality.cpp \
+	container/detail/F14Table.cpp \
 	detail/AtFork.cpp \
 	detail/Futex.cpp \
 	detail/IPAddress.cpp \

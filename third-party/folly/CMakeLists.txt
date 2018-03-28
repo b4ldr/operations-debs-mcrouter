@@ -267,12 +267,20 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/folly_dep.cpp
   COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_BINARY_DIR}/folly_dep.cpp
   DEPENDS folly_base folly_fingerprint
 )
-add_library(folly ${CMAKE_CURRENT_BINARY_DIR}/folly_dep.cpp $<TARGET_OBJECTS:folly_base>)
+add_library(folly
+  ${CMAKE_CURRENT_BINARY_DIR}/folly_dep.cpp
+  $<TARGET_OBJECTS:folly_base>
+)
 apply_folly_compile_options_to_target(folly)
 source_group("" FILES ${CMAKE_CURRENT_BINARY_DIR}/folly_dep.cpp)
 
 target_link_libraries(folly PUBLIC ${FOLLY_LINK_LIBRARIES})
-target_include_directories(folly PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
+target_include_directories(folly
+  INTERFACE
+    ${FOLLY_INCLUDE_DIRECTORIES}
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+    $<INSTALL_INTERFACE:include>
+)
 
 install(TARGETS folly
   EXPORT folly
@@ -285,22 +293,32 @@ auto_install_files(folly ${FOLLY_DIR}
   ${FOLLY_DIR}/detail/SlowFingerprint.h
   ${FOLLY_DIR}/detail/FingerprintPolynomial.h
 )
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/folly/folly-config.h DESTINATION include/folly)
+install(
+  FILES ${CMAKE_CURRENT_BINARY_DIR}/folly/folly-config.h
+  DESTINATION include/folly
+  COMPONENT dev
+)
+
+# Generate the folly-config.cmake file for installation so that
+# downstream projects that use on folly can easily depend on it in their CMake
+# files using "find_package(folly CONFIG)"
+configure_file(
+  ${CMAKE_CURRENT_SOURCE_DIR}/CMake/folly-config.cmake.in
+  ${CMAKE_CURRENT_BINARY_DIR}/folly-config.cmake
+  @ONLY
+)
+install(
+  FILES ${CMAKE_CURRENT_BINARY_DIR}/folly-config.cmake
+  DESTINATION share/folly
+  COMPONENT dev
+)
 install(
   EXPORT folly
   DESTINATION share/folly
   NAMESPACE Folly::
   FILE folly-targets.cmake
+  COMPONENT dev
 )
-
-# We need a wrapper config file to do the find_package calls to ensure
-# that all our dependencies are available to link against.
-file(
-  COPY ${CMAKE_CURRENT_SOURCE_DIR}/CMake/folly-deps.cmake
-  DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/
-)
-file(APPEND ${CMAKE_CURRENT_BINARY_DIR}/folly-deps.cmake "\ninclude(folly-targets.cmake)\n")
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/folly-deps.cmake DESTINATION share/folly RENAME folly-config.cmake)
 
 option(BUILD_TESTS "If enabled, compile the tests." OFF)
 option(BUILD_BROKEN_TESTS "If enabled, compile tests that are known to be broken." OFF)
@@ -332,6 +350,8 @@ if (BUILD_TESTS)
     ${FOLLY_DIR}/test/SingletonTestStructs.cpp
     ${FOLLY_DIR}/test/SocketAddressTestHelper.cpp
     ${FOLLY_DIR}/test/SocketAddressTestHelper.h
+    ${FOLLY_DIR}/experimental/logging/test/ConfigHelpers.cpp
+    ${FOLLY_DIR}/experimental/logging/test/ConfigHelpers.h
     ${FOLLY_DIR}/experimental/logging/test/TestLogHandler.cpp
     ${FOLLY_DIR}/experimental/logging/test/TestLogHandler.h
     ${FOLLY_DIR}/futures/test/TestExecutor.cpp
@@ -387,6 +407,9 @@ if (BUILD_TESTS)
       # EnumerateTest.cpp since it uses macros to define tests.
       #TEST enumerate_test SOURCES EnumerateTest.cpp
       TEST evicting_cache_map_test SOURCES EvictingCacheMapTest.cpp
+      TEST f14_pre_test SOURCES F14PreTest.cpp
+      TEST f14_map_test SOURCES F14MapTest.cpp
+      TEST f14_set_test SOURCES F14SetTest.cpp
       TEST foreach_test SOURCES ForeachTest.cpp
       TEST merge_test SOURCES MergeTest.cpp
       TEST sparse_byte_set_test SOURCES SparseByteSetTest.cpp
