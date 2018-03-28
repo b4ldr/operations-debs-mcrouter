@@ -32,15 +32,15 @@ AC_PROG_CXX
 AC_PROG_CC
 AC_PROG_CPP
 AX_PYTHON_DEVEL()
-AX_CXX_COMPILE_STDCXX_11([],[mandatory])
+AX_CXX_COMPILE_STDCXX_14([],[mandatory])
 LT_INIT
 
 CXXFLAGS="-fno-strict-aliasing $CXXFLAGS"
 CXXFLAGS="-W -Wall -Wextra -Wno-unused-parameter $CXXFLAGS"
 CXXFLAGS=" -Wno-missing-field-initializers -Wno-deprecated $CXXFLAGS"
-CXXFLAGS="-DLIBMC_FBTRACE_DISABLE $CXXFLAGS"
+CXXFLAGS="-DLIBMC_FBTRACE_DISABLE -DDISABLE_COMPRESSION $CXXFLAGS"
 
-CFLAGS="-DLIBMC_FBTRACE_DISABLE $CFLAGS"
+CFLAGS="-DLIBMC_FBTRACE_DISABLE -DDISABLE_COMPRESSION $CFLAGS"
 
 # Checks for glog and gflags
 # There are no symbols with C linkage, so we do a try-run
@@ -168,8 +168,6 @@ AC_CONFIG_FILES([Makefile
                  lib/test/Makefile
                  lib/config/Makefile
                  lib/config/test/Makefile
-                 lib/cycles/Makefile
-                 lib/cycles/test/Makefile
                  lib/fbi/Makefile
                  lib/fbi/test/Makefile
                  lib/fbi/cpp/Makefile

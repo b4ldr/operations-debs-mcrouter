@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "McPiper.h"
@@ -12,7 +10,6 @@
 #include <unordered_set>
 
 #include "mcrouter/lib/network/CarbonMessageList.h"
-
 #include "mcrouter/tools/mcpiper/FifoReader.h"
 #include "mcrouter/tools/mcpiper/MessagePrinter.h"
 
@@ -32,8 +29,10 @@ MessagePrinter::Options getOptions(const Settings& settings, McPiper* mcpiper) {
   options.numAfterMatch = settings.numAfterMatch;
   options.quiet = settings.quiet;
   options.raw = settings.raw;
+  options.script = settings.script;
   options.maxMessages = settings.maxMessages;
-  options.disableColor = settings.raw || !isatty(fileno(stdout));
+  options.disableColor =
+      settings.raw || settings.script || !isatty(fileno(stdout));
 
   // Time Function
   static struct timeval prevTs = {0, 0};
@@ -92,7 +91,7 @@ MessagePrinter::Filter getFilter(const Settings& settings) {
   if (!settings.protocol.empty()) {
     auto protocol = mc_string_to_protocol(settings.protocol.c_str());
     if (protocol == mc_ascii_protocol || protocol == mc_caret_protocol ||
-        protocol == mc_umbrella_protocol) {
+        protocol == mc_umbrella_protocol_DONOTUSE) {
       filter.protocol.emplace(protocol);
     } else {
       LOG(ERROR) << "Invalid protocol. ascii|caret|umbrella expected, got "
@@ -119,6 +118,11 @@ MessagePrinter::Filter getFilter(const Settings& settings) {
 
 void McPiper::stop() {
   running_ = false;
+  eventBase_.runInEventBaseThread([this]() {
+    if (fifoReaderManager_) {
+      fifoReaderManager_->unregisterCallbacks();
+    }
+  });
 }
 
 void McPiper::run(Settings settings, std::ostream& targetOut) {
@@ -130,7 +134,7 @@ void McPiper::run(Settings settings, std::ostream& targetOut) {
     std::cerr << "Filename pattern: " << *filenamePattern << std::endl;
   }
 
-  messagePrinter_ = folly::make_unique<MessagePrinter>(
+  messagePrinter_ = std::make_unique<MessagePrinter>(
       getOptions(settings, this),
       getFilter(settings),
       createValueFormatter(),
@@ -175,17 +179,17 @@ void McPiper::run(Settings settings, std::ostream& targetOut) {
 
   initCompression();
 
-  folly::EventBase eventBase;
-  FifoReaderManager fifoManager(
-      eventBase,
+  fifoReaderManager_ = std::make_unique<FifoReaderManager>(
+      eventBase_,
       fifoReaderCallback,
       settings.fifoRoot,
       std::move(filenamePattern));
 
-  eventBase.setMaxReadAtOnce(1);
   while (running_) {
-    eventBase.loopOnce();
+    eventBase_.loopOnce();
   }
+
+  fifoReaderManager_.reset();
 }
 
 } // mcpiper namespace

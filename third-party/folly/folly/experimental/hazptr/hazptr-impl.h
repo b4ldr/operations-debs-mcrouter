@@ -84,6 +84,7 @@
 #define HAZPTR_STATS false
 #endif
 
+#include <folly/SingletonThreadLocal.h>
 #include <folly/concurrency/CacheLocality.h>
 #include <folly/experimental/hazptr/debug.h>
 #include <folly/synchronization/AsymmetricMemoryBarrier.h>
@@ -161,8 +162,8 @@ bool hazptr_tc_enabled();
 bool hazptr_priv_enabled();
 
 hazptr_tc* hazptr_tc_tls();
-void hazptr_tc_init();
-void hazptr_tc_shutdown();
+void hazptr_tc_init(hazptr_tc& tc);
+void hazptr_tc_shutdown(hazptr_tc& tc);
 hazptr_rec* hazptr_tc_try_get();
 bool hazptr_tc_try_put(hazptr_rec* hprec);
 
@@ -183,6 +184,7 @@ class hazptr_priv {
     tail_ = nullptr;
     rcount_ = 0;
     active_ = true;
+    default_hazptr_domain().priv_add(this);
   }
 
   bool active() {
@@ -313,11 +315,11 @@ class hazptr_priv {
 };
 
 static_assert(
-    std::is_trivial<hazptr_priv>::value,
+    folly::kCpplibVer || std::is_trivial<hazptr_priv>::value,
     "hazptr_priv must be trivial to avoid a branch to check initialization");
 
-void hazptr_priv_init();
-void hazptr_priv_shutdown();
+void hazptr_priv_init(hazptr_priv& priv);
+void hazptr_priv_shutdown(hazptr_priv& priv);
 bool hazptr_priv_try_retire(hazptr_obj* obj);
 
 inline void hazptr_priv_list::insert(hazptr_priv* rec) {
@@ -363,27 +365,31 @@ inline void hazptr_priv_list::collect(hazptr_obj*& head, hazptr_obj*& tail) {
   }
 }
 
-/** hazptr_tls_life */
-
-struct hazptr_tls_life {
-  hazptr_tls_life();
-  ~hazptr_tls_life();
-};
-
-void tls_life_odr_use();
-
 /** tls globals */
-#if HAZPTR_ENABLE_TLS
-extern thread_local hazptr_tls_state tls_state_;
-extern thread_local hazptr_tc tls_tc_data_;
-extern thread_local hazptr_priv tls_priv_data_;
-extern thread_local hazptr_tls_life tls_life_; // last
-#else
-extern hazptr_tls_state tls_state_;
-extern hazptr_tc tls_tc_data_;
-extern hazptr_priv tls_priv_data_;
-extern hazptr_tls_life tls_life_; // last
-#endif
+
+struct hazptr_tls_globals_ {
+  hazptr_tls_state tls_state{TLS_UNINITIALIZED};
+  hazptr_tc tc;
+  hazptr_priv priv;
+
+  hazptr_tls_globals_() {
+    HAZPTR_DEBUG_PRINT(this);
+    tls_state = TLS_ALIVE;
+    hazptr_tc_init(tc);
+    hazptr_priv_init(priv);
+  }
+  ~hazptr_tls_globals_() {
+    HAZPTR_DEBUG_PRINT(this);
+    CHECK(tls_state == TLS_ALIVE);
+    hazptr_tc_shutdown(tc);
+    hazptr_priv_shutdown(priv);
+    tls_state = TLS_DESTROYED;
+  }
+};
+FOLLY_ALWAYS_INLINE hazptr_tls_globals_& hazptr_tls_globals() {
+  return folly::SingletonThreadLocal<hazptr_tls_globals_, void>::get();
+}
+
 /**
  *  hazptr_domain
  */
@@ -701,6 +707,7 @@ FOLLY_ALWAYS_INLINE hazptr_array<M>::~hazptr_array() {
       auto count = tc.count();
       if ((M <= HAZPTR_TC_SIZE) && (count + M <= HAZPTR_TC_SIZE)) {
         for (size_t i = 0; i < M; ++i) {
+          h[i].reset();
           tc[count + i].hprec_ = h[i].hazptr_;
           HAZPTR_DEBUG_PRINT(i << " " << &h[i]);
           new (&h[i]) hazptr_holder(nullptr);
@@ -773,7 +780,7 @@ FOLLY_ALWAYS_INLINE hazptr_local<M>::hazptr_local() {
     }
   }
   // Slow path
-  need_destruct_ = true;
+  slow_path_ = true;
   for (size_t i = 0; i < M; ++i) {
     new (&h[i]) hazptr_holder;
     HAZPTR_DEBUG_PRINT(
@@ -783,13 +790,17 @@ FOLLY_ALWAYS_INLINE hazptr_local<M>::hazptr_local() {
 
 template <size_t M>
 FOLLY_ALWAYS_INLINE hazptr_local<M>::~hazptr_local() {
-  if (LIKELY(!need_destruct_)) {
+  if (LIKELY(!slow_path_)) {
     if (kIsDebug) {
       auto ptc = hazptr_tc_tls();
       DCHECK(ptc != nullptr);
       auto& tc = *ptc;
       DCHECK(tc.local_);
       tc.local_ = false;
+    }
+    auto h = reinterpret_cast<hazptr_holder*>(&raw_);
+    for (size_t i = 0; i < M; ++i) {
+      h[i].reset();
     }
     return;
   }
@@ -930,6 +941,14 @@ inline void hazptr_domain::cleanup() {
     pushRetired(h, t, 0);
   }
   bulkReclaim();
+}
+
+inline void hazptr_domain::priv_add(hazptr_priv* rec) {
+  priv_.insert(rec);
+}
+
+inline void hazptr_domain::priv_remove(hazptr_priv* rec) {
+  priv_.remove(rec);
 }
 
 inline hazptr_rec* hazptr_domain::hazptrAcquire() {
@@ -1162,20 +1181,17 @@ FOLLY_ALWAYS_INLINE size_t hazptr_tc::count() {
 
 /** hazptr_tc free functions */
 FOLLY_ALWAYS_INLINE hazptr_tc* hazptr_tc_tls() {
-  HAZPTR_DEBUG_PRINT(tls_state_);
-  if (LIKELY(tls_state_ == TLS_ALIVE)) {
-    HAZPTR_DEBUG_PRINT(tls_state_);
-    return &tls_tc_data_;
-  } else if (tls_state_ == TLS_UNINITIALIZED) {
-    tls_life_odr_use();
-    return &tls_tc_data_;
+  HAZPTR_DEBUG_PRINT(hazptr_tls_globals().tls_state);
+  if (LIKELY(hazptr_tls_globals().tls_state == TLS_ALIVE)) {
+    HAZPTR_DEBUG_PRINT(hazptr_tls_globals().tls_state);
+    return &hazptr_tls_globals().tc;
+  } else if (hazptr_tls_globals().tls_state == TLS_UNINITIALIZED) {
+    return &hazptr_tls_globals().tc;
   }
   return nullptr;
 }
 
-inline void hazptr_tc_init() {
-  HAZPTR_DEBUG_PRINT("");
-  auto& tc = tls_tc_data_;
+inline void hazptr_tc_init(hazptr_tc& tc) {
   HAZPTR_DEBUG_PRINT(&tc);
   tc.count_ = 0;
   if (kIsDebug) {
@@ -1183,8 +1199,7 @@ inline void hazptr_tc_init() {
   }
 }
 
-inline void hazptr_tc_shutdown() {
-  auto& tc = tls_tc_data_;
+inline void hazptr_tc_shutdown(hazptr_tc& tc) {
   HAZPTR_DEBUG_PRINT(&tc);
   for (size_t i = 0; i < tc.count_; ++i) {
     tc.entry_[i].evict();
@@ -1193,22 +1208,21 @@ inline void hazptr_tc_shutdown() {
 
 FOLLY_ALWAYS_INLINE hazptr_rec* hazptr_tc_try_get() {
   HAZPTR_DEBUG_PRINT(TLS_UNINITIALIZED << TLS_ALIVE << TLS_DESTROYED);
-  HAZPTR_DEBUG_PRINT(tls_state_);
-  if (LIKELY(tls_state_ == TLS_ALIVE)) {
-    HAZPTR_DEBUG_PRINT(tls_state_);
-    return tls_tc_data_.get();
-  } else if (tls_state_ == TLS_UNINITIALIZED) {
-    tls_life_odr_use();
-    return tls_tc_data_.get();
+  HAZPTR_DEBUG_PRINT(hazptr_tls_globals().tls_state);
+  if (LIKELY(hazptr_tls_globals().tls_state == TLS_ALIVE)) {
+    HAZPTR_DEBUG_PRINT(hazptr_tls_globals().tls_state);
+    return hazptr_tls_globals().tc.get();
+  } else if (hazptr_tls_globals().tls_state == TLS_UNINITIALIZED) {
+    return hazptr_tls_globals().tc.get();
   }
   return nullptr;
 }
 
 FOLLY_ALWAYS_INLINE bool hazptr_tc_try_put(hazptr_rec* hprec) {
-  HAZPTR_DEBUG_PRINT(tls_state_);
-  if (LIKELY(tls_state_ == TLS_ALIVE)) {
-    HAZPTR_DEBUG_PRINT(tls_state_);
-    return tls_tc_data_.put(hprec);
+  HAZPTR_DEBUG_PRINT(hazptr_tls_globals().tls_state);
+  if (LIKELY(hazptr_tls_globals().tls_state == TLS_ALIVE)) {
+    HAZPTR_DEBUG_PRINT(hazptr_tls_globals().tls_state);
+    return hazptr_tls_globals().tc.put(hprec);
   }
   return false;
 }
@@ -1217,61 +1231,33 @@ FOLLY_ALWAYS_INLINE bool hazptr_tc_try_put(hazptr_rec* hprec) {
  *  hazptr_priv
  */
 
-inline void hazptr_priv_init() {
-  auto& priv = tls_priv_data_;
+inline void hazptr_priv_init(hazptr_priv& priv) {
   HAZPTR_DEBUG_PRINT(&priv);
   priv.init();
 }
 
-inline void hazptr_priv_shutdown() {
-  auto& priv = tls_priv_data_;
+inline void hazptr_priv_shutdown(hazptr_priv& priv) {
   HAZPTR_DEBUG_PRINT(&priv);
   DCHECK(priv.active());
   priv.clear_active();
   if (!priv.empty()) {
     priv.push_all_to_domain();
   }
+  default_hazptr_domain().priv_remove(&priv);
 }
 
 inline bool hazptr_priv_try_retire(hazptr_obj* obj) {
-  HAZPTR_DEBUG_PRINT(tls_state_);
-  if (tls_state_ == TLS_ALIVE) {
-    HAZPTR_DEBUG_PRINT(tls_state_);
-    tls_priv_data_.push(obj);
+  HAZPTR_DEBUG_PRINT(hazptr_tls_globals().tls_state);
+  if (hazptr_tls_globals().tls_state == TLS_ALIVE) {
+    HAZPTR_DEBUG_PRINT(hazptr_tls_globals().tls_state);
+    hazptr_tls_globals().priv.push(obj);
     return true;
-  } else if (tls_state_ == TLS_UNINITIALIZED) {
-    HAZPTR_DEBUG_PRINT(tls_state_);
-    tls_life_odr_use();
-    tls_priv_data_.push(obj);
+  } else if (hazptr_tls_globals().tls_state == TLS_UNINITIALIZED) {
+    HAZPTR_DEBUG_PRINT(hazptr_tls_globals().tls_state);
+    hazptr_tls_globals().priv.push(obj);
     return true;
   }
   return false;
-}
-
-/** hazptr_tls_life */
-
-inline void tls_life_odr_use() {
-  HAZPTR_DEBUG_PRINT(tls_state_);
-  CHECK(tls_state_ == TLS_UNINITIALIZED);
-  auto volatile tlsOdrUse = &tls_life_;
-  CHECK(tlsOdrUse != nullptr);
-  HAZPTR_DEBUG_PRINT(tlsOdrUse);
-}
-
-inline hazptr_tls_life::hazptr_tls_life() {
-  HAZPTR_DEBUG_PRINT(this);
-  CHECK(tls_state_ == TLS_UNINITIALIZED);
-  hazptr_tc_init();
-  hazptr_priv_init();
-  tls_state_ = TLS_ALIVE;
-}
-
-inline hazptr_tls_life::~hazptr_tls_life() {
-  HAZPTR_DEBUG_PRINT(this);
-  CHECK(tls_state_ == TLS_ALIVE);
-  hazptr_tc_shutdown();
-  hazptr_priv_shutdown();
-  tls_state_ = TLS_DESTROYED;
 }
 
 /** hazptr_obj_batch */

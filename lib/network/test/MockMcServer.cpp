@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include <signal.h>
@@ -15,6 +13,7 @@
 #include <glog/logging.h>
 
 #include <folly/Format.h>
+#include <folly/Singleton.h>
 
 #include "mcrouter/lib/McOperation.h"
 #include "mcrouter/lib/network/AsyncMcServer.h"
@@ -314,14 +313,14 @@ class MockMcOnRequest {
 };
 
 void serverLoop(
-    size_t threadId,
+    size_t /* threadId */,
     folly::EventBase& evb,
     AsyncMcServerWorker& worker) {
   worker.setOnRequest(MemcacheRequestHandler<MockMcOnRequest>());
   evb.loop();
 }
 
-void usage(char** argv) {
+[[noreturn]] void usage(char** argv) {
   std::cerr << "Arguments:\n"
                "  -P <port>      TCP port on which to listen\n"
                "  -t <fd>        TCP listen sock fd\n"
@@ -333,7 +332,7 @@ void usage(char** argv) {
 }
 
 int main(int argc, char** argv) {
-  google::InitGoogleLogging(argv[0]);
+  folly::SingletonVault::singleton()->registrationComplete();
 
   AsyncMcServer::Options opts;
   opts.worker.versionString = "MockMcServer-1.0";

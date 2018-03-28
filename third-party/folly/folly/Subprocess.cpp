@@ -310,6 +310,14 @@ void Subprocess::spawn(
   pipesGuard.dismiss();
 }
 
+// With -Wclobbered, gcc complains about vfork potentially cloberring the
+// childDir variable, even though we only use it on the child side of the
+// vfork.
+
+FOLLY_PUSH_WARNING
+#if !defined(__clang__)
+FOLLY_GCC_DISABLE_WARNING("-Wclobbered")
+#endif
 void Subprocess::spawnInternal(
     std::unique_ptr<const char*[]> argv,
     const char* executable,
@@ -446,6 +454,7 @@ void Subprocess::spawnInternal(
   pid_ = pid;
   returnCode_ = ProcessReturnCode::makeRunning();
 }
+FOLLY_POP_WARNING
 
 int Subprocess::prepareChild(const Options& options,
                              const sigset_t* sigmask,

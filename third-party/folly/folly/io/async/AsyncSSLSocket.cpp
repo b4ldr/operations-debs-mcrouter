@@ -19,7 +19,6 @@
 #include <folly/io/async/EventBase.h>
 #include <folly/portability/Sockets.h>
 
-#include <boost/noncopyable.hpp>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/types.h>
@@ -365,9 +364,11 @@ void AsyncSSLSocket::shutdownWriteNow() {
 }
 
 bool AsyncSSLSocket::good() const {
-  return (AsyncSocket::good() &&
-          (sslState_ == STATE_ACCEPTING || sslState_ == STATE_CONNECTING ||
-           sslState_ == STATE_ESTABLISHED || sslState_ == STATE_UNENCRYPTED));
+  return (
+      AsyncSocket::good() &&
+      (sslState_ == STATE_ACCEPTING || sslState_ == STATE_CONNECTING ||
+       sslState_ == STATE_ESTABLISHED || sslState_ == STATE_UNENCRYPTED ||
+       sslState_ == STATE_UNINIT));
 }
 
 // The TAsyncTransport definition of 'good' states that the transport is
@@ -823,6 +824,9 @@ const SSL* AsyncSSLSocket::getSSL() const {
 }
 
 void AsyncSSLSocket::setSSLSession(SSL_SESSION *session, bool takeOwnership) {
+  if (sslSession_) {
+    SSL_SESSION_free(sslSession_);
+  }
   sslSession_ = session;
   if (!takeOwnership && session != nullptr) {
     // Increment the reference count

@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include "FifoReader.h"
@@ -251,7 +249,7 @@ void FifoReaderManager::runScanDirectory() {
     if (fd >= 0) {
       auto pipeReader = folly::AsyncPipeReader::UniquePtr(
           new folly::AsyncPipeReader(&evb_, fd));
-      auto callback = folly::make_unique<FifoReadCallback>(fifo, messageReady_);
+      auto callback = std::make_unique<FifoReadCallback>(fifo, messageReady_);
       pipeReader->setReadCB(callback.get());
       fifoReaders_.emplace(
           fifo, FifoReader(std::move(pipeReader), std::move(callback)));
@@ -263,5 +261,12 @@ void FifoReaderManager::runScanDirectory() {
   evb_.runAfterDelay(
       [this]() { runScanDirectory(); }, kPollDirectoryIntervalMs);
 }
+
+void FifoReaderManager::unregisterCallbacks() {
+  for (auto& fifoReader : fifoReaders_) {
+    fifoReader.second.first->setReadCB(nullptr);
+  }
+}
+
 } // memcache
 } // facebook

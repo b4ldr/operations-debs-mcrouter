@@ -34,13 +34,13 @@ namespace folly {
 
 /// Returns the best real CacheLocality information available
 static CacheLocality getSystemLocalityInfo() {
-#ifdef __linux__
-  try {
-    return CacheLocality::readFromSysfs();
-  } catch (...) {
-    // keep trying
+  if (kIsLinux) {
+    try {
+      return CacheLocality::readFromSysfs();
+    } catch (...) {
+      // keep trying
+    }
   }
-#endif
 
   long numCpus = sysconf(_SC_NPROCESSORS_CONF);
   if (numCpus <= 0) {
@@ -249,7 +249,7 @@ void* SimpleAllocator::allocateHard() {
   // Allocate a new slab.
   mem_ = static_cast<uint8_t*>(folly::aligned_malloc(allocSize_, allocSize_));
   if (!mem_) {
-    std::__throw_bad_alloc();
+    throw_exception<std::bad_alloc>();
   }
   end_ = mem_ + allocSize_;
   blocks_.push_back(mem_);

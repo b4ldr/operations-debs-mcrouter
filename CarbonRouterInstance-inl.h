@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2016-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include <vector>
@@ -19,7 +17,6 @@
 
 #include "mcrouter/AsyncWriter.h"
 #include "mcrouter/CarbonRouterInstanceBase.h"
-#include "mcrouter/FileObserver.h"
 #include "mcrouter/McrouterLogFailure.h"
 #include "mcrouter/McrouterLogger.h"
 #include "mcrouter/Proxy.h"
@@ -155,6 +152,7 @@ CarbonRouterInstance<RouterInfo>* CarbonRouterInstance<RouterInfo>::createRaw(
 
   auto router = new CarbonRouterInstance<RouterInfo>(std::move(input_options));
 
+  folly::Expected<folly::Unit, std::string> result;
   try {
     folly::json::serialization_opts jsonOpts;
     jsonOpts.sort_keys = true;
@@ -162,11 +160,22 @@ CarbonRouterInstance<RouterInfo>* CarbonRouterInstance<RouterInfo>::createRaw(
     auto jsonStr = folly::json::serialize(dict, jsonOpts);
     failure::setServiceContext(routerName(router->opts()), std::move(jsonStr));
 
-    if (router->spinUp(evbs)) {
+    result = router->spinUp(evbs);
+    if (result.hasValue()) {
       return router;
     }
   } catch (...) {
+    result = folly::makeUnexpected(
+        folly::exceptionStr(std::current_exception()).toStdString());
   }
+
+  result.error() = folly::sformat(
+      "mcrouter error (router name '{}', flavor '{}',"
+      " service '{}'): {}",
+      router->opts().router_name,
+      router->opts().flavor_name,
+      router->opts().service_name,
+      result.error());
 
   // Proxy destruction depends on EventBase loop running. Ensure that all user
   // EventBases have their loops running and if not - loop them ourselves.
@@ -184,7 +193,7 @@ CarbonRouterInstance<RouterInfo>* CarbonRouterInstance<RouterInfo>::createRaw(
     tmpThread.second.join();
   }
 
-  return nullptr;
+  throw std::runtime_error(std::move(result.error()));
 }
 
 template <class RouterInfo>
@@ -224,7 +233,8 @@ CarbonRouterInstance<RouterInfo>::createSameThreadClient(
 }
 
 template <class RouterInfo>
-bool CarbonRouterInstance<RouterInfo>::spinUp(
+folly::Expected<folly::Unit, std::string>
+CarbonRouterInstance<RouterInfo>::spinUp(
     const std::vector<folly::EventBase*>& evbs) {
   CHECK(evbs.empty() || evbs.size() == opts_.num_proxies);
 
@@ -233,50 +243,55 @@ bool CarbonRouterInstance<RouterInfo>::spinUp(
     initCompression(*this);
   }
 
-  bool configuredFromDisk = false;
+  bool configuringFromDisk = false;
   {
     std::lock_guard<std::mutex> lg(configReconfigLock_);
 
     auto builder = createConfigBuilder();
-    if (!builder) {
+    if (builder.hasError()) {
+      std::string initialError = std::move(builder.error());
       // If we cannot create ConfigBuilder from normal config,
       // try creating it from backup files.
       configApi_->enableReadingFromBackupFiles();
-      configuredFromDisk = true;
+      configuringFromDisk = true;
       builder = createConfigBuilder();
-      if (!builder) {
-        return false;
+      if (builder.hasError()) {
+        return folly::makeUnexpected(folly::sformat(
+            "Failed to configure, initial error '{}', from backup '{}'",
+            initialError,
+            builder.error()));
       }
     }
 
     for (size_t i = 0; i < opts_.num_proxies; i++) {
       if (evbs.empty()) {
         try {
-          proxyThreads_.emplace_back(folly::make_unique<ProxyThread>(*this, i));
+          proxyThreads_.emplace_back(std::make_unique<ProxyThread>(*this, i));
         } catch (...) {
-          LOG(ERROR) << "Failed to start proxy thread: "
-                     << folly::exceptionStr(std::current_exception());
-          return false;
+          return folly::makeUnexpected(folly::sformat(
+              "Failed to start proxy thread: {}",
+              folly::exceptionStr(std::current_exception())));
         }
-        proxyEvbs_.push_back(folly::make_unique<folly::VirtualEventBase>(
+        proxyEvbs_.push_back(std::make_unique<folly::VirtualEventBase>(
             proxyThreads_.back()->getEventBase()));
       } else {
         CHECK(evbs[i] != nullptr);
         proxyEvbs_.push_back(
-            folly::make_unique<folly::VirtualEventBase>(*evbs[i]));
+            std::make_unique<folly::VirtualEventBase>(*evbs[i]));
       }
 
       try {
         proxies_.emplace_back(
             Proxy<RouterInfo>::createProxy(*this, *proxyEvbs_[i], i));
       } catch (...) {
-        LOG(ERROR) << "Failed to create proxy: "
-                   << folly::exceptionStr(std::current_exception());
-        return false;
+        return folly::makeUnexpected(folly::sformat(
+            "Failed to create proxy: {}",
+            folly::exceptionStr(std::current_exception())));
       }
     }
 
-    if (configure(builder.value())) {
+    auto configResult = configure(builder.value());
+    if (configResult.hasValue()) {
       configApi_->subscribeToTrackedSources();
     } else {
       configFailures_++;
@@ -286,32 +301,29 @@ bool CarbonRouterInstance<RouterInfo>::spinUp(
       // failed to configure, we have to create ConfigBuilder again,
       // this time reading from backup files.
       configApi_->enableReadingFromBackupFiles();
-      configuredFromDisk = true;
+      configuringFromDisk = true;
       builder = createConfigBuilder();
-      if (configure(builder.value())) {
+      auto reconfigResult = configure(builder.value());
+      if (reconfigResult.hasValue()) {
         configApi_->subscribeToTrackedSources();
       } else {
         configApi_->abandonTrackedSources();
         LOG(ERROR) << "Failed to configure proxies";
-        return false;
+        return folly::makeUnexpected(folly::sformat(
+            "Failed to configure, initial error '{}', from backup '{}'",
+            configResult.error(),
+            reconfigResult.error()));
       }
     }
   }
 
-  if (configuredFromDisk) {
-    configsFromDisk_++;
-  }
+  configuredFromDisk_ = configuringFromDisk;
 
   startTime_ = time(nullptr);
 
-  try {
-    spawnAuxiliaryThreads();
-  } catch (const std::exception& e) {
-    LOG(ERROR) << e.what();
-    return false;
-  }
+  spawnAuxiliaryThreads();
 
-  return true;
+  return folly::Unit();
 }
 
 template <class RouterInfo>
@@ -366,6 +378,7 @@ void CarbonRouterInstance<RouterInfo>::subscribeToConfigUpdate() {
       }
     }
     if (success) {
+      configuredFromDisk_ = false;
       onReconfigureSuccess_.notify();
     } else {
       LOG(ERROR) << "Error while reconfiguring mcrouter after config change";
@@ -378,24 +391,10 @@ void CarbonRouterInstance<RouterInfo>::spawnAuxiliaryThreads() {
   configApi_->startObserving();
   subscribeToConfigUpdate();
 
-  startAwriterThreads();
   startObservingRuntimeVarsFile();
   registerOnUpdateCallbackForRxmits();
-  statUpdaterThread_ = std::thread([this]() { statUpdaterThreadRun(); });
+  registerForStatsUpdates();
   spawnStatLoggerThread();
-}
-
-template <class RouterInfo>
-void CarbonRouterInstance<RouterInfo>::startAwriterThreads() {
-  if (!opts_.asynclog_disable) {
-    if (!asyncWriter_->start("mcrtr-awriter")) {
-      throw std::runtime_error("failed to spawn mcrouter awriter thread");
-    }
-  }
-
-  if (!statsLogWriter_->start("mcrtr-statsw")) {
-    throw std::runtime_error("failed to spawn mcrouter stats writer thread");
-  }
 }
 
 template <class RouterInfo>
@@ -423,54 +422,18 @@ void CarbonRouterInstance<RouterInfo>::startObservingRuntimeVarsFile() {
     return;
   }
 
-  startObservingFile(
-      opts_.runtime_vars_file,
-      *evbAuxiliaryThread_.getEventBase(),
-      opts_.file_observer_poll_period_ms,
-      opts_.file_observer_sleep_before_update_ms,
-      std::move(onUpdate));
-}
-
-template <class RouterInfo>
-void CarbonRouterInstance<RouterInfo>::statUpdaterThreadRun() {
-  mcrouterSetThisThreadName(opts_, "stats");
-
-  if (opts_.num_proxies == 0) {
-    return;
-  }
-
-  // the idx of the oldest bin
-  int idx = 0;
-  static const int BIN_NUM =
-      (MOVING_AVERAGE_WINDOW_SIZE_IN_SECOND /
-       MOVING_AVERAGE_BIN_SIZE_IN_SECOND);
-
-  while (true) {
-    {
-      /* Wait for the full timeout unless shutdown is started */
-      std::unique_lock<std::mutex> lock(statUpdaterCvMutex_);
-      if (statUpdaterCv_.wait_for(
-              lock,
-              std::chrono::seconds(MOVING_AVERAGE_BIN_SIZE_IN_SECOND),
-              [this]() { return shutdownStarted_.load(); })) {
-        /* Shutdown was initiated, so we stop this thread */
-        break;
-      }
-    }
-
-    // to avoid inconsistence among proxies, we lock all mutexes together
-    std::vector<std::unique_lock<std::mutex>> statsLocks;
-    statsLocks.reserve(opts_.num_proxies);
-    for (size_t i = 0; i < opts_.num_proxies; ++i) {
-      statsLocks.push_back(getProxy(i)->stats().lock());
-    }
-
-    for (size_t i = 0; i < opts_.num_proxies; ++i) {
-      getProxy(i)->stats().aggregate(idx);
-      getProxy(i)->requestStats().advanceBin();
-    }
-
-    idx = (idx + 1) % BIN_NUM;
+  if (auto scheduler = functionScheduler()) {
+    runtimeVarsObserverHandle_ = startObservingFile(
+        opts_.runtime_vars_file,
+        scheduler,
+        std::chrono::milliseconds(opts_.file_observer_poll_period_ms),
+        std::chrono::milliseconds(opts_.file_observer_sleep_before_update_ms),
+        std::move(onUpdate));
+  } else {
+    MC_LOG_FAILURE(
+        opts(),
+        failure::Category::kSystemError,
+        "Global function scheduler not available");
   }
 }
 
@@ -488,50 +451,33 @@ void CarbonRouterInstance<RouterInfo>::joinAuxiliaryThreads() noexcept {
     configApi_->stopObserving(pid_);
   }
 
-  statUpdaterCv_.notify_all();
-
-  /* pid check is a huge hack to make PHP fork() kinda sorta work.
-     After fork(), the child doesn't have the thread but does have
-     the full copy of the stack which we must cleanup. */
-  if (getpid() == pid_) {
-    if (statUpdaterThread_.joinable()) {
-      statUpdaterThread_.join();
-    }
-  }
+  deregisterForStatsUpdates();
 
   if (mcrouterLogger_) {
     mcrouterLogger_->stop();
   }
 
-  stopAwriterThreads();
-
-  evbAuxiliaryThread_.stop();
-}
-
-template <class RouterInfo>
-void CarbonRouterInstance<RouterInfo>::stopAwriterThreads() noexcept {
-  asyncWriter_->stop();
-  statsLogWriter_->stop();
+  runtimeVarsObserverHandle_.reset();
 }
 
 template <class RouterInfo>
 bool CarbonRouterInstance<RouterInfo>::reconfigure(
     const ProxyConfigBuilder& builder) {
-  bool success = configure(builder);
+  auto result = configure(builder);
 
-  if (!success) {
+  if (result.hasError()) {
     configFailures_++;
     configApi_->abandonTrackedSources();
   } else {
     configApi_->subscribeToTrackedSources();
   }
 
-  return success;
+  return result.hasValue();
 }
 
 template <class RouterInfo>
-bool CarbonRouterInstance<RouterInfo>::configure(
-    const ProxyConfigBuilder& builder) {
+folly::Expected<folly::Unit, std::string>
+CarbonRouterInstance<RouterInfo>::configure(const ProxyConfigBuilder& builder) {
   VLOG_IF(0, !opts_.constantly_reload_configs) << "started reconfiguring";
   std::vector<std::shared_ptr<ProxyConfig<RouterInfo>>> newConfigs;
   try {
@@ -539,12 +485,10 @@ bool CarbonRouterInstance<RouterInfo>::configure(
       newConfigs.push_back(builder.buildConfig<RouterInfo>(*getProxy(i)));
     }
   } catch (const std::exception& e) {
-    MC_LOG_FAILURE(
-        opts(),
-        failure::Category::kInvalidConfig,
-        "Failed to reconfigure: {}",
-        e.what());
-    return false;
+    std::string error = folly::sformat("Failed to reconfigure: {}", e.what());
+    MC_LOG_FAILURE(opts(), failure::Category::kInvalidConfig, error);
+
+    return folly::makeUnexpected(std::move(error));
   }
 
   for (size_t i = 0; i < opts_.num_proxies; i++) {
@@ -557,11 +501,11 @@ bool CarbonRouterInstance<RouterInfo>::configure(
       << newConfigs[0]->calcNumClients() << " clients "
       << newConfigs[0]->getConfigMd5Digest() << ")";
 
-  return true;
+  return folly::Unit();
 }
 
 template <class RouterInfo>
-folly::Optional<ProxyConfigBuilder>
+folly::Expected<ProxyConfigBuilder, std::string>
 CarbonRouterInstance<RouterInfo>::createConfigBuilder() {
   /* mark config attempt before, so that
      successful config is always >= last config attempt. */
@@ -569,6 +513,7 @@ CarbonRouterInstance<RouterInfo>::createConfigBuilder() {
   configApi_->trackConfigSources();
   std::string config;
   std::string path;
+  std::string error;
   if (configApi_->getConfigFile(config, path)) {
     try {
       // assume default_route, default_region and default_cluster are same for
@@ -580,6 +525,7 @@ CarbonRouterInstance<RouterInfo>::createConfigBuilder() {
           failure::Category::kInvalidConfig,
           "Failed to reconfigure: {}",
           e.what());
+      error = e.what();
     }
   }
   MC_LOG_FAILURE(
@@ -589,7 +535,7 @@ CarbonRouterInstance<RouterInfo>::createConfigBuilder() {
       path);
   configFailures_++;
   configApi_->abandonTrackedSources();
-  return folly::none;
+  return folly::makeUnexpected(std::move(error));
 }
 
 template <class RouterInfo>

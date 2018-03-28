@@ -34,7 +34,7 @@
 #include <folly/Portability.h>
 #include <folly/hash/Hash.h>
 #include <folly/lang/Align.h>
-#include <folly/portability/BitsFunctexcept.h>
+#include <folly/lang/Exception.h>
 #include <folly/system/ThreadId.h>
 
 namespace folly {
@@ -405,7 +405,7 @@ class SimpleAllocator {
  * Note that allocation and deallocation takes a per-sizeclass lock.
  */
 template <size_t Stripes>
-class CoreAllocator {
+class CoreRawAllocator {
  public:
   class Allocator {
     static constexpr size_t AllocSize{4096};
@@ -437,13 +437,13 @@ class CoreAllocator {
         void* mem =
             aligned_malloc(size, hardware_destructive_interference_size);
         if (!mem) {
-          std::__throw_bad_alloc();
+          throw_exception<std::bad_alloc>();
         }
         return mem;
       }
       return allocators_[cl].allocate();
     }
-    void deallocate(void* mem) {
+    void deallocate(void* mem, size_t = 0) {
       if (!mem) {
         return;
       }
@@ -469,19 +469,14 @@ class CoreAllocator {
   Allocator allocators_[Stripes];
 };
 
-template <size_t Stripes>
-typename CoreAllocator<Stripes>::Allocator* getCoreAllocator(size_t stripe) {
+template <typename T, size_t Stripes>
+CxxAllocatorAdaptor<T, typename CoreRawAllocator<Stripes>::Allocator>
+getCoreAllocator(size_t stripe) {
   // We cannot make sure that the allocator will be destroyed after
   // all the objects allocated with it, so we leak it.
-  static Indestructible<CoreAllocator<Stripes>> allocator;
-  return allocator->get(stripe);
-}
-
-template <typename T, size_t Stripes>
-StlAllocator<typename CoreAllocator<Stripes>::Allocator, T> getCoreAllocatorStl(
-    size_t stripe) {
-  auto alloc = getCoreAllocator<Stripes>(stripe);
-  return StlAllocator<typename CoreAllocator<Stripes>::Allocator, T>(alloc);
+  static Indestructible<CoreRawAllocator<Stripes>> allocator;
+  return CxxAllocatorAdaptor<T, typename CoreRawAllocator<Stripes>::Allocator>(
+      *allocator->get(stripe));
 }
 
 } // namespace folly

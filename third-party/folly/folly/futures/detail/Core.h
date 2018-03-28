@@ -24,14 +24,14 @@
 
 #include <folly/Executor.h>
 #include <folly/Function.h>
-#include <folly/MicroSpinLock.h>
 #include <folly/Optional.h>
 #include <folly/ScopeGuard.h>
 #include <folly/Try.h>
 #include <folly/Utility.h>
 #include <folly/futures/FutureException.h>
 #include <folly/futures/detail/FSM.h>
-#include <folly/portability/BitsFunctexcept.h>
+#include <folly/lang/Exception.h>
+#include <folly/synchronization/MicroSpinLock.h>
 
 #include <folly/io/async/Request.h>
 
@@ -161,7 +161,7 @@ class Core final {
       case State::OnlyCallback:
       case State::Armed:
       case State::Done:
-        std::__throw_logic_error("setCallback called twice");
+        throw_exception<std::logic_error>("setCallback called twice");
     FSM_END
 
     // we could always call this, it is an optimization to only call it when
@@ -188,7 +188,7 @@ class Core final {
       case State::OnlyResult:
       case State::Armed:
       case State::Done:
-        std::__throw_logic_error("setResult called twice");
+      throw_exception<std::logic_error>("setResult called twice");
     FSM_END
 
     if (transitionToArmed) {
@@ -226,17 +226,12 @@ class Core final {
   /// May call from any thread
   bool isActive() { return active_.load(std::memory_order_acquire); }
 
-  /// Call only from Future thread
+  /// Call only from Future thread, either before attaching a callback or after
+  /// the callback has already been invoked, but not concurrently with anything
+  /// which might trigger invocation of the callback
   void setExecutor(Executor* x, int8_t priority = Executor::MID_PRI) {
-    if (!executorLock_.try_lock()) {
-      executorLock_.lock();
-    }
-    executor_ = x;
-    priority_ = priority;
-    executorLock_.unlock();
-  }
-
-  void setExecutorNoLock(Executor* x, int8_t priority = Executor::MID_PRI) {
+    auto s = fsm_.getState();
+    DCHECK(s == State::Start || s == State::OnlyResult || s == State::Done);
     executor_ = x;
     priority_ = priority;
   }
@@ -337,16 +332,7 @@ class Core final {
 
   void doCallback() {
     Executor* x = executor_;
-    // initialize, solely to appease clang's -Wconditional-uninitialized
-    int8_t priority = 0;
-    if (x) {
-      if (!executorLock_.try_lock()) {
-        executorLock_.lock();
-      }
-      x = executor_;
-      priority = priority_;
-      executorLock_.unlock();
-    }
+    int8_t priority = priority_;
 
     if (x) {
       exception_wrapper ew;
@@ -426,7 +412,6 @@ class Core final {
   std::atomic<bool> active_ {true};
   std::atomic<bool> interruptHandlerSet_ {false};
   folly::MicroSpinLock interruptLock_ {0};
-  folly::MicroSpinLock executorLock_ {0};
   int8_t priority_ {-1};
   Executor* executor_ {nullptr};
   std::shared_ptr<RequestContext> context_ {nullptr};

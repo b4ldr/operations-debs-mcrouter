@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2016-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -85,14 +83,27 @@ using GetRequestReplyPairs =
     typename detail::GetRequestReplyPairsImpl<RequestList>::type;
 
 template <typename Reply>
-typename std::enable_if<detail::HasMessage<Reply>::value>::type
-setMessageIfPresent(Reply& reply, std::string msg) {
+typename std::enable_if_t<detail::HasMessage<Reply>::value> setMessageIfPresent(
+    Reply& reply,
+    std::string msg) {
   reply.message() = std::move(msg);
 }
 
 template <typename Reply>
-typename std::enable_if<!detail::HasMessage<Reply>::value>::type
+typename std::enable_if_t<!detail::HasMessage<Reply>::value>
 setMessageIfPresent(Reply&, std::string) {}
+
+template <typename Reply>
+typename std::enable_if_t<detail::HasMessage<Reply>::value, folly::StringPiece>
+getMessage(const Reply& reply) {
+  return reply.message();
+}
+
+template <typename Reply>
+typename std::enable_if_t<!detail::HasMessage<Reply>::value, folly::StringPiece>
+getMessage(const Reply&) {
+  return folly::StringPiece{};
+}
 
 namespace detail {
 inline folly::IOBuf* bufPtr(folly::Optional<folly::IOBuf>& buf) {
@@ -115,7 +126,7 @@ typename std::enable_if<R::hasValue, folly::IOBuf*>::type valuePtrUnsafe(
 }
 template <class R>
 typename std::enable_if<!R::hasValue, folly::IOBuf*>::type valuePtrUnsafe(
-    const R& requestOrReply) {
+    const R& /* requestOrReply */) {
   return nullptr;
 }
 
@@ -128,7 +139,7 @@ typename std::enable_if<R::hasValue, folly::StringPiece>::type valueRangeSlow(
 
 template <class R>
 typename std::enable_if<!R::hasValue, folly::StringPiece>::type valueRangeSlow(
-    R& requestOrReply) {
+    R& /* requestOrReply */) {
   return folly::StringPiece();
 }
 
@@ -166,13 +177,30 @@ template <class TypeList>
 inline size_t getTypeIdByName(folly::StringPiece name, TypeList);
 
 template <>
-inline size_t getTypeIdByName(folly::StringPiece name, List<>) {
+inline size_t getTypeIdByName(folly::StringPiece /* name */, List<>) {
   return 0;
 }
 
 template <class T, class... Ts>
 inline size_t getTypeIdByName(folly::StringPiece name, List<T, Ts...>) {
   return name == T::name ? T::typeId : getTypeIdByName(name, List<Ts...>());
+}
+
+template <class TypeList>
+inline ssize_t getIndexInListByName(folly::StringPiece name, TypeList);
+
+template <>
+inline ssize_t getIndexInListByName(folly::StringPiece /* name */, List<>) {
+  return -1;
+}
+
+template <class T, class... Ts>
+inline ssize_t getIndexInListByName(folly::StringPiece name, List<T, Ts...>) {
+  return name == T::name
+      ? 0
+      : (getIndexInListByName(name, List<Ts...>()) == -1
+             ? -1
+             : 1 + getIndexInListByName(name, List<Ts...>()));
 }
 
 namespace detail {

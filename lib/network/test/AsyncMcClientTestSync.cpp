@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2014-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include <string>
@@ -25,6 +23,10 @@
 
 using namespace facebook::memcache;
 using namespace facebook::memcache::test;
+
+namespace folly {
+class AsyncSocket;
+} // namespace folly
 
 void serverShutdownTest(SSLContextProvider ssl) {
   auto server = TestServer::create(false, ssl != noSsl());
@@ -63,13 +65,17 @@ TEST(AsyncMcClient, simpleAsciiTimeout) {
 }
 
 TEST(AsyncMcClient, simpleAsciiTimeoutSsl) {
-  simpleAsciiTimeoutTest(validSsl());
+  simpleAsciiTimeoutTest(validClientSsl());
 }
 
 void simpleUmbrellaTimeoutTest(SSLContextProvider ssl) {
   auto server = TestServer::create(true, ssl != noSsl());
   TestClient client(
-      "localhost", server->getListenPort(), 200, mc_umbrella_protocol, ssl);
+      "localhost",
+      server->getListenPort(),
+      200,
+      mc_umbrella_protocol_DONOTUSE,
+      ssl);
   client.sendGet("nohold1", mc_res_found);
   client.sendGet("hold", mc_res_timeout);
   client.sendGet("nohold2", mc_res_found);
@@ -85,7 +91,7 @@ TEST(AsyncMcClient, simpleUmbrellaTimeout) {
 }
 
 TEST(AsyncMcClient, simpleUmbrellaTimeoutSsl) {
-  simpleUmbrellaTimeoutTest(validSsl());
+  simpleUmbrellaTimeoutTest(validClientSsl());
 }
 
 void noServerTimeoutTest(SSLContextProvider ssl) {
@@ -99,7 +105,7 @@ TEST(AsyncMcClient, noServerTimeout) {
 }
 
 TEST(AsyncMcClient, noServerTimeoutSsl) {
-  noServerTimeoutTest(validSsl());
+  noServerTimeoutTest(validClientSsl());
 }
 
 void immediateConnectFailTest(SSLContextProvider ssl) {
@@ -113,7 +119,7 @@ TEST(AsyncMcClient, immeadiateConnectFail) {
 }
 
 TEST(AsyncMcClient, immeadiateConnectFailSsl) {
-  immediateConnectFailTest(validSsl());
+  immediateConnectFailTest(validClientSsl());
 }
 
 void testCerts(std::string name, SSLContextProvider ssl, size_t numConns) {
@@ -135,13 +141,17 @@ void testCerts(std::string name, SSLContextProvider ssl, size_t numConns) {
   };
   auto server = TestServer::create(true, true);
   TestClient brokenClient(
-      "localhost", server->getListenPort(), 200, mc_umbrella_protocol, ssl);
+      "localhost",
+      server->getListenPort(),
+      200,
+      mc_umbrella_protocol_DONOTUSE,
+      ssl);
   TestClient client(
       "localhost",
       server->getListenPort(),
       200,
-      mc_umbrella_protocol,
-      validSsl());
+      mc_umbrella_protocol_DONOTUSE,
+      validClientSsl());
   brokenClient.sendGet("test", mc_res_connect_error);
   brokenClient.waitForReplies();
   EXPECT_TRUE(loggedFailure);
@@ -183,7 +193,7 @@ TEST(AsyncMcClient, inflightThrottle) {
 }
 
 TEST(AsyncMcClient, inflightThrottleSsl) {
-  inflightThrottleTest(validSsl());
+  inflightThrottleTest(validClientSsl());
 }
 
 void inflightThrottleFlushTest(SSLContextProvider ssl) {
@@ -209,7 +219,7 @@ TEST(AsyncMcClient, inflightThrottleFlush) {
 }
 
 TEST(AsyncMcClient, inflightThrottleFlushSsl) {
-  inflightThrottleFlushTest(validSsl());
+  inflightThrottleFlushTest(validClientSsl());
 }
 
 void outstandingThrottleTest(SSLContextProvider ssl) {
@@ -235,7 +245,7 @@ TEST(AsyncMcClient, outstandingThrottle) {
 }
 
 TEST(AsyncMcClient, outstandingThrottleSsl) {
-  outstandingThrottleTest(validSsl());
+  outstandingThrottleTest(validClientSsl());
 }
 
 void connectionErrorTest(SSLContextProvider ssl) {
@@ -258,7 +268,7 @@ TEST(AsyncMcClient, connectionError) {
 }
 
 TEST(AsyncMcClient, connectionErrorSsl) {
-  connectionErrorTest(validSsl());
+  connectionErrorTest(validClientSsl());
 }
 
 void basicTest(
@@ -297,7 +307,7 @@ TEST(AsyncMcClient, basicAscii) {
 }
 
 TEST(AsyncMcClient, basicUmbrella) {
-  basicTest(mc_umbrella_protocol, noSsl());
+  basicTest(mc_umbrella_protocol_DONOTUSE, noSsl());
 }
 
 TEST(AsyncMcClient, basicCaret) {
@@ -305,15 +315,15 @@ TEST(AsyncMcClient, basicCaret) {
 }
 
 TEST(AsyncMcClient, basicAsciiSsl) {
-  basicTest(mc_ascii_protocol, validSsl());
+  basicTest(mc_ascii_protocol, validClientSsl());
 }
 
 TEST(AsyncMcClient, basicUmbrellaSsl) {
-  basicTest(mc_umbrella_protocol, validSsl());
+  basicTest(mc_umbrella_protocol_DONOTUSE, validClientSsl());
 }
 
 TEST(AsyncMcClient, basicCaretSsl) {
-  basicTest(mc_caret_protocol, validSsl());
+  basicTest(mc_caret_protocol, validClientSsl());
 }
 
 void qosTest(
@@ -325,7 +335,7 @@ void qosTest(
 }
 
 TEST(AsyncMcClient, qosClass1) {
-  qosTest(mc_umbrella_protocol, noSsl(), 1, 0);
+  qosTest(mc_umbrella_protocol_DONOTUSE, noSsl(), 1, 0);
 }
 
 TEST(AsyncMcClient, qosClass2) {
@@ -333,17 +343,18 @@ TEST(AsyncMcClient, qosClass2) {
 }
 
 TEST(AsyncMcClient, qosClass3) {
-  qosTest(mc_umbrella_protocol, validSsl(), 3, 2);
+  qosTest(mc_umbrella_protocol_DONOTUSE, validClientSsl(), 3, 2);
 }
 
 TEST(AsyncMcClient, qosClass4) {
-  qosTest(mc_ascii_protocol, validSsl(), 4, 3);
+  qosTest(mc_ascii_protocol, validClientSsl(), 4, 3);
 }
 
 void reconnectTest(mc_protocol_t protocol) {
   auto bigValue = genBigValue();
 
-  auto server = TestServer::create(protocol == mc_umbrella_protocol, false);
+  auto server =
+      TestServer::create(protocol == mc_umbrella_protocol_DONOTUSE, false);
   TestClient client("localhost", server->getListenPort(), 100, protocol);
   client.sendGet("test1", mc_res_found);
   client.sendSet("test", "testValue", mc_res_stored);
@@ -367,13 +378,14 @@ TEST(AsyncMcClient, reconnectAscii) {
 }
 
 TEST(AsyncMcClient, reconnectUmbrella) {
-  reconnectTest(mc_umbrella_protocol);
+  reconnectTest(mc_umbrella_protocol_DONOTUSE);
 }
 
 void reconnectImmediatelyTest(mc_protocol_t protocol) {
   auto bigValue = genBigValue();
 
-  auto server = TestServer::create(protocol == mc_umbrella_protocol, false);
+  auto server =
+      TestServer::create(protocol == mc_umbrella_protocol_DONOTUSE, false);
   TestClient client("localhost", server->getListenPort(), 100, protocol);
   client.sendGet("test1", mc_res_found);
   client.sendSet("test", "testValue", mc_res_stored);
@@ -401,11 +413,12 @@ TEST(AsyncMcClient, reconnectImmediatelyAscii) {
 }
 
 TEST(AsyncMcClient, reconnectImmediatelyUmbrella) {
-  reconnectImmediatelyTest(mc_umbrella_protocol);
+  reconnectImmediatelyTest(mc_umbrella_protocol_DONOTUSE);
 }
 
 void bigKeyTest(mc_protocol_t protocol) {
-  auto server = TestServer::create(protocol == mc_umbrella_protocol, false);
+  auto server =
+      TestServer::create(protocol == mc_umbrella_protocol_DONOTUSE, false);
   TestClient client("localhost", server->getListenPort(), 200, protocol);
   constexpr int len = MC_KEY_MAX_LEN_ASCII + 5;
   char key[len] = {0};
@@ -430,9 +443,9 @@ TEST(AsyncMcClient, eventBaseDestructionWhileConnecting) {
   //  2. Fail the request because of timeout.
   //  3. Delete EventBase, this in turn should case proper cleanup
   //     in AsyncMcClient.
-  auto eventBase = folly::make_unique<folly::EventBase>();
-  auto fiberManager = folly::make_unique<folly::fibers::FiberManager>(
-      folly::make_unique<folly::fibers::EventBaseLoopController>());
+  auto eventBase = std::make_unique<folly::EventBase>();
+  auto fiberManager = std::make_unique<folly::fibers::FiberManager>(
+      std::make_unique<folly::fibers::EventBaseLoopController>());
   dynamic_cast<folly::fibers::EventBaseLoopController&>(
       fiberManager->loopController())
       .attachEventBase(*eventBase);
@@ -442,9 +455,10 @@ TEST(AsyncMcClient, eventBaseDestructionWhileConnecting) {
 
   ConnectionOptions opts("100::", 11302, mc_ascii_protocol);
   opts.writeTimeout = std::chrono::milliseconds(1000);
-  auto client = folly::make_unique<AsyncMcClient>(*eventBase, opts);
+  auto client = std::make_unique<AsyncMcClient>(*eventBase, opts);
   client->setStatusCallbacks(
-      [&wasUp] { wasUp = true; }, [&wentDown](bool) { wentDown = true; });
+      [&wasUp](const folly::AsyncSocket&) { wasUp = true; },
+      [&wentDown](AsyncMcClient::ConnectionDownReason) { wentDown = true; });
 
   fiberManager->addTask([&client, &replied] {
     McGetRequest req("hold");
@@ -541,7 +555,7 @@ TEST(AsyncMcClient, asciiSendingTimeouts) {
 TEST(AsyncMcClient, oooUmbrellaTimeouts) {
   auto server = TestServer::create(true /* outOfOrder */, false /* useSsl */);
   TestClient client(
-      "localhost", server->getListenPort(), 200, mc_umbrella_protocol);
+      "localhost", server->getListenPort(), 200, mc_umbrella_protocol_DONOTUSE);
   // Allow only up to two requests in flight.
   client.setThrottle(2, 0);
   client.sendGet("sleep", mc_res_timeout, 500);
@@ -566,7 +580,9 @@ TEST(AsyncMcClient, tonsOfConnections) {
 
   /* Create a client to see if it gets evicted. */
   TestClient client("localhost", server->getListenPort(), 1, mc_ascii_protocol);
-  client.setStatusCallbacks([] {}, [&wentDown](bool) { wentDown = true; });
+  client.setStatusCallbacks(
+      [](const folly::AsyncSocket&) {},
+      [&wentDown](AsyncMcClient::ConnectionDownReason) { wentDown = true; });
   client.sendGet("test", mc_res_found);
   client.waitForReplies();
 
@@ -609,7 +625,8 @@ void umbrellaBinaryReply(std::string data, mc_res_t expectedResult) {
     CHECK(n == data.size());
   });
 
-  TestClient client("localhost", sock.getPort(), 200, mc_umbrella_protocol);
+  TestClient client(
+      "localhost", sock.getPort(), 200, mc_umbrella_protocol_DONOTUSE);
   client.sendGet("test", expectedResult);
   client.waitForReplies();
   serverThread.join();
@@ -653,9 +670,7 @@ TEST(AsyncMcClient, SslSessionCache) {
       true /* useTicketKeySeeds */);
   auto constexpr nConnAttempts = 10;
 
-  for (int i = 0; i < nConnAttempts; i++) {
-    TestClient client(
-        "::1", server->getListenPort(), 200, mc_umbrella_protocol, validSsl());
+  auto sendAndCheckRequest = [](TestClient& client, int i) {
     LOG(INFO) << "Connection attempt: " << i;
     client.sendGet("test", mc_res_found);
     client.waitForReplies();
@@ -666,11 +681,43 @@ TEST(AsyncMcClient, SslSessionCache) {
     } else {
       EXPECT_FALSE(socket->getSSLSessionReused());
     }
-    if (i == nConnAttempts - 1) {
-      client.sendGet("shutdown", mc_res_notfound);
-      client.waitForReplies();
-    }
+  };
+
+  for (int i = 0; i < nConnAttempts; i++) {
+    TestClient client(
+        "::1",
+        server->getListenPort(),
+        200,
+        mc_umbrella_protocol_DONOTUSE,
+        validClientSsl());
+    sendAndCheckRequest(client, i);
   }
+
+  // do the same test w/ service identity
+  // we should expect the first attempt to not resume
+  for (int i = 0; i < nConnAttempts; i++) {
+    TestClient client(
+        "::1",
+        server->getListenPort(),
+        200,
+        mc_umbrella_protocol_DONOTUSE,
+        validClientSsl(),
+        0,
+        0,
+        "test");
+    sendAndCheckRequest(client, i);
+  }
+
+  // shutdown the server
+  TestClient client(
+      "::1",
+      server->getListenPort(),
+      200,
+      mc_umbrella_protocol_DONOTUSE,
+      validClientSsl());
+  client.sendGet("shutdown", mc_res_notfound);
+  client.waitForReplies();
+
   server->join();
 }
 
@@ -699,11 +746,11 @@ TEST(AsyncMcClient, asciiVersionUserSpecified) {
 }
 
 TEST(AsyncMcClient, umbrellaVersionDefault) {
-  versionTest(mc_umbrella_protocol, true);
+  versionTest(mc_umbrella_protocol_DONOTUSE, true);
 }
 
 TEST(AsyncMcClient, umbrellaVersionUserSpecified) {
-  versionTest(mc_umbrella_protocol, false);
+  versionTest(mc_umbrella_protocol_DONOTUSE, false);
 }
 
 TEST(AsyncMcClient, caretVersionDefault) {
@@ -718,12 +765,115 @@ TEST(AsyncMcClient, caretAdditionalFields) {
   auto server = TestServer::create(true /* OOO */, false /* useSsl */);
   TestClient client(
       "localhost", server->getListenPort(), 200, mc_caret_protocol);
-  // Mix in some normal get requests
-  for (int i = 0; i < 1000; ++i) {
-    client.sendGet("trace_id", mc_res_found);
-    client.sendGet("test", mc_res_found);
-  }
+  client.sendGet("trace_id", mc_res_found);
   client.waitForReplies();
   server->shutdown();
   server->join();
 }
+
+TEST(AsyncMcClient, caretGoAway) {
+  auto server = TestServer::create(true /* OOO */, false /* useSsl */);
+  TestClient client(
+      "localhost", server->getListenPort(), 200, mc_caret_protocol);
+  client.sendGet("test", mc_res_found);
+  client.sendGet("hold", mc_res_found);
+  client.setStatusCallbacks(
+      [](const folly::AsyncSocket&) {},
+      [&client](AsyncMcClient::ConnectionDownReason reason) {
+        if (reason == AsyncMcClient::ConnectionDownReason::SERVER_GONE_AWAY) {
+          LOG(INFO) << "Server gone away, flushing";
+          client.sendGet("flush", mc_res_found);
+        }
+      });
+  client.waitForReplies(1);
+  server->shutdown();
+  client.waitForReplies();
+  server->join();
+}
+
+TEST(AsyncMcClient, contextProviders) {
+  auto clientCtxProvider = validClientSsl();
+  auto serverCtxProvider = validSsl();
+
+  auto clientCtx1 = clientCtxProvider();
+  auto clientCtx2 = clientCtxProvider();
+
+  auto serverCtx1 = serverCtxProvider();
+  auto serverCtx2 = serverCtxProvider();
+
+  // client contexts should be the same since they are
+  // thread local cached
+  EXPECT_EQ(clientCtx1, clientCtx2);
+
+  // server contexts should be the same for the same reason
+  EXPECT_EQ(serverCtx1, serverCtx2);
+
+  EXPECT_NE(clientCtx1, serverCtx1);
+}
+
+using BoolPair = std::tuple<bool, bool>;
+class AsyncMcClientTFOTest : public testing::TestWithParam<BoolPair> {};
+
+TEST_P(AsyncMcClientTFOTest, testTfoWithSSL) {
+  auto serverEnabled = std::get<0>(GetParam());
+  auto clientEnabled = std::get<1>(GetParam());
+  auto server = TestServer::create(
+      true,
+      true,
+      10,
+      250,
+      100,
+      true,
+      4 /* nThreads */,
+      true /* useTicketKeySeeds */,
+      1000 /* go away timeout */,
+      nullptr,
+      serverEnabled);
+  auto constexpr nConnAttempts = 10;
+
+  auto sendReq = [serverEnabled, clientEnabled](TestClient& client) {
+    client.sendGet("test", mc_res_found);
+    client.waitForReplies();
+    auto transport = client.getClient().getTransport();
+    auto* socket = transport->getUnderlyingTransport<folly::AsyncSSLSocket>();
+    if (clientEnabled) {
+      EXPECT_TRUE(socket->getTFOAttempted());
+      EXPECT_TRUE(socket->getTFOFinished());
+      // we can not guarantee socket->getTFOSucceeded() will return true
+      // unless there are specific kernel + host settings applied
+      if (!serverEnabled) {
+        EXPECT_FALSE(socket->getTFOSucceded());
+      }
+    } else {
+      EXPECT_FALSE(socket->getTFOAttempted());
+    }
+  };
+
+  for (int i = 0; i < nConnAttempts; i++) {
+    TestClient client(
+        "::1",
+        server->getListenPort(),
+        200,
+        mc_caret_protocol,
+        validClientSsl(),
+        0,
+        0,
+        "",
+        nullptr,
+        clientEnabled);
+    sendReq(client);
+  }
+
+  // shutdown the server
+  TestClient client(
+      "::1", server->getListenPort(), 200, mc_caret_protocol, validClientSsl());
+  client.sendGet("shutdown", mc_res_notfound);
+  client.waitForReplies();
+
+  server->join();
+}
+
+INSTANTIATE_TEST_CASE_P(
+    AsyncMcClientTest,
+    AsyncMcClientTFOTest,
+    testing::Combine(testing::Bool(), testing::Bool()));

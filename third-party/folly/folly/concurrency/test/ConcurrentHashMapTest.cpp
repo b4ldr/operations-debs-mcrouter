@@ -89,22 +89,18 @@ TEST(ConcurrentHashMap, MoveTest) {
 struct foo {
   static int moved;
   static int copied;
-  foo(foo&& o) noexcept {
-    (void*)&o;
+  foo(foo&&) noexcept {
     moved++;
   }
-  foo& operator=(foo&& o) {
-    (void*)&o;
+  foo& operator=(foo&&) {
     moved++;
     return *this;
   }
-  foo& operator=(const foo& o) {
-    (void*)&o;
+  foo& operator=(const foo&) {
     copied++;
     return *this;
   }
-  foo(const foo& o) {
-    (void*)&o;
+  foo(const foo&) {
     copied++;
   }
   foo() {}
@@ -249,12 +245,35 @@ TEST(ConcurrentHashMap, MapIterateTest) {
   EXPECT_EQ(count, 2);
 }
 
+TEST(ConcurrentHashMap, MoveIterateAssignIterate) {
+  using Map = ConcurrentHashMap<int, int>;
+  Map tmp;
+  Map map{std::move(tmp)};
+
+  map.insert(0, 0);
+  ++map.cbegin();
+  ConcurrentHashMap<int, int> other;
+  other.insert(0, 0);
+  map = std::move(other);
+  ++map.cbegin();
+}
+
 TEST(ConcurrentHashMap, EraseTest) {
   ConcurrentHashMap<uint64_t, uint64_t> foomap(3);
   foomap.insert(1, 0);
   auto f1 = foomap.find(1);
   EXPECT_EQ(1, foomap.erase(1));
   foomap.erase(f1);
+}
+
+TEST(ConcurrentHashMap, CopyIterator) {
+  ConcurrentHashMap<int, int> map;
+  map.insert(0, 0);
+  auto const cbegin = map.cbegin();
+  for (auto cit = cbegin; cit != map.cend(); ++cit) {
+    std::pair<int const, int> const ckv{0, 0};
+    EXPECT_EQ(*cit, ckv);
+  }
 }
 
 TEST(ConcurrentHashMap, EraseInIterateTest) {
@@ -568,4 +587,110 @@ TEST(ConcurrentHashMap, RefcountTest) {
   for (int32_t i = 0; i < 300; ++i) {
     foomap.insert_or_assign(1, i);
   }
+}
+
+struct Wrapper {
+  explicit Wrapper(bool& del_) : del(del_) {}
+  ~Wrapper() {
+    del = true;
+  }
+
+  bool& del;
+};
+
+TEST(ConcurrentHashMap, Deletion) {
+  bool del{false};
+
+  {
+    ConcurrentHashMap<int, std::shared_ptr<Wrapper>> map;
+
+    map.insert(0, std::make_shared<Wrapper>(del));
+  }
+
+  EXPECT_TRUE(del);
+}
+
+TEST(ConcurrentHashMap, DeletionWithErase) {
+  bool del{false};
+
+  {
+    ConcurrentHashMap<int, std::shared_ptr<Wrapper>> map;
+
+    map.insert(0, std::make_shared<Wrapper>(del));
+    map.erase(0);
+  }
+
+  EXPECT_TRUE(del);
+}
+
+TEST(ConcurrentHashMap, DeletionWithIterator) {
+  bool del{false};
+
+  {
+    ConcurrentHashMap<int, std::shared_ptr<Wrapper>> map;
+
+    map.insert(0, std::make_shared<Wrapper>(del));
+    auto it = map.find(0);
+    map.erase(it);
+  }
+
+  EXPECT_TRUE(del);
+}
+
+TEST(ConcurrentHashMap, DeletionWithForLoop) {
+  bool del{false};
+
+  {
+    ConcurrentHashMap<int, std::shared_ptr<Wrapper>> map;
+
+    map.insert(0, std::make_shared<Wrapper>(del));
+    for (auto it = map.cbegin(); it != map.cend(); ++it) {
+      EXPECT_EQ(it->first, 0);
+    }
+  }
+
+  EXPECT_TRUE(del);
+}
+
+TEST(ConcurrentHashMap, DeletionMultiple) {
+  bool del1{false}, del2{false};
+
+  {
+    ConcurrentHashMap<int, std::shared_ptr<Wrapper>> map;
+
+    map.insert(0, std::make_shared<Wrapper>(del1));
+    map.insert(1, std::make_shared<Wrapper>(del2));
+  }
+
+  EXPECT_TRUE(del1);
+  EXPECT_TRUE(del2);
+}
+
+TEST(ConcurrentHashMap, DeletionAssigned) {
+  bool del1{false}, del2{false};
+
+  {
+    ConcurrentHashMap<int, std::shared_ptr<Wrapper>> map;
+
+    map.insert(0, std::make_shared<Wrapper>(del1));
+    map.insert_or_assign(0, std::make_shared<Wrapper>(del2));
+  }
+
+  EXPECT_TRUE(del1);
+  EXPECT_TRUE(del2);
+}
+
+TEST(ConcurrentHashMap, DeletionMultipleMaps) {
+  bool del1{false}, del2{false};
+
+  {
+    ConcurrentHashMap<int, std::shared_ptr<Wrapper>> map1;
+    ConcurrentHashMap<int, std::shared_ptr<Wrapper>> map2;
+
+    map1.insert(0, std::make_shared<Wrapper>(del1));
+    map2.insert(0, std::make_shared<Wrapper>(del2));
+  }
+
+  EXPECT_TRUE(del1);
+  EXPECT_TRUE(del2);
 }

@@ -1,10 +1,8 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2015-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
@@ -82,6 +80,9 @@ class ClientServerMcParser {
 
     void parseError(mc_res_t, folly::StringPiece) {}
 
+    void handleConnectionControlMessage(
+        const UmbrellaMessageInfo& /* headerInfo */) {}
+
    private:
     Callback& callback_;
   };
@@ -99,7 +100,7 @@ class ClientServerMcParser {
     explicit RequestCallback(Callback& callback) : callback_(callback) {}
 
     template <class Request>
-    void onRequest(Request&& req, bool noreply) {
+    void onRequest(Request&& req, bool /* noreply */) {
       callback_.requestReady(0, std::move(req));
     }
 
@@ -130,11 +131,11 @@ class ClientServerMcParser {
   explicit ClientServerMcParser(Callback& callback)
       : replyCallback_(callback),
         requestCallback_(callback),
-        replyParser_(folly::make_unique<ClientMcParser<ReplyCallback>>(
+        replyParser_(std::make_unique<ClientMcParser<ReplyCallback>>(
             replyCallback_,
             kReadBufferSizeMin,
             kReadBufferSizeMax)),
-        requestParser_(folly::make_unique<ServerMcParser<RequestCallback>>(
+        requestParser_(std::make_unique<ServerMcParser<RequestCallback>>(
             requestCallback_,
             kReadBufferSizeMin,
             kReadBufferSizeMax)),
@@ -147,7 +148,7 @@ class ClientServerMcParser {
   void parse(folly::ByteRange data, uint32_t typeId, bool isFirstPacket);
 
   void reset() {
-    replyParser_ = folly::make_unique<ClientMcParser<ReplyCallback>>(
+    replyParser_ = std::make_unique<ClientMcParser<ReplyCallback>>(
         replyCallback_,
         kReadBufferSizeMin,
         kReadBufferSizeMax,
@@ -155,7 +156,7 @@ class ClientServerMcParser {
         getCompressionCodecMap());
     expectNextDispatcher_.setReplyParser(replyParser_.get());
 
-    requestParser_ = folly::make_unique<ServerMcParser<RequestCallback>>(
+    requestParser_ = std::make_unique<ServerMcParser<RequestCallback>>(
         requestCallback_, kReadBufferSizeMin, kReadBufferSizeMax);
   }
 
@@ -174,7 +175,7 @@ class ClientServerMcParser {
   detail::ExpectNextDispatcher<ClientMcParser<ReplyCallback>, RequestList>
       expectNextDispatcher_;
 };
-}
-} // facebook::memcache
+} // memcache
+} // facebook
 
 #include "ClientServerMcParser-inl.h"

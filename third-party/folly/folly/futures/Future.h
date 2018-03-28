@@ -48,6 +48,9 @@ class Future;
 template <class T>
 class SemiFuture;
 
+template <class T>
+class FutureSplitter;
+
 namespace futures {
 namespace detail {
 template <class T>
@@ -193,6 +196,8 @@ class FutureBase {
   typename std::enable_if<R::ReturnsFuture::value, typename R::Return>::type
   thenImplementation(F&& func, futures::detail::argResult<isTry, F, Args...>);
 };
+template <class T>
+void convertFuture(SemiFuture<T>&& sf, Future<T>& f);
 } // namespace detail
 } // namespace futures
 
@@ -310,6 +315,7 @@ class SemiFuture : private futures::detail::FutureBase<T> {
 
   /**
    * Defer work to run on the consumer of the future.
+   * Function must take a Try as a parameter.
    * This work will be run eithe ron an executor that the caller sets on the
    * SemiFuture, or inline with the call to .get().
    * NB: This is a custom method because boost-blocking executors is a
@@ -318,8 +324,73 @@ class SemiFuture : private futures::detail::FutureBase<T> {
    * of driveable executor here.
    */
   template <typename F>
-  SemiFuture<typename futures::detail::callableResult<T, F>::Return::value_type>
+  SemiFuture<
+      typename futures::detail::deferCallableResult<T, F>::Return::value_type>
   defer(F&& func) &&;
+
+  /**
+   * Defer for functions taking a T rather than a Try<T>.
+   */
+  template <typename F>
+  SemiFuture<typename futures::detail::deferValueCallableResult<T, F>::Return::
+                 value_type>
+  deferValue(F&& func) &&;
+
+  /// Set an error callback for this SemiFuture. The callback should take a
+  /// single argument of the type that you want to catch, and should return a
+  /// value of the same type as this SemiFuture, or a SemiFuture of that type
+  /// (see overload below). For instance,
+  ///
+  /// makeSemiFuture()
+  ///   .defer([] {
+  ///     throw std::runtime_error("oh no!");
+  ///     return 42;
+  ///   })
+  ///   .deferError([] (std::runtime_error& e) {
+  ///     LOG(INFO) << "std::runtime_error: " << e.what();
+  ///     return -1; // or makeSemiFuture<int>(-1)
+  ///   });
+  template <class F>
+  typename std::enable_if<
+      !futures::detail::callableWith<F, exception_wrapper>::value &&
+          !futures::detail::callableWith<F, exception_wrapper&>::value &&
+          !futures::detail::Extract<F>::ReturnsFuture::value,
+      SemiFuture<T>>::type
+  deferError(F&& func);
+
+  /// Overload of deferError where the error callback returns a Future<T>
+  template <class F>
+  typename std::enable_if<
+      !futures::detail::callableWith<F, exception_wrapper>::value &&
+          !futures::detail::callableWith<F, exception_wrapper&>::value &&
+          futures::detail::Extract<F>::ReturnsFuture::value,
+      SemiFuture<T>>::type
+  deferError(F&& func);
+
+  /// Overload of deferError that takes exception_wrapper and returns T
+  template <class F>
+  typename std::enable_if<
+      futures::detail::callableWith<F, exception_wrapper>::value &&
+          !futures::detail::Extract<F>::ReturnsFuture::value,
+      SemiFuture<T>>::type
+  deferError(F&& func);
+
+  /// Overload of deferError that takes exception_wrapper and returns Future<T>
+  template <class F>
+  typename std::enable_if<
+      futures::detail::callableWith<F, exception_wrapper>::value &&
+          futures::detail::Extract<F>::ReturnsFuture::value,
+      SemiFuture<T>>::type
+  deferError(F&& func);
+
+  /// Return a future that completes inline, as if the future had no executor.
+  /// Intended for porting legacy code without behavioural change, and for rare
+  /// cases where this is really the intended behaviour.
+  /// Future is unsafe in the sense that the executor it completes on is
+  /// non-deterministic in the standard case.
+  /// For new code, or to update code that temporarily uses this, please
+  /// use via and pass a meaningful executor.
+  inline Future<T> toUnsafeFuture() &&;
 
  private:
   friend class Promise<T>;
@@ -327,6 +398,8 @@ class SemiFuture : private futures::detail::FutureBase<T> {
   friend class futures::detail::FutureBase;
   template <class>
   friend class SemiFuture;
+  template <class>
+  friend class Future;
 
   using typename Base::corePtr;
   using Base::setExecutor;
@@ -777,6 +850,8 @@ class Future : private futures::detail::FutureBase<T> {
   friend class Future;
   template <class>
   friend class SemiFuture;
+  template <class>
+  friend class FutureSplitter;
 
   using Base::setExecutor;
   using Base::throwIfInvalid;
@@ -812,8 +887,70 @@ class Future : private futures::detail::FutureBase<T> {
   /// predicate behaves like std::function<bool(void)>
   template <class P, class F>
   friend Future<Unit> whileDo(P&& predicate, F&& thunk);
+
+  template <class FT>
+  friend void futures::detail::convertFuture(
+      SemiFuture<FT>&& sf,
+      Future<FT>& f);
 };
 
 } // namespace folly
+
+#if FOLLY_HAS_COROUTINES
+#include <experimental/coroutine>
+
+namespace folly {
+namespace detail {
+template <typename T>
+class FutureAwaitable {
+ public:
+  explicit FutureAwaitable(folly::Future<T>&& future)
+      : future_(std::move(future)) {}
+
+  bool await_ready() const {
+    return future_.isReady();
+  }
+
+  T await_resume() {
+    return std::move(future_.value());
+  }
+
+  void await_suspend(std::experimental::coroutine_handle<> h) {
+    future_.setCallback_([h](Try<T>&&) mutable { h(); });
+  }
+
+ private:
+  folly::Future<T> future_;
+};
+
+template <typename T>
+class FutureRefAwaitable {
+ public:
+  explicit FutureRefAwaitable(folly::Future<T>& future) : future_(future) {}
+
+  bool await_ready() const {
+    return future_.isReady();
+  }
+
+  T await_resume() {
+    return std::move(future_.value());
+  }
+
+  void await_suspend(std::experimental::coroutine_handle<> h) {
+    future_.setCallback_([h](Try<T>&&) mutable { h(); });
+  }
+
+ private:
+  folly::Future<T>& future_;
+};
+} // namespace detail
+} // namespace folly
+
+template <typename T>
+folly::detail::FutureAwaitable<T>
+/* implicit */ operator co_await(folly::Future<T>& future) {
+  return folly::detail::FutureRefAwaitable<T>(future);
+}
+#endif
 
 #include <folly/futures/Future-inl.h>

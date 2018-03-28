@@ -29,7 +29,7 @@
 #include <folly/io/IOBuf.h>
 #include <folly/io/IOBufQueue.h>
 #include <folly/lang/Bits.h>
-#include <folly/portability/BitsFunctexcept.h>
+#include <folly/lang/Exception.h>
 
 /**
  * Cursor class for fast iteration over IOBuf chains.
@@ -413,6 +413,9 @@ class CursorBase {
   }
 
   void pull(void* buf, size_t len) {
+    if (UNLIKELY(len == 0)) {
+      return;
+    }
     dcheckIntegrity();
     if (LIKELY(crtPos_ + len <= crtEnd_)) {
       memcpy(buf, data(), len);
@@ -449,13 +452,13 @@ class CursorBase {
 
   void clone(std::unique_ptr<folly::IOBuf>& buf, size_t len) {
     if (UNLIKELY(cloneAtMost(buf, len) != len)) {
-      std::__throw_out_of_range("underflow");
+      throw_exception<std::out_of_range>("underflow");
     }
   }
 
   void clone(folly::IOBuf& buf, size_t len) {
     if (UNLIKELY(cloneAtMost(buf, len) != len)) {
-      std::__throw_out_of_range("underflow");
+      throw_exception<std::out_of_range>("underflow");
     }
   }
 
@@ -526,13 +529,13 @@ class CursorBase {
       }
 
       if (otherBuf == other.buffer_) {
-        std::__throw_out_of_range("wrap-around");
+        throw_exception<std::out_of_range>("wrap-around");
       }
 
       len += crtPos_ - crtBegin_;
     } else {
       if (crtPos_ < other.crtPos_) {
-        std::__throw_out_of_range("underflow");
+        throw_exception<std::out_of_range>("underflow");
       }
 
       len += crtPos_ - other.crtPos_;
@@ -552,7 +555,7 @@ class CursorBase {
       len += curBuf->length();
       curBuf = curBuf->next();
       if (curBuf == buf || curBuf == buffer_) {
-        std::__throw_out_of_range("wrap-around");
+        throw_exception<std::out_of_range>("wrap-around");
       }
     }
 
@@ -629,7 +632,7 @@ class CursorBase {
     for (size_t available; (available = length()) < len; ) {
       str->append(reinterpret_cast<const char*>(data()), available);
       if (UNLIKELY(!tryAdvanceBuffer())) {
-        std::__throw_out_of_range("string underflow");
+        throw_exception<std::out_of_range>("string underflow");
       }
       len -= available;
     }
@@ -639,6 +642,12 @@ class CursorBase {
   }
 
   size_t pullAtMostSlow(void* buf, size_t len) {
+    // If the length of this buffer is 0 try advancing it.
+    // Otherwise on the first iteration of the following loop memcpy is called
+    // with a null source pointer.
+    if (UNLIKELY(length() == 0 && !tryAdvanceBuffer())) {
+      return 0;
+    }
     uint8_t* p = reinterpret_cast<uint8_t*>(buf);
     size_t copied = 0;
     for (size_t available; (available = length()) < len; ) {
@@ -658,7 +667,7 @@ class CursorBase {
 
   void pullSlow(void* buf, size_t len) {
     if (UNLIKELY(pullAtMostSlow(buf, len) != len)) {
-      std::__throw_out_of_range("underflow");
+      throw_exception<std::out_of_range>("underflow");
     }
   }
 
@@ -678,7 +687,7 @@ class CursorBase {
 
   void skipSlow(size_t len) {
     if (UNLIKELY(skipAtMostSlow(len) != len)) {
-      std::__throw_out_of_range("underflow");
+      throw_exception<std::out_of_range>("underflow");
     }
   }
 
@@ -697,7 +706,7 @@ class CursorBase {
 
   void retreatSlow(size_t len) {
     if (UNLIKELY(retreatAtMostSlow(len) != len)) {
-      std::__throw_out_of_range("underflow");
+      throw_exception<std::out_of_range>("underflow");
     }
   }
 
@@ -745,13 +754,13 @@ class Writable {
   void push(const uint8_t* buf, size_t len) {
     Derived* d = static_cast<Derived*>(this);
     if (d->pushAtMost(buf, len) != len) {
-      std::__throw_out_of_range("overflow");
+      throw_exception<std::out_of_range>("overflow");
     }
   }
 
   void push(ByteRange buf) {
     if (this->pushAtMost(buf) != buf.size()) {
-      std::__throw_out_of_range("overflow");
+      throw_exception<std::out_of_range>("overflow");
     }
   }
 
@@ -767,7 +776,7 @@ class Writable {
    */
   void push(Cursor cursor, size_t len) {
     if (this->pushAtMost(cursor, len) != len) {
-      std::__throw_out_of_range("overflow");
+      throw_exception<std::out_of_range>("overflow");
     }
   }
 
@@ -996,7 +1005,7 @@ class Appender : public detail::Writable<Appender> {
     // Waste the rest of the current buffer and allocate a new one.
     // Don't make it too small, either.
     if (growth_ == 0) {
-      std::__throw_out_of_range("can't grow buffer chain");
+      throw_exception<std::out_of_range>("can't grow buffer chain");
     }
 
     n = std::max(n, growth_);
@@ -1011,6 +1020,13 @@ class Appender : public detail::Writable<Appender> {
     // memcpy() with a null source pointer, since that is undefined behavior
     // even if the length is 0.
     if (len == 0) {
+      return 0;
+    }
+
+    // If the length of this buffer is 0 try growing it.
+    // Otherwise on the first iteration of the following loop memcpy is called
+    // with a null source pointer.
+    if (UNLIKELY(length() == 0 && !tryGrowChain())) {
       return 0;
     }
 

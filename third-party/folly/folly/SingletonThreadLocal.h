@@ -16,8 +16,10 @@
 
 #pragma once
 
-#include <folly/Singleton.h>
+#include <boost/intrusive/list.hpp>
+
 #include <folly/ThreadLocal.h>
+#include <folly/detail/Singleton.h>
 #include <folly/functional/Invoke.h>
 
 namespace folly {
@@ -60,68 +62,95 @@ template <
     typename Make = detail::DefaultMake<T>>
 class SingletonThreadLocal {
  private:
-  SingletonThreadLocal() = delete;
+  struct Wrapper;
+
+  using NodeBase = boost::intrusive::list_base_hook<
+      boost::intrusive::link_mode<boost::intrusive::auto_unlink>>;
+
+  struct Node : NodeBase {
+    Wrapper*& cache;
+    bool& stale;
+
+    Node(Wrapper*& cache_, bool& stale_) : cache(cache_), stale(stale_) {
+      auto& wrapper = getWrapper();
+      wrapper.caches.push_front(*this);
+      cache = &wrapper;
+    }
+    ~Node() {
+      clear();
+    }
+
+    void clear() {
+      cache = nullptr;
+      stale = true;
+    }
+  };
+
+  using List =
+      boost::intrusive::list<Node, boost::intrusive::constant_time_size<false>>;
 
   struct Wrapper {
+    template <typename S>
+    using MakeRet = is_invocable_r<S, Make>;
+
     // keep as first field, to save 1 instr in the fast path
     union {
       alignas(alignof(T)) unsigned char storage[sizeof(T)];
       T object;
     };
-    Wrapper** cache{};
+    List caches;
 
     /* implicit */ operator T&() {
       return object;
     }
 
     // normal make types
-    template <
-        typename S = T,
-        _t<std::enable_if<is_invocable_r<S, Make>::value, int>> = 0>
+    template <typename S = T, _t<std::enable_if<MakeRet<S>::value, int>> = 0>
     Wrapper() {
       (void)new (storage) S(Make{}());
     }
     // default and special make types for non-move-constructible T, until C++17
-    template <
-        typename S = T,
-        _t<std::enable_if<!is_invocable_r<S, Make>::value, int>> = 0>
+    template <typename S = T, _t<std::enable_if<!MakeRet<S>::value, int>> = 0>
     Wrapper() {
       (void)Make{}(storage);
     }
     ~Wrapper() {
-      if (cache) {
-        *cache = nullptr;
+      for (auto& node : caches) {
+        node.clear();
       }
+      caches.clear();
       object.~T();
     }
   };
 
-  FOLLY_EXPORT FOLLY_ALWAYS_INLINE static Wrapper& getWrapperInline() {
-    static LeakySingleton<ThreadLocal<Wrapper>, Tag> singleton;
-    return *singleton.get();
+  SingletonThreadLocal() = delete;
+
+  FOLLY_EXPORT FOLLY_NOINLINE static ThreadLocal<Wrapper>& getWrapperTL() {
+    static auto& entry = *detail::createGlobal<ThreadLocal<Wrapper>, Tag>();
+    return entry;
   }
 
-  FOLLY_NOINLINE static Wrapper& getWrapperOutline() {
-    return getWrapperInline();
+  FOLLY_NOINLINE static Wrapper& getWrapper() {
+    return *getWrapperTL();
   }
 
-  /// Benchmarks indicate that getSlow being inline but containing a call to
-  /// getWrapperOutline is faster than getSlow being outline but containing
-  /// a call to getWrapperInline, which would otherwise produce smaller code.
-  FOLLY_ALWAYS_INLINE static Wrapper& getSlow(Wrapper*& cache) {
-    cache = &getWrapperOutline();
-    cache->cache = &cache;
-    return *cache;
+#ifdef FOLLY_TLS
+  FOLLY_NOINLINE static T& getSlow(Wrapper*& cache) {
+    static thread_local Wrapper** check = &cache;
+    CHECK_EQ(check, &cache) << "inline function static thread_local merging";
+    static thread_local bool stale;
+    static thread_local Node node(cache, stale);
+    return !stale && node.cache ? *node.cache : getWrapper();
   }
+#endif
 
  public:
   FOLLY_EXPORT FOLLY_ALWAYS_INLINE static T& get() {
-    // the absolute minimal conditional-compilation
 #ifdef FOLLY_TLS
-    static FOLLY_TLS Wrapper* cache;
+    static thread_local Wrapper* cache;
     return FOLLY_LIKELY(!!cache) ? *cache : getSlow(cache);
 #else
-    return getWrapperInline();
+    return getWrapper();
 #endif
   }
 };

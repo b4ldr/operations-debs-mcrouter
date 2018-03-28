@@ -76,9 +76,9 @@ class NotificationQueue {
     enum : uint16_t { kDefaultMaxReadAtOnce = 10 };
 
     Consumer()
-      : queue_(nullptr),
-        destroyedFlagPtr_(nullptr),
-        maxReadAtOnce_(kDefaultMaxReadAtOnce) {}
+        : queue_(nullptr),
+          destroyedFlagPtr_(nullptr),
+          maxReadAtOnce_(kDefaultMaxReadAtOnce) {}
 
     // create a consumer in-place, without the need to build new class
     template <typename TCallback>
@@ -651,7 +651,9 @@ void NotificationQueue<MessageT>::Consumer::consumeMessages(
       queue_->syncSignalAndQueue();
     }
   };
-  SCOPE_EXIT { setActive(false, /* shouldLock = */ true); };
+  SCOPE_EXIT {
+    setActive(false, /* shouldLock = */ true);
+  };
   SCOPE_EXIT {
     if (numConsumed != nullptr) {
       *numConsumed = numProcessed;

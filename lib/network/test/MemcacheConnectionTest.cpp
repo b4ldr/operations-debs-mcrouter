@@ -1,21 +1,19 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2017-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #include <gtest/gtest.h>
 #include <vector>
 
-#include <folly/Baton.h>
 #include <folly/Conv.h>
 #include <folly/fibers/EventBaseLoopController.h>
 #include <folly/fibers/FiberManager.h>
 #include <folly/io/IOBuf.h>
 #include <folly/io/async/EventBase.h>
+#include <folly/synchronization/Baton.h>
 
 #include <mcrouter/lib/network/AsyncMcClient.h>
 #include <mcrouter/options.h>
@@ -100,6 +98,9 @@ TEST(MemcachePooledConnectionTest, PooledExternalConnection) {
 }
 
 TEST(MemcacheInternalConnectionTest, simpleInternalConnection) {
+  folly::SingletonVault::singleton()->destroyInstances();
+  folly::SingletonVault::singleton()->reenableInstances();
+
   auto server = facebook::memcache::test::TestServer::create(
       false /* outOfOrder */, false /* useSsl */);
   facebook::memcache::McrouterOptions mcrouterOptions;
@@ -151,6 +152,9 @@ TEST(MemcacheInternalConnectionTest, simpleInternalConnection) {
 }
 
 TEST(MemcachePooledConnectionTest, PooledInternalConnection) {
+  folly::SingletonVault::singleton()->destroyInstances();
+  folly::SingletonVault::singleton()->reenableInstances();
+
   auto server = facebook::memcache::test::TestServer::create(
       false /* outOfOrder */, false /* useSsl */);
   facebook::memcache::McrouterOptions mcrouterOptions;

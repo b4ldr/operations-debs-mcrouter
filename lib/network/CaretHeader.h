@@ -1,21 +1,23 @@
 /*
- *  Copyright (c) 2017, Facebook, Inc.
- *  All rights reserved.
+ *  Copyright (c) 2016-present, Facebook, Inc.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree. An additional grant
- *  of patent rights can be found in the PATENTS file in the same directory.
+ *  This source code is licensed under the MIT license found in the LICENSE
+ *  file in the root directory of this source tree.
  *
  */
 #pragma once
 
 #include <utility>
 
+#include <folly/Varint.h>
+
+#include "mcrouter/lib/network/ServerLoad.h"
+
 namespace facebook {
 namespace memcache {
 
 constexpr char kCaretMagicByte = '^';
-constexpr size_t kMaxAdditionalFields = 5;
+constexpr size_t kMaxAdditionalFields = 6;
 constexpr size_t kMaxHeaderLength = 1 /* magic byte */ +
     1 /* GroupVarint header (lengths of 4 ints) */ +
     4 * sizeof(uint32_t) /* body size, typeId, reqId, num additional fields */ +
@@ -24,6 +26,8 @@ constexpr size_t kMaxHeaderLength = 1 /* magic byte */ +
 
 // Normalize the dropProbability to the accuracy of 10^-6.
 constexpr uint32_t kDropProbabilityNormalizer = 1000000;
+
+constexpr uint32_t kCaretConnectionControlReqId = 0;
 
 enum class UmbrellaVersion : uint8_t {
   BASIC = 0,
@@ -44,6 +48,7 @@ struct UmbrellaMessageInfo {
   uint64_t usedCodecId{0};
   uint64_t uncompressedBodySize{0};
   uint64_t dropProbability{0}; // Use uint64_t to store a double.
+  ServerLoad serverLoad{0};
 };
 
 enum class CaretAdditionalFieldType {
@@ -64,6 +69,9 @@ enum class CaretAdditionalFieldType {
 
   // Node ID for trace
   TRACE_NODE_ID = 6,
+
+  // Load on the server
+  SERVER_LOAD = 7,
 };
 
 } // memcache
