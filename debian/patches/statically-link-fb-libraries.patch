@@ -1,14 +1,16 @@
 Description: Link statically facebook's third-party libraries
  Given Facebook doesn't guarantee a stable ABI for folly nor its other libraries,
- go the HHVM way and link statically to wangle, folly and fbthrift.
+ go the HHVM way and link statically to wangle, and folly.
 Author: Giuseppe Lavagetto <glavagetto@wikimedia.org>
 Forwarded: No
-Last-Update: 2016-05-17
+Last-Update: 2017-03-28
 
-index 392f2bf..de18b1d 100644
---- a/configure.ac
-+++ b/configure.ac
-@@ -119,13 +119,6 @@ AC_CHECK_LIB([ssl], [SSL_library_init], [], [AC_MSG_ERROR([Unable to find ssl])]
+index edd4201..a42c893 100644
+Index: b/configure.ac
+===================================================================
+--- a/configure.ac	2018-03-28 18:56:02.569241211 +0200
++++ b/configure.ac	2018-03-28 18:56:53.060767512 +0200
+@@ -111,14 +111,7 @@
  AC_CHECK_LIB([z], [gzread], [], [AC_MSG_ERROR([Unable to find zlib])])
  AC_CHECK_LIB([double-conversion],[ceil],[],[AC_MSG_ERROR(
               [Please install double-conversion library])])
@@ -19,16 +21,18 @@ index 392f2bf..de18b1d 100644
 -)], [])
 -AC_CHECK_LIB([wangle], [getenv], [], [AC_MSG_ERROR(
 -             [Please install the wangle library])])
- 
+-
++AC_CHECK_LIB([dl], [dlopen], [])
  # Checks for typedefs, structures, and compiler characteristics.
  AC_HEADER_STDBOOL
-@@ -162,7 +155,8 @@ AC_CHECK_FUNCS([gettimeofday \
+ AC_C_CONST
+@@ -154,7 +147,8 @@
  
  LIBS="$LIBS $BOOST_LDFLAGS $BOOST_CONTEXT_LIB $BOOST_FILESYSTEM_LIB \
        $BOOST_PROGRAM_OPTIONS_LIB $BOOST_SYSTEM_LIB $BOOST_REGEX_LIB \
--      -lpthread -pthread -lthriftprotocol"
-+      -lpthread -pthread -l:libfolly.a -l:libthriftprotocol.a \
-+      -l:libwangle.a -liberty"
+-      $BOOST_THREAD_LIB -lpthread -pthread"
++      $BOOST_THREAD_LIB -lpthread -pthread -l:libwangle.a -l:libfolly.a \
++      -liberty -lunwind"
  
  AM_PATH_PYTHON([2.6],, [:])
  AM_CONDITIONAL([HAVE_PYTHON], [test "$PYTHON" != :])
