@@ -2,14 +2,15 @@ Source: mcrouter
 Section: net
 Priority: optional
 Maintainer: Giuseppe Lavagetto <glavagetto@wikimedia.org>
-Build-Depends: debhelper (>=9), googletest,
+Build-Depends: debhelper (>=9), 
     libboost-all-dev (>=1.55), libcap-dev,
     libdouble-conversion-dev, libdwarf-dev, libelf-dev,
     libevent-dev, libgflags-dev, libgoogle-glog-dev,
     libgtest-dev, libiberty-dev, libjemalloc-dev,
-    liblz4-dev, liblzma-dev, libsnappy-dev, libssl1.0-dev,
-    libssl1.0.2, libtool, libunwind8-dev, cmake, pkg-config,
-    cmake, flex, bison, ragel, scons, unzip, zlib1g-dev
+    liblz4-dev, liblzma-dev, libsnappy-dev, libssl-dev,
+    libssl1.0.0, libtool, libunwind8-dev, cmake, pkg-config,
+    cmake, flex, bison, ragel, scons, unzip, zlib1g-dev,
+    dh-systemd, autoconf, automake
 Standards-Version: 3.9.8
 Homepage: https://github.com/facebook/mcrouter/wiki/
 #Vcs-Git: git://anonscm.debian.org/collab-maint/mcrouter.git
