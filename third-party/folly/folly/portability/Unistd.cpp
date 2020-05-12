@@ -30,12 +30,6 @@
 #include <folly/portability/Sockets.h>
 #include <folly/portability/Windows.h>
 
-// Including ntdef.h requires building as a driver, but all we want
-// is a status code, but we need NTSTATUS defined for that. Luckily
-// bcrypt.h also defines NTSTATUS, so we'll use that one instead.
-#include <bcrypt.h> // @manual
-#include <ntstatus.h> // @manual
-
 // Generic wrapper for the p* family of functions.
 template <class F, class... Args>
 static int wrapPositional(F f, int fd, off_t offset, Args... args) {

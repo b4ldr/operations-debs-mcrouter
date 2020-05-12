@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #pragma once
 
 #include <folly/Optional.h>
@@ -189,118 +190,6 @@ class AsyncSocket : public AsyncTransportWrapper {
      */
     virtual uint32_t getAncillaryDataSize(
         folly::WriteFlags /*flags*/) noexcept {
-      return 0;
-    }
-
-    static const size_t maxAncillaryDataSize{0x5000};
-
-   private:
-    /**
-     * getFlagsImpl() will be invoked by getFlags(folly::WriteFlags flags)
-     * method to retrieve the flags to be passed to ::sendmsg() system call.
-     * SendMsgParamsCallback::getFlags() is calling this method, and returns
-     * its results directly to the caller in AsyncSocket.
-     * Classes inheriting from SendMsgParamsCallback are welcome to override
-     * this method to force SendMsgParamsCallback to return its own set
-     * of flags.
-     *
-     * @param flags        Write flags requested for the given write operation
-     * @param defaultflags A set of message flags returned by getDefaultFlags()
-     *                     method for the given "flags" mask.
-     */
-    virtual int getFlagsImpl(folly::WriteFlags /*flags*/, int defaultFlags) {
-      return defaultFlags;
-    }
-
-    /**
-     * getDefaultFlags() will be invoked by  getFlags(folly::WriteFlags flags)
-     * to retrieve the default set of flags, and pass them to getFlagsImpl(...)
-     *
-     * @param flags     Write flags requested for the given write operation
-     */
-    int getDefaultFlags(folly::WriteFlags flags, bool zeroCopyEnabled) noexcept;
-  };
-
-  class EvbChangeCallback {
-   public:
-    virtual ~EvbChangeCallback() = default;
-
-    // Called when the socket has been attached to a new EVB
-    // and is called from within that EVB thread
-    virtual void evbAttached(AsyncSocket* socket) = 0;
-
-    // Called when the socket is detached from an EVB and
-    // is called from the EVB thread being detached
-    virtual void evbDetached(AsyncSocket* socket) = 0;
-  };
-
-  /**
-   * This interface is implemented only for platforms supporting
-   * per-socket error queues.
-   */
-  class ErrMessageCallback {
-   public:
-    virtual ~ErrMessageCallback() = default;
-
-    /**
-     * errMessage() will be invoked when kernel puts a message to
-     * the error queue associated with the socket.
-     *
-     * @param cmsg      Reference to cmsghdr structure describing
-     *                  a message read from error queue associated
-     *                  with the socket.
-     */
-    virtual void
-    errMessage(const cmsghdr& cmsg) noexcept = 0;
-
-    /**
-     * errMessageError() will be invoked if an error occurs reading a message
-     * from the socket error stream.
-     *
-     * @param ex        An exception describing the error that occurred.
-     */
-    virtual void errMessageError(const AsyncSocketException& ex) noexcept = 0;
-  };
-
-  class SendMsgParamsCallback {
-   public:
-    virtual ~SendMsgParamsCallback() = default;
-
-    /**
-     * getFlags() will be invoked to retrieve the desired flags to be passed
-     * to ::sendmsg() system call. This method was intentionally declared
-     * non-virtual, so there is no way to override it. Instead feel free to
-     * override getFlagsImpl(flags, defaultFlags) method instead, and enjoy
-     * the convenience of defaultFlags passed there.
-     *
-     * @param flags     Write flags requested for the given write operation
-     */
-    int getFlags(folly::WriteFlags flags, bool zeroCopyEnabled) noexcept {
-      return getFlagsImpl(flags, getDefaultFlags(flags, zeroCopyEnabled));
-    }
-
-    /**
-     * getAncillaryData() will be invoked to initialize ancillary data
-     * buffer referred by "msg_control" field of msghdr structure passed to
-     * ::sendmsg() system call. The function assumes that the size of buffer
-     * is not smaller than the value returned by getAncillaryDataSize() method
-     * for the same combination of flags.
-     *
-     * @param flags     Write flags requested for the given write operation
-     * @param data      Pointer to ancillary data buffer to initialize.
-     */
-    virtual void getAncillaryData(
-      folly::WriteFlags /*flags*/,
-      void* /*data*/) noexcept {}
-
-    /**
-     * getAncillaryDataSize() will be invoked to retrieve the size of
-     * ancillary data buffer which should be passed to ::sendmsg() system call
-     *
-     * @param flags     Write flags requested for the given write operation
-     */
-    virtual uint32_t getAncillaryDataSize(folly::WriteFlags /*flags*/)
-        noexcept {
       return 0;
     }
 

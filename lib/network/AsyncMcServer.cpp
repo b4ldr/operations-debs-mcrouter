@@ -821,12 +821,6 @@ void AsyncMcServer::start(std::function<void()> onShutdown) {
   // this call will throw if something went wrong with acceptor.
   threadsSpawnController_->waitForAcceptor();
 
-  threadsSpawnController_->startRunning();
-  spawned_ = true;
-
-  // this call will throw if something went wrong with acceptor.
-  threadsSpawnController_->waitForAcceptor();
-
   /* We atomically attempt to change the state STARTUP -> SPAWNED.
      If we see the state SHUTDOWN, it means a signal handler ran
      concurrently with us (maybe even on this thread),

@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#include <numeric>
-
 #include <folly/dynamic.h>
 
 #include <numeric>
@@ -65,19 +63,6 @@ TypeError::TypeError(
           expected,
           dynamic::typeName(actual1),
           dynamic::typeName(actual2))) {}
-
-[[noreturn]] void throwTypeError_(
-    std::string const& expected,
-    dynamic::Type actual) {
-  throw TypeError(expected, actual);
-}
-
-[[noreturn]] void throwTypeError_(
-    std::string const& expected,
-    dynamic::Type actual1,
-    dynamic::Type actual2) {
-  throw TypeError(expected, actual1, actual2);
-}
 
 // This is a higher-order preprocessor macro to aid going from runtime
 // types to the compile time type system.

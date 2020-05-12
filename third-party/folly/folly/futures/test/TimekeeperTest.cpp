@@ -490,13 +490,3 @@ TEST_F(TimekeeperFixture, destruction) {
   EXPECT_TRUE(f.isReady());
   EXPECT_TRUE(f.hasException());
 }
-
-TEST_F(TimekeeperFixture, destruction) {
-  folly::Optional<ThreadWheelTimekeeper> tk;
-  tk.emplace();
-  auto f = tk->after(std::chrono::seconds(10));
-  EXPECT_FALSE(f.isReady());
-  tk.clear();
-  EXPECT_TRUE(f.isReady());
-  EXPECT_TRUE(f.hasException());
-}

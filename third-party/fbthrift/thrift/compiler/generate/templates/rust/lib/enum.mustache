@@ -1,0 +1,111 @@
+{{!
+
+  Copyright (c) Facebook, Inc. and its affiliates.
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+
+}}
+
+    #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash{{!
+        }}{{#program:serde?}}, Serialize, Deserialize{{/program:serde?}}{{!
+    }})]
+    pub struct {{enum:rust_name}}(pub i32);
+
+    impl {{enum:rust_name}} {{>lib/block}}{{!
+        }}{{#enum:values}}
+        pub const {{enumValue:rust_name}}: Self = {{!
+            }}{{enum:rust_name}}({{enumValue:value}}i32);{{!
+        }}{{/enum:values}}
+    }
+
+    impl Default for {{enum:rust_name}} {
+        fn default() -> Self {
+            {{enum:rust_name}}(fbthrift::__UNKNOWN_ID)
+        }
+    }
+
+    impl<'a> From<&'a {{enum:rust_name}}> for i32 {
+        #[inline]
+        fn from(x: &'a {{enum:rust_name}}) -> i32 {
+            x.0
+        }
+    }
+
+    impl From<{{enum:rust_name}}> for i32 {
+        #[inline]
+        fn from(x: {{enum:rust_name}}) -> i32 {
+            x.0
+        }
+    }
+
+    impl From<i32> for {{enum:rust_name}} {
+        #[inline]
+        fn from(x: i32) -> Self {
+            Self(x)
+        }
+    }
+
+    impl std::fmt::Display for {{enum:rust_name}} {
+        fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {{>lib/block}}{{!
+            }}{{#enum:values?}}
+            let s: &str = match *self {{>lib/block}}{{!
+                }}{{#enum:values}}
+                {{enum:rust_name}}::{{enumValue:rust_name}} => "{{enumValue:name}}",{{!
+                }}{{/enum:values}}
+                {{enum:rust_name}}(x) => return write!(fmt, "{}", x),
+            };
+            write!(fmt, "{}", s){{!
+            }}{{/enum:values?}}{{!
+            }}{{^enum:values?}}
+            write!(fmt, "{}", self.0){{!
+            }}{{/enum:values?}}
+        }
+    }
+
+    impl std::fmt::Debug for {{enum:rust_name}} {
+        fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(fmt, "{{enum:name}}::{}", self)
+        }
+    }
+
+    impl std::str::FromStr for {{enum:rust_name}} {
+        type Err = anyhow::Error;
+
+        fn from_str(string: &str) -> std::result::Result<Self, Self::Err> {
+            match string {{>lib/block}}{{!
+                }}{{#enum:values}}
+                "{{enumValue:name}}" => Ok({{enum:rust_name}}::{{enumValue:rust_name}}),{{!
+                }}{{/enum:values}}
+                _ => anyhow::bail!("Unable to parse {} as {{enum:name}}", string),
+            }
+        }
+    }
+
+    impl GetTType for {{enum:rust_name}} {
+        const TTYPE: TType = TType::I32;
+    }
+
+    impl<P: ProtocolWriter> Serialize<P> for {{enum:rust_name}} {
+        #[inline]
+        fn write(&self, p: &mut P) {
+            p.write_i32(self.into())
+        }
+    }
+
+    impl<P: ProtocolReader> Deserialize<P> for {{enum:rust_name}} {
+        #[inline]
+        fn read(p: &mut P) -> anyhow::Result<Self> {
+            Ok({{enum:rust_name}}::from(p.read_i32()?))
+        }
+    }
+{{!newline}}

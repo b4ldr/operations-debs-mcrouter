@@ -2263,7 +2263,6 @@ STL_TEST(
     ASSERT_EQ(*i, convertToInt(*it)) << "u(i,j) constructed incorrectly";
   }
 }
-}
 
 STL_TEST(
     "23.2.3 Table 100.2",
@@ -2289,7 +2288,6 @@ STL_TEST(
     ASSERT_EQ(*i, convertToInt(*it)) << "u(i,j) constructed incorrectly";
   }
 }
-}
 
 STL_TEST("23.2.3 Table 100.3", ilConstruction, is_arithmetic) {
   // whitebox: ensure that Vector(il) is implemented in terms of
@@ -2309,7 +2307,6 @@ STL_TEST("23.2.3 Table 100.3", ilConstruction, is_arithmetic) {
   for (; it != u.end(); ++it, i += 3) {
     ASSERT_EQ(i, convertToInt(*it)) << "u(il) constructed incorrectly";
   }
-}
 }
 
 STL_TEST("23.2.3 Table 100.4", ilAssignment, is_arithmetic, a) {
@@ -2334,7 +2331,6 @@ STL_TEST("23.2.3 Table 100.4", ilAssignment, is_arithmetic, a) {
   for (; it != a.end(); ++it, i += 3) {
     ASSERT_EQ(i, convertToInt(*it)) << "u(il) constructed incorrectly";
   }
-}
 }
 
 //----------------------------
@@ -2643,7 +2639,6 @@ STL_TEST("23.2.3 Table 100.14", assignRange, is_move_assignable, a, i, j) {
     ASSERT_EQ(*i, convertToInt(*it));
   }
 }
-}
 
 STL_TEST(
     "23.2.3 Table 100.14",
@@ -2665,7 +2660,6 @@ STL_TEST(
   for (auto it = a.begin(); it != a.end(); ++it, ++i) {
     ASSERT_EQ(*i, convertToInt(*it));
   }
-}
 }
 
 STL_TEST("23.2.3 Table 100.15", assignIL, is_arithmetic, a) {
@@ -2690,7 +2684,6 @@ STL_TEST("23.2.3 Table 100.15", assignIL, is_arithmetic, a) {
     ASSERT_EQ(*i, convertToInt(*it));
   }
 }
-}
 
 STL_TEST(
     "23.2.3 Table 100.16",
@@ -2710,7 +2703,6 @@ STL_TEST(
   for (auto it = a.begin(); it != a.end(); ++it) {
     ASSERT_EQ(tval, convertToInt(*it));
   }
-}
 }
 
 STL_TEST("23.2.3 Table 101.1", front, is_destructible, a) {
@@ -2843,7 +2835,6 @@ STL_TEST("23.2.3 Table 100.10", popBack, is_destructible, a) {
   for (; it != a.end(); ++it, ++i) {
     ASSERT_EQ(dsa[i], convertToInt(*it));
   }
-}
 }
 
 STL_TEST("23.2.3 Table 100.11", operatorBrace, is_destructible, a) {

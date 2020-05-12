@@ -79,14 +79,6 @@ struct AccessPoint {
     return unixDomainSocket_;
   }
 
-  bool compressed() const {
-    return compressed_;
-  }
-
-  bool isUnixDomainSocket() const {
-    return unixDomainSocket_;
-  }
-
   /**
    * @return [host]:port if address is IPv6, host:port otherwise
    */

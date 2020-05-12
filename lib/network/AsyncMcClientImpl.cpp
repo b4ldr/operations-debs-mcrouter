@@ -574,7 +574,7 @@ void AsyncMcClientImpl::processShutdown(folly::StringPiece errorMessage) {
       // We can safely close connection, it will stop all writes.
       socket_->close();
 
-    /* fallthrough */
+      /* fallthrough */
 
     case ConnectionState::Error:
       queue_.failAllSent(

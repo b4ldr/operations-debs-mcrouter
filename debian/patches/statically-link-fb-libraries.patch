@@ -5,10 +5,10 @@ Author: Giuseppe Lavagetto <glavagetto@wikimedia.org>
 Forwarded: No
 Last-Update: 2017-03-28
 
-Index: mcrouter-0.41.0/mcrouter/configure.ac
+Index: mcrouter-0.41.0/configure.ac
 ===================================================================
---- mcrouter-0.41.0.orig/mcrouter/configure.ac
-+++ mcrouter-0.41.0/mcrouter/configure.ac
+--- mcrouter-0.41.0.orig/configure.ac
++++ mcrouter-0.41.0/configure.ac
 @@ -123,14 +123,10 @@
               [Please install double-conversion library])])
  AC_CHECK_LIB([dl], [dlopen], [])

@@ -39,8 +39,6 @@ namespace compression {
 
 static_assert(kIsLittleEndian, "BitVectorCoding.h requires little endianness");
 
-static_assert(kIsLittleEndian, "BitVectorCoding.h requires little endianness");
-
 template <class Pointer>
 struct BitVectorCompressedListBase {
   BitVectorCompressedListBase() = default;

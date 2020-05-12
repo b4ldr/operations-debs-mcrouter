@@ -1728,12 +1728,6 @@ class IOBuf::Iterator : public detail::IteratorFacade<
                             ByteRange const,
                             std::forward_iterator_tag> {
  public:
-  using difference_type = ssize_t;
-  using value_type = ByteRange;
-  using reference = ByteRange const&;
-  using pointer = ByteRange const*;
-  using iterator_category = std::forward_iterator_tag;
-
   // Note that IOBufs are stored as a circular list without a guard node,
   // so pos == end is ambiguous (it may mean "begin" or "end").  To solve
   // the ambiguity (at the cost of one extra comparison in the "increment"

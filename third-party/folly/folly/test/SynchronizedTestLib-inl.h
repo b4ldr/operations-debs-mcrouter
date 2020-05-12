@@ -418,7 +418,6 @@ testUnlock() {
     EXPECT_FALSE(lv.isNull());
     EXPECT_EQ(7, *lv);
   }
-}
 
   testUnlockCommon<Mutex>();
 }

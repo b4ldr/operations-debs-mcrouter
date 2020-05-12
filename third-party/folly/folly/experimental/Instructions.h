@@ -147,6 +147,7 @@ struct Haswell : public Nehalem {
     return _bzhi_u64(value, index);
 #endif
   }
+};
 
 enum class Type {
   DEFAULT,

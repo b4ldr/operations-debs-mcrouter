@@ -32,11 +32,6 @@ TEST(Dynamic, Default) {
   EXPECT_TRUE(obj.isNull());
 }
 
-TEST(Dynamic, Default) {
-  dynamic obj;
-  EXPECT_TRUE(obj.isNull());
-}
-
 TEST(Dynamic, ObjectBasics) {
   dynamic obj = dynamic::object("a", false);
   EXPECT_EQ(obj.at("a"), false);

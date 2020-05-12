@@ -75,10 +75,6 @@ Promise<T>::Promise(futures::detail::EmptyConstruct) noexcept
     : retrieved_(false), core_(nullptr) {}
 
 template <class T>
-Promise<T>::Promise(futures::detail::EmptyConstruct) noexcept
-    : retrieved_(false), core_(nullptr) {}
-
-template <class T>
 Promise<T>::~Promise() {
   detach();
 }

@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #pragma once
 
 /*
@@ -109,7 +110,7 @@ class Optional {
   Optional(const Optional& src) noexcept(
       std::is_nothrow_copy_constructible<Value>::value) {
     if (src.hasValue()) {
-      storage_.construct(src.value());
+      construct(src.value());
     }
   }
 
@@ -180,17 +181,17 @@ class Optional {
 
   void assign(Value&& newValue) {
     if (hasValue()) {
-      *storage_.value_pointer() = std::move(newValue);
+      storage_.value = std::move(newValue);
     } else {
-      storage_.construct(std::move(newValue));
+      construct(std::move(newValue));
     }
   }
 
   void assign(const Value& newValue) {
     if (hasValue()) {
-      *storage_.value_pointer() = newValue;
+      storage_.value = newValue;
     } else {
-      storage_.construct(newValue);
+      construct(newValue);
     }
   }
 
@@ -257,17 +258,17 @@ class Optional {
 
   constexpr const Value& value() const& {
     require_value();
-    return *storage_.value_pointer();
+    return storage_.value;
   }
 
   constexpr Value& value() & {
     require_value();
-    return std::move(*storage_.value_pointer());
+    return storage_.value;
   }
 
   constexpr Value&& value() && {
     require_value();
-    return std::move(*storage_.value_pointer());
+    return std::move(storage_.value);
   }
 
   constexpr const Value&& value() const&& {
@@ -279,7 +280,7 @@ class Optional {
     return storage_.hasValue ? &storage_.value : nullptr;
   }
   Value* get_pointer() & {
-    return storage_.value_pointer();
+    return storage_.hasValue ? &storage_.value : nullptr;
   }
   Value* get_pointer() && = delete;
 
@@ -383,7 +384,7 @@ class Optional {
     constexpr StorageTriviallyDestructible()
         : emptyState('\0'), hasValue{false} {}
     void clear() {
-      hasValue_ = false;
+      hasValue = false;
     }
   };
 
@@ -400,9 +401,9 @@ class Optional {
     }
 
     void clear() {
-      if (hasValue_) {
-        hasValue_ = false;
-        launder(reinterpret_cast<Value*>(value_))->~Value();
+      if (hasValue) {
+        hasValue = false;
+        value.~Value();
       }
     }
   };

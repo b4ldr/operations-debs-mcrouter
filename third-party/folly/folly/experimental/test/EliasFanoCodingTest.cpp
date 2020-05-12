@@ -82,61 +82,6 @@ TEST(EliasFanoCoding, defaultNumLowerBits) {
   }
 }
 
-namespace {
-
-uint8_t slowDefaultNumLowerBits(size_t upperBound, size_t size) {
-  if (size == 0 || upperBound < size) {
-    return 0;
-  }
-  // floor(log(upperBound / size));
-  return uint8_t(folly::findLastSet(upperBound / size) - 1);
-}
-
-} // namespace
-
-TEST(EliasFanoCoding, defaultNumLowerBits) {
-  // Verify that slowDefaultNumLowerBits and optimized
-  // Encoder::defaultNumLowerBits agree.
-  static constexpr size_t kNumIterations = 2500;
-  auto compare = [](size_t upperBound, size_t size) {
-    using Encoder = EliasFanoEncoderV2<size_t>;
-    EXPECT_EQ(int(slowDefaultNumLowerBits(upperBound, size)),
-              int(Encoder::defaultNumLowerBits(upperBound, size)))
-        << upperBound << " " << size;
-  };
-  auto batch = [&compare](size_t initialUpperBound) {
-    for (size_t upperBound = initialUpperBound, i = 0;
-         i < kNumIterations;
-         ++i, --upperBound) {
-      // Test "size" values close to "upperBound".
-      for (size_t size = upperBound, j = 0; j < kNumIterations; ++j, --size) {
-        compare(upperBound, size);
-      }
-      // Sample "size" values between [0, upperBound].
-      for (size_t size = upperBound;
-           size > 1 + upperBound / kNumIterations;
-           size -= 1 + upperBound / kNumIterations) {
-        compare(upperBound, size);
-      }
-      // Test "size" values close to 0.
-      for (size_t size = 0; size < kNumIterations; ++size) {
-        compare(upperBound, size);
-      }
-    }
-  };
-  batch(std::numeric_limits<size_t>::max());
-  batch(kNumIterations + 1312213123);
-  batch(kNumIterations);
-
-  std::mt19937 gen;
-  std::uniform_int_distribution<size_t> distribution;
-  for (size_t i = 0; i < kNumIterations; ++i) {
-    const auto a = distribution(gen);
-    const auto b = distribution(gen);
-    compare(std::max(a, b), std::min(a, b));
-  }
-}
-
 class EliasFanoCodingTest : public ::testing::Test {
  public:
   void doTestEmpty() {
@@ -228,30 +173,6 @@ TEST_F(EliasFanoCodingTest, BugLargeGapInUpperBits) { // t16274876
   list.free();
 }
 
-TEST_F(EliasFanoCodingTest, BugLargeGapInUpperBits) { // t16274876
-  typedef EliasFanoEncoderV2<uint32_t, uint32_t, 2, 2> Encoder;
-  typedef EliasFanoReader<Encoder, instructions::EF_TEST_ARCH> Reader;
-  constexpr uint32_t kLargeValue = 127;
-
-  // Build a list where the upper bits have a large gap after the
-  // first element, so that we need to reposition in the upper bits
-  // using skips to position the iterator on the second element.
-  std::vector<uint32_t> data = {0, kLargeValue};
-  for (uint32_t i = 0; i < kLargeValue; ++i) {
-    data.push_back(data.back() + 1);
-  }
-  auto list = Encoder::encode(data.begin(), data.end());
-
-  {
-    Reader reader(list);
-    ASSERT_TRUE(reader.skipTo(kLargeValue - 1));
-    ASSERT_EQ(kLargeValue, reader.value());
-    ASSERT_EQ(0, reader.previousValue());
-  }
-
-  list.free();
-}
-
 namespace bm {
 
 typedef EliasFanoEncoderV2<uint32_t, uint32_t, 128, 128> Encoder;
@@ -261,8 +182,6 @@ std::vector<size_t> order;
 
 std::vector<uint64_t> encodeSmallData;
 std::vector<uint64_t> encodeLargeData;
-
-std::vector<std::pair<size_t, size_t>> numLowerBitsInput;
 
 std::vector<std::pair<size_t, size_t>> numLowerBitsInput;
 

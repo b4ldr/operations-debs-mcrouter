@@ -30,13 +30,6 @@
 #include <folly/small_vector.h>
 #include <folly/test/FBVectorTestUtil.h>
 
-#include <folly/FBVector.h>
-#include <folly/Traits.h>
-#include <folly/container/Foreach.h>
-#include <folly/portability/GFlags.h>
-#include <folly/small_vector.h>
-#include <folly/test/FBVectorTestUtil.h>
-
 using namespace std;
 using namespace folly;
 using namespace folly::test::detail;

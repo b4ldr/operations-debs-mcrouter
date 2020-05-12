@@ -151,25 +151,6 @@ class AsyncMcClient : public Transport {
    */
   static constexpr bool isCompatible(mc_protocol_t protocol);
 
-  /**
-   * @return Retransmits per packet used to detect lossy connections
-   */
-  double getRetransmissionInfo();
-
-  /**
-   * Get the drop probability
-   */
-  template <class Request>
-  double getDropProbability() const;
-
-  /**
-   * Set external queue for managing flush callbacks. By default we'll use
-   * EventBase as a manager of these callbacks.
-   */
-  void setFlushList(FlushList* flushList) {
-    base_->setFlushList(flushList);
-  }
-
  private:
   std::shared_ptr<AsyncMcClientImpl> base_;
 };

@@ -525,20 +525,6 @@ class NextProtocolTest : public Test {
         << "Expected server handshake error!";
   }
 
-  void expectHandshakeSuccess() {
-    EXPECT_FALSE(client->except.hasValue())
-        << "client handshake error: " << client->except->what();
-    EXPECT_FALSE(server->except.hasValue())
-        << "server handshake error: " << server->except->what();
-  }
-
-  void expectHandshakeError() {
-    EXPECT_TRUE(client->except.hasValue())
-        << "Expected client handshake error!";
-    EXPECT_TRUE(server->except.hasValue())
-        << "Expected server handshake error!";
-  }
-
   EventBase eventBase;
   std::shared_ptr<SSLContext> clientCtx{std::make_shared<SSLContext>()};
   std::shared_ptr<SSLContext> serverCtx{std::make_shared<SSLContext>()};
@@ -926,7 +912,6 @@ TEST(AsyncSSLSocketTest, EarlyCloseNotify) {
 
   eventBase.loop();
 }
-#endif // !SSL_ERROR_WANT_SESS_CACHE_LOOKUP
 
 /**
  * Verify Client Ciphers obtained using SSL MSG Callback.

@@ -31,13 +31,6 @@
 #include <folly/portability/GTest.h>
 #include <folly/test/FBVectorTestUtil.h>
 
-#include <folly/FBString.h>
-#include <folly/Random.h>
-#include <folly/Traits.h>
-#include <folly/container/Foreach.h>
-#include <folly/portability/GTest.h>
-#include <folly/test/FBVectorTestUtil.h>
-
 using namespace std;
 using namespace folly;
 using namespace folly::test::detail;

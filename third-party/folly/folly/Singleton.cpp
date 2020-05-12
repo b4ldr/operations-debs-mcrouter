@@ -21,10 +21,6 @@
 #include <dlfcn.h>
 #endif
 
-#ifndef _WIN32
-#include <dlfcn.h>
-#endif
-
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
@@ -35,10 +31,6 @@
 #include <folly/Format.h>
 #include <folly/ScopeGuard.h>
 #include <folly/detail/SingletonStackTrace.h>
-
-#if !defined(_WIN32) && !defined(__APPLE__) && !defined(__ANDROID__)
-#define FOLLY_SINGLETON_HAVE_DLSYM 1
-#endif
 
 #if !defined(_WIN32) && !defined(__APPLE__) && !defined(__ANDROID__)
 #define FOLLY_SINGLETON_HAVE_DLSYM 1

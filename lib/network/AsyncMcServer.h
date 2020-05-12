@@ -119,7 +119,7 @@ class AsyncMcServer {
      * Number of threads to spawn, must be positive if number if virtual event
      * base mode is not used.
      */
-    std::string tlsTicketKeySeedPath;
+    size_t numThreads{1};
 
     /**
      * If set, AsyncMcServer does not own create threads/EventBases and uses

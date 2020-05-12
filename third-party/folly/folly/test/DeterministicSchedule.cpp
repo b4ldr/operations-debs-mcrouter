@@ -499,7 +499,6 @@ detail::FutexResult futexWaitImpl(
       absSteadyTimeout,
       waitMask);
 }
-} // namespace detail
 
 int futexWakeImpl(
     const detail::Futex<DeterministicAtomic>* futex,

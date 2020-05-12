@@ -858,10 +858,3 @@ TEST_F(AsyncUDPSocketTest, TestDetachAttach) {
   t.join();
   EXPECT_EQ(packetsRecvd, 2);
 }
-
-class TestAsyncUDPSocket : public AsyncUDPSocket {
- public:
-  explicit TestAsyncUDPSocket(EventBase* evb) : AsyncUDPSocket(evb) {}
-
-  MOCK_METHOD3(sendmsg, ssize_t(int, const struct msghdr*, int));
-};

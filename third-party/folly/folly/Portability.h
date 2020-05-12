@@ -95,12 +95,6 @@ constexpr bool kHasUnalignedAccess = false;
 #define FOLLY_ARM 0
 #endif
 
-#if defined(__arm__)
-#define FOLLY_ARM 1
-#else
-#define FOLLY_ARM 0
-#endif
-
 #if defined(__aarch64__)
 #define FOLLY_AARCH64 1
 #else

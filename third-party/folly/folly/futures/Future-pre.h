@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #pragma once
 
 // included by Future.h, do not include directly.
@@ -28,19 +29,6 @@ class SemiFuture;
 template <typename T>
 struct isSemiFuture : std::false_type {
   using Inner = lift_unit_t<T>;
-};
-
-template <typename T>
-struct isSemiFuture<SemiFuture<T>> : std::true_type {
-  typedef T Inner;
-};
-
-template <class T>
-class SemiFuture;
-
-template <typename T>
-struct isSemiFuture : std::false_type {
-  using Inner = typename Unit::Lift<T>::type;
 };
 
 template <typename T>

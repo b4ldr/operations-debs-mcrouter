@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <folly/Memory.h>
 #include <folly/io/async/AsyncPipe.h>
 #include <folly/Memory.h>
 #include <folly/io/async/EventBase.h>
@@ -60,12 +59,6 @@ class TestReadCallback : public folly::AsyncReader::ReadCallback {
     auto buf = readBuffer_.move();
     buf->coalesce();
     return std::string((char*)buf->data(), buf->length());
-  }
-
-  void reset() {
-    movable_ = false;
-    error_ = false;
-    readBuffer_.clear();
   }
 
   void reset() {

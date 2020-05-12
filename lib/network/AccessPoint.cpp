@@ -51,15 +51,6 @@ bool parseCompressed(folly::StringPiece s) {
   throw std::runtime_error("Invalid compression config");
 }
 
-bool parseCompressed(folly::StringPiece s) {
-  if (s == "compressed") {
-    return true;
-  } else if (s == "notcompressed") {
-    return false;
-  }
-  throw std::runtime_error("Invalid compression config");
-}
-
 mc_protocol_t parseProtocol(folly::StringPiece str) {
   if (str == "ascii") {
     return mc_ascii_protocol;

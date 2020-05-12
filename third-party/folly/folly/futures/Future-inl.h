@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #pragma once
 
 #include <algorithm>
@@ -449,126 +450,6 @@ FutureBase<T>::thenImplementation(
     futures::detail::InlineContinuation allowInline) {
   static_assert(R::Arg::ArgsSize::value == 2, "Then must take two arguments");
   typedef typename R::ReturnsFuture::Inner B;
-  this->throwIfInvalid();
-
-  Promise<B> p;
-  p.core_->setInterruptHandlerNoLock(this->core_->getInterruptHandler());
-
-  // grab the Future now before we lose our handle on the Promise
-  auto sf = p.getSemiFuture();
-  auto* e = this->getExecutor();
-  sf.core_->setExecutor(e);
-  auto f = Future<B>(sf.core_);
-  sf.core_ = nullptr;
-
-  this->setCallback_([state = futures::detail::makeCoreCallbackState(
-                          std::move(p), std::forward<F>(func))](
-                         Try<T>&& t) mutable {
-    if (!isTry && t.hasException()) {
-      state.setException(std::move(t.exception()));
-    } else {
-      // Ensure that if function returned a SemiFuture we correctly chain
-      // potential deferral.
-      auto tf2 = state.tryInvoke(t.template get<isTry, Args>()...);
-      if (tf2.hasException()) {
-        state.setException(std::move(tf2.exception()));
-      } else {
-        auto statePromise = state.stealPromise();
-        auto tf3 =
-            chainExecutor(statePromise.core_->getExecutor(), *std::move(tf2));
-        tf3.setCallback_([p2 = std::move(statePromise)](Try<B>&& b) mutable {
-          p2.setTry(std::move(b));
-        });
-      }
-    }
-  });
-
-  return f;
-}
-
-/**
- * Defer work until executor is actively boosted.
- *
- * NOTE: that this executor is a private implementation detail belonging to the
- * Folly Futures library and not intended to be used elsewhere. It is designed
- * specifically for the use case of deferring work on a SemiFuture. It is NOT
- * thread safe. Please do not use for any other purpose without great care.
- */
-class DeferredExecutor final : public Executor {
- public:
-  void add(Func func) override {
-    auto state = state_.load(std::memory_order_acquire);
-    if (state == State::HAS_FUNCTION) {
-      // This means we are inside runAndDestroy, just run the function inline
-      func();
-      return;
-    }
-
-    func_ = std::move(func);
-    std::shared_ptr<FutureBatonType> baton;
-    do {
-      if (state == State::HAS_EXECUTOR) {
-        state_.store(State::HAS_FUNCTION, std::memory_order_release);
-        executor_->add([this] { this->runAndDestroy(); });
-        return;
-      }
-      if (state == State::DETACHED) {
-        // Function destructor may trigger more functions to be added to the
-        // Executor. They should be run inline.
-        state = State::HAS_FUNCTION;
-        func_ = nullptr;
-        delete this;
-        return;
-      }
-      if (state == State::HAS_BATON) {
-        baton = baton_.copy();
-      }
-      assert(state == State::EMPTY || state == State::HAS_BATON);
-    } while (!state_.compare_exchange_weak(
-        state,
-        State::HAS_FUNCTION,
-        std::memory_order_release,
-        std::memory_order_acquire));
-
-    // After compare_exchange_weak is complete, we can no longer use this
-    // object since it may be destroyed from another thread.
-    if (baton) {
-      baton->post();
-    }
-  }
-
-  void setExecutor(folly::Executor* executor) {
-    executor_ = executor;
-    auto state = state_.load(std::memory_order_acquire);
-    do {
-      if (state == State::HAS_FUNCTION) {
-        executor_->add([this] { this->runAndDestroy(); });
-        return;
-      }
-      assert(state == State::EMPTY);
-    } while (!state_.compare_exchange_weak(
-        state,
-        State::HAS_EXECUTOR,
-        std::memory_order_release,
-        std::memory_order_acquire));
-  }
-
-  void runAndDestroy() {
-    assert(state_.load(std::memory_order_relaxed) == State::HAS_FUNCTION);
-    func_();
-    delete this;
-  }
-
-  void detach() {
-    auto state = state_.load(std::memory_order_acquire);
-    do {
-      if (state == State::HAS_FUNCTION) {
-        // Function destructor may trigger more functions to be added to the
-        // Executor. They should be run inline.
-        func_ = nullptr;
-        delete this;
-        return;
-      }
 
   Promise<B> p;
   p.core_->setInterruptHandlerNoLock(this->getCore().getInterruptHandler());
@@ -1492,7 +1373,6 @@ void stealDeferredExecutors(
 
 // collectAll (variadic)
 
-// TODO(T26439406): Make return SemiFuture
 template <typename... Fs>
 SemiFuture<std::tuple<Try<typename remove_cvref_t<Fs>::value_type>...>>
 collectAll(Fs&&... fs) {
@@ -1543,7 +1423,6 @@ collectAllUnsafe(Fs&&... fs) {
 
 // collectAll (iterator)
 
-// TODO(T26439406): Make return SemiFuture
 template <class InputIterator>
 SemiFuture<std::vector<
     Try<typename std::iterator_traits<InputIterator>::value_type::value_type>>>
@@ -1663,7 +1542,6 @@ collect(InputIterator first, InputIterator last) {
   return future;
 }
 
-// TODO(T26439406): Make return SemiFuture
 template <class InputIterator>
 Future<std::vector<
     typename std::iterator_traits<InputIterator>::value_type::value_type>>
@@ -1680,7 +1558,6 @@ collectSemiFuture(InputIterator first, InputIterator last) {
 
 // collect (variadic)
 
-// TODO(T26439406): Make return SemiFuture
 template <typename... Fs>
 SemiFuture<std::tuple<typename remove_cvref_t<Fs>::value_type...>> collect(
     Fs&&... fs) {
@@ -1804,7 +1681,6 @@ collectAny(InputIterator first, InputIterator last) {
 
 // collectAnyWithoutException (iterator)
 
-// TODO(T26439406): Make return SemiFuture
 template <class InputIterator>
 SemiFuture<std::pair<
     size_t,
@@ -1852,7 +1728,6 @@ collectAnyWithoutException(InputIterator first, InputIterator last) {
 
 // collectN (iterator)
 
-// TODO(T26439406): Make return SemiFuture
 template <class InputIterator>
 SemiFuture<std::vector<std::pair<
     size_t,
@@ -2192,10 +2067,6 @@ SemiFuture<T>::within(HighResDuration dur, E e, Timekeeper* tk) && {
     Promise<T> promise;
     std::atomic<bool> token{false};
   };
-
-  if (this->isReady()) {
-    return std::move(*this);
-  }
 
   std::shared_ptr<Timekeeper> tks;
   if (LIKELY(!tk)) {

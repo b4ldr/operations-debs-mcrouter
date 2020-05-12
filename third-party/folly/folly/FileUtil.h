@@ -132,7 +132,7 @@ bool readFile(
 
   size_t soFar = 0; // amount of bytes successfully read
   SCOPE_EXIT {
-    DCHECK(out.size() >= soFar); // resize better doesn't throw
+    assert(out.size() >= soFar); // resize better doesn't throw
     out.resize(soFar);
   };
 

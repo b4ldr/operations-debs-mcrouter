@@ -452,53 +452,6 @@ TEST(Json, EscapeCornerCases) {
   }
 }
 
-TEST(Json, EscapeCornerCases) {
-  // The escaping logic uses some bitwise operations to determine
-  // which bytes need escaping 8 bytes at a time. Test that this logic
-  // is correct regardless of positions by planting 2 characters that
-  // may need escaping at each possible position and checking the
-  // result, for varying string lengths.
-
-  folly::json::serialization_opts opts;
-  opts.validate_utf8 = true;
-
-  std::string s;
-  std::string expected;
-  for (bool ascii : {true, false}) {
-    opts.encode_non_ascii = ascii;
-
-    for (size_t len = 2; len < 32; ++len) {
-      for (size_t i = 0; i < len; ++i) {
-        for (size_t j = 0; j < len; ++j) {
-          if (i == j) {
-            continue;
-          }
-
-          s.clear();
-          expected.clear();
-
-          expected.push_back('"');
-          for (size_t pos = 0; pos < len; ++pos) {
-            if (pos == i) {
-              s.push_back('\\');
-              expected.append("\\\\");
-            } else if (pos == j) {
-              s.append("\xe2\x82\xac");
-              expected.append(ascii ? "\\u20ac" : "\xe2\x82\xac");
-            } else {
-              s.push_back('x');
-              expected.push_back('x');
-            }
-          }
-          expected.push_back('"');
-
-          EXPECT_EQ(folly::json::serialize(s, opts), expected) << ascii;
-        }
-      }
-    }
-  }
-}
-
 TEST(Json, JsonNonAsciiEncoding) {
   folly::json::serialization_opts opts;
   opts.encode_non_ascii = true;
@@ -821,10 +774,6 @@ TEST(Json, SortKeys) {
   std::string sorted_keys =
       R"({"a":[{"a":"b","c":"d"},12.5,"Yo Dawg",["heh"],null],)"
       R"("another":32.2,"foo":"bar","junk":12})";
-
-  std::string inverse_sorted_keys =
-      R"({"junk":12,"foo":"bar","another":32.2,)"
-      R"("a":[{"c":"d","a":"b"},12.5,"Yo Dawg",["heh"],null]})";
 
   std::string inverse_sorted_keys =
       R"({"junk":12,"foo":"bar","another":32.2,)"

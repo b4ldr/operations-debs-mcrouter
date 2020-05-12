@@ -158,10 +158,8 @@ void SingletonHolder<T>::vivify() {
 }
 
 template <typename T>
-void SingletonHolder<T>::preDestroyInstance(
-    ReadMostlyMainPtrDeleter<>& deleter) {
-  instance_copy_ = instance_;
-  deleter.add(std::move(instance_));
+bool SingletonHolder<T>::hasLiveInstance() {
+  return !instance_weak_.expired();
 }
 
 template <typename T>

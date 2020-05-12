@@ -305,7 +305,6 @@ struct LastElementImpl<Head, Ts...> {
     return std::forward<Last>(last);
   }
 };
-#endif
 
 template <typename... Ts>
 auto getLastElement(const Ts&... ts)

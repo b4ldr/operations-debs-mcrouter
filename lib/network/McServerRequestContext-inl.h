@@ -144,34 +144,6 @@ inline bool McServerRequestContext::noReply(const McLeaseGetReply&) const {
   return isParentError();
 }
 
-/**
- * No reply if either:
- *  1) We saw an error (the error will be printed out by the end context),
- *  2) This is a miss, except for lease-get (lease-get misses still have
- *     'LVALUE' replies with the token).
- * Lease-gets are handled in a separate overload below.
- */
-template <class Reply>
-bool McServerRequestContext::noReply(const Reply& r) const {
-  if (noReply_) {
-    return true;
-  }
-  if (!hasParent()) {
-    return false;
-  }
-  return isParentError() || r.result() != mc_res_found;
-}
-
-inline bool McServerRequestContext::noReply(const McLeaseGetReply&) const {
-  if (noReply_) {
-    return true;
-  }
-  if (!hasParent()) {
-    return false;
-  }
-  return isParentError();
-}
-
 template <class T, class Enable = void>
 struct HasDispatchTypedRequest {
   static constexpr std::false_type value{};

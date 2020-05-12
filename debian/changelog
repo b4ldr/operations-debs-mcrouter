@@ -1,3 +1,9 @@
+mcrouter (0.41.0-1) buster-wikimedia; urgency=medium
+
+  * Upgrade upstream to 0.41.0
+
+ -- John Bond <jbond@wikimedia.org>  Tue, 12 May 2020 14:33:14 +0000
+
 mcrouter (0.37.0-1) stretch-wikimedia; urgency=medium
 
   * Upgrade upstream to 0.37.0

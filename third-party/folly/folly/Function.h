@@ -526,7 +526,6 @@ struct FunctionTraits<ReturnType(Args...) noexcept> {
   using SharedProxy =
       FunctionTraitsSharedProxy<NonConstSignature, ReturnType, Args...>;
 };
-#endif
 
 template <typename ReturnType, typename... Args>
 struct FunctionTraits<ReturnType(Args...) const noexcept> {
@@ -897,16 +896,6 @@ class Function final : private detail::function::FunctionTraits<FunctionType> {
    */
   std::size_t heapAllocatedMemory() const noexcept {
     return exec(Op::HEAP, nullptr, nullptr);
-  }
-
-  using typename Traits::SharedProxy;
-
-  /**
-   * Move this `Function` into a copyable callable object, of which all copies
-   * share the state.
-   */
-  SharedProxy asSharedProxy() && {
-    return SharedProxy{std::move(*this)};
   }
 
   using typename Traits::SharedProxy;

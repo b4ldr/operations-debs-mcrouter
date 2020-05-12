@@ -7,20 +7,20 @@ export MY_MAKEFLAGS=$(shell perl -e 'print "-j$$1" if ($$ENV{"DEB_BUILD_OPTIONS"
 	dh $@ --with=systemd --parallel
 
 configure_and_build_folly:
-	cd third-party/folly/folly && autoreconf --install
-	cd third-party/folly/folly \
-	&& LD_LIBRARY_PATH="$(LIB_DIR):$$LD_LIBRARY_PATH" \
-		LD_RUN_PATH="$(LIB_DIR):$$LD_RUN_PATH" ./configure \
-			--prefix=$(LIB_BASE)
-	cd third-party/folly/folly && make $(MY_MAKEFLAGS)
-	cd third-party/folly/folly && make install
+	cd third-party/folly/build && \
+	    LD_LIBRARY_PATH="$(LIB_DIR):$$LD_LIBRARY_PATH" \
+		LD_RUN_PATH="$(LIB_DIR):$$LD_RUN_PATH" \
+		cmake -DCMAKE_INSTALL_PREFIX:PATH=$(LIB_BASE) ..
+	cd third-party/folly/build && make $(MY_MAKEFLAGS)
+	cd third-party/folly/build && make install
 
-configure_and_build_wangle:
-	cd third-party/wangle/wangle && cmake \
-		-DCMAKE_INSTALL_PREFIX=$(LIB_BASE) \
-		-DBUILD_TESTS=OFF
-	cd third-party/wangle/wangle && make $(MY_MAKEFLAGS)
-	cd third-party/wangle/wangle && make install
+configure_and_build_fbthrift:
+	cd third-party/fbthrift/build && \
+	    LD_LIBRARY_PATH="$(LIB_DIR):$$LD_LIBRARY_PATH" \
+		LD_RUN_PATH="$(LIB_DIR):$$LD_RUN_PATH" \
+		cmake -DCMAKE_INSTALL_PREFIX:PATH=$(LIB_BASE) ..
+	cd third-party/fbthrift/build && make $(MY_MAKEFLAGS)
+	cd third-party/fbthrift/build && make install
 
 configure_mcrouter:
 	# Ugly, ugly, ugly hack to cope quickly with the "peculiar" includes
@@ -33,7 +33,7 @@ configure_mcrouter:
 		CPPFLAGS="-I$(LIB_BASE)/include $$CPPFLAGS" \
 		./configure --prefix=/usr
 
-override_dh_auto_configure: configure_and_build_folly configure_and_build_wangle configure_mcrouter
+override_dh_auto_configure: configure_and_build_folly configure_and_build_fbthrift configure_mcrouter
 
 override_dh_auto_install:
 	dh_auto_install

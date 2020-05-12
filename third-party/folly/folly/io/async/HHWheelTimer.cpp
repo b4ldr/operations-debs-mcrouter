@@ -299,7 +299,6 @@ void HHWheelTimerBase<Duration>::timeoutExpired() noexcept {
   if (count_ > 0) {
     scheduleNextTimeout(expireTick_);
   }
-  scheduleNextTimeout();
 }
 
 template <class Duration>

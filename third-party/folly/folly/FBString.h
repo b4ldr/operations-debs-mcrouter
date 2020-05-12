@@ -263,8 +263,8 @@ class fbstring_core {
       default:
         folly::assume_unreachable();
     }
-    FBSTRING_ASSERT(size() == rhs.size());
-    FBSTRING_ASSERT(memcmp(data(), rhs.data(), size() * sizeof(Char)) == 0);
+    assert(size() == rhs.size());
+    assert(memcmp(data(), rhs.data(), size() * sizeof(Char)) == 0);
   }
 
   fbstring_core& operator=(const fbstring_core& rhs) = delete;
@@ -311,8 +311,8 @@ class fbstring_core {
       const size_t allocatedSize,
       AcquireMallocatedString) {
     if (size > 0) {
-      FBSTRING_ASSERT(allocatedSize >= size + 1);
-      FBSTRING_ASSERT(data[size] == '\0');
+      assert(allocatedSize >= size + 1);
+      assert(data[size] == '\0');
       // Use the medium string storage
       ml_.data_ = data;
       ml_.size_ = size;
@@ -389,7 +389,7 @@ class fbstring_core {
       default:
         folly::assume_unreachable();
     }
-    FBSTRING_ASSERT(capacity() >= minCapacity);
+    assert(capacity() >= minCapacity);
   }
 
   Char* expandNoinit(
@@ -487,7 +487,7 @@ class fbstring_core {
     static void decrementRefs(Char* p) {
       auto const dis = fromData(p);
       size_t oldcnt = dis->refCount_.fetch_sub(1, std::memory_order_acq_rel);
-      FBSTRING_ASSERT(oldcnt > 0);
+      assert(oldcnt > 0);
       if (oldcnt == 1) {
         free(dis);
       }
@@ -581,10 +581,10 @@ class fbstring_core {
       "Corrupt memory layout for fbstring.");
 
   size_t smallSize() const {
-    FBSTRING_ASSERT(category() == Category::isSmall);
+    assert(category() == Category::isSmall);
     constexpr auto shift = kIsLittleEndian ? 0 : 2;
     auto smallShifted = static_cast<size_t>(small_[maxSmallSize]) >> shift;
-    FBSTRING_ASSERT(static_cast<size_t>(maxSmallSize) >= smallShifted);
+    assert(static_cast<size_t>(maxSmallSize) >= smallShifted);
     return static_cast<size_t>(maxSmallSize) - smallShifted;
   }
 
@@ -592,11 +592,11 @@ class fbstring_core {
     // Warning: this should work with uninitialized strings too,
     // so don't assume anything about the previous value of
     // small_[maxSmallSize].
-    FBSTRING_ASSERT(s <= maxSmallSize);
+    assert(s <= maxSmallSize);
     constexpr auto shift = kIsLittleEndian ? 0 : 2;
     small_[maxSmallSize] = char((maxSmallSize - s) << shift);
     small_[s] = '\0';
-    FBSTRING_ASSERT(category() == Category::isSmall && size() == s);
+    assert(category() == Category::isSmall && size() == s);
   }
 
   void copySmall(const fbstring_core&);
@@ -936,7 +936,7 @@ class dummy_fbstring_core {
     return const_cast<Char*>(backend_.data());
   }
   void shrink(size_t delta) {
-    FBSTRING_ASSERT(delta <= size());
+    assert(delta <= size());
     backend_.resize(size() - delta);
   }
   Char* expandNoinit(size_t delta) {
@@ -1222,7 +1222,7 @@ class basic_fbstring {
     return *begin();
   }
   const value_type& back() const {
-    FBSTRING_ASSERT(!empty());
+    assert(!empty());
     // Should be begin()[size() - 1], but that branches twice
     return *(end() - 1);
   }
@@ -1230,12 +1230,12 @@ class basic_fbstring {
     return *begin();
   }
   value_type& back() {
-    FBSTRING_ASSERT(!empty());
+    assert(!empty());
     // Should be begin()[size() - 1], but that branches twice
     return *(end() - 1);
   }
   void pop_back() {
-    FBSTRING_ASSERT(!empty());
+    assert(!empty());
     store_.shrink(1);
   }
 

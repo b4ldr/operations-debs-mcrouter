@@ -44,8 +44,6 @@ class InitOptions {
   }
 };
 
-#include <folly/CPortability.h>
-
 /*
  * Calls common init functions in the necessary order
  * Among other things, this ensures that folly::Singletons are initialized

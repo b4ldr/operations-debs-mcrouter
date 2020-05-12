@@ -232,14 +232,6 @@ Container&& as_sorted_unique(Container&& container, Compare const& comp) {
 }
 } // namespace detail
 
-template <typename Container, typename Compare>
-Container&& as_sorted(Container&& container, Compare const& comp) {
-  using namespace std;
-  std::sort(begin(container), end(container), comp);
-  return static_cast<Container&&>(container);
-}
-} // namespace detail
-
 //////////////////////////////////////////////////////////////////////
 
 /**

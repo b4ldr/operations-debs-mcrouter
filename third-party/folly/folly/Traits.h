@@ -594,25 +594,6 @@ struct is_transparent_<void_t<typename T::is_transparent>, T> : std::true_type {
 template <typename T>
 struct is_transparent : detail::is_transparent_<void, T> {};
 
-template <bool... Bs>
-struct Bools {
-  using valid_type = bool;
-  static constexpr std::size_t size() {
-    return sizeof...(Bs);
-  }
-};
-
-// Lighter-weight than Conjunction, but evaluates all sub-conditions eagerly.
-template <class... Ts>
-struct StrictConjunction
-    : std::is_same<Bools<Ts::value...>, Bools<(Ts::value || true)...>> {};
-
-template <class... Ts>
-struct StrictDisjunction
-  : Negation<
-      std::is_same<Bools<Ts::value...>, Bools<(Ts::value && false)...>>
-    > {};
-
 } // namespace folly
 
 /**

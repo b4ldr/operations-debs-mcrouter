@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 // SingletonVault - a library to manage the creation and destruction
 // of interdependent singletons.
 //
@@ -515,10 +516,6 @@ class SingletonVault {
     type_ = type;
   }
 
-  void setType(Type type) {
-    type_ = type;
-  }
-
  private:
   template <typename T>
   friend struct detail::SingletonHolder;
@@ -742,20 +739,6 @@ class LeakySingleton {
     if (entry.ptr) {
       annotate_object_leaked(std::exchange(entry.ptr, nullptr));
     }
-    entry.createFunc = createFunc;
-    entry.state = State::Dead;
-  }
-
-  static void make_mock(std::nullptr_t /* c */ = nullptr) {
-    make_mock([]() { return new T; });
-  }
-
-  static void make_mock(CreateFunc createFunc) {
-    if (createFunc == nullptr) {
-      detail::singletonThrowNullCreator(typeid(T));
-    }
-
-    auto& entry = entryInstance();
     entry.createFunc = createFunc;
     entry.state = State::Dead;
   }

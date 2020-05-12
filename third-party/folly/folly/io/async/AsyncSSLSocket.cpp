@@ -166,7 +166,7 @@ class AsyncSSLSocketConnector : public AsyncSocket::ConnectCallback,
         return;
       }
     }
-    sslSocket_->sslConn(this, std::chrono::milliseconds(timeoutLeft));
+    sslSocket_->sslConn(this, timeoutLeft);
   }
 
   void connectErr(const AsyncSocketException& ex) noexcept override {
@@ -1942,14 +1942,6 @@ void AsyncSSLSocket::clientHelloParsingCallback(
             }
             extensionDataLength -=
                 sizeof(typ) + sizeof(nameLength) + nameLength;
-          }
-        } else if (extensionType == ssl::TLSExtension::SUPPORTED_VERSIONS) {
-          cursor.skip(1);
-          extensionDataLength -= 1;
-          while (extensionDataLength) {
-            sock->clientHelloInfo_->clientHelloSupportedVersions_.push_back(
-                cursor.readBE<uint16_t>());
-            extensionDataLength -= 2;
           }
         } else {
           cursor.skip(extensionDataLength);

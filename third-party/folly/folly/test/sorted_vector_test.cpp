@@ -296,70 +296,6 @@ TEST(SortedVectorTypes, BadHints) {
   }
 }
 
-TEST(SortedVectorTypes, TransparentSetTest) {
-  using namespace folly::string_piece_literals;
-  using Compare = folly::transparent<std::less<folly::StringPiece>>;
-
-  constexpr auto buddy = "buddy"_sp;
-  constexpr auto hello = "hello"_sp;
-  constexpr auto stake = "stake"_sp;
-  constexpr auto world = "world"_sp;
-  constexpr auto zebra = "zebra"_sp;
-
-  sorted_vector_set<std::string, Compare> const s({hello.str(), world.str()});
-
-  // find
-  EXPECT_TRUE(s.end() == s.find(buddy));
-  EXPECT_EQ(hello, *s.find(hello));
-  EXPECT_TRUE(s.end() == s.find(stake));
-  EXPECT_EQ(world, *s.find(world));
-  EXPECT_TRUE(s.end() == s.find(zebra));
-
-  // count
-  EXPECT_EQ(0, s.count(buddy));
-  EXPECT_EQ(1, s.count(hello));
-  EXPECT_EQ(0, s.count(stake));
-  EXPECT_EQ(1, s.count(world));
-  EXPECT_EQ(0, s.count(zebra));
-
-  // lower_bound
-  EXPECT_TRUE(s.find(hello) == s.lower_bound(buddy));
-  EXPECT_TRUE(s.find(hello) == s.lower_bound(hello));
-  EXPECT_TRUE(s.find(world) == s.lower_bound(stake));
-  EXPECT_TRUE(s.find(world) == s.lower_bound(world));
-  EXPECT_TRUE(s.end() == s.lower_bound(zebra));
-
-  // upper_bound
-  EXPECT_TRUE(s.find(hello) == s.upper_bound(buddy));
-  EXPECT_TRUE(s.find(world) == s.upper_bound(hello));
-  EXPECT_TRUE(s.find(world) == s.upper_bound(stake));
-  EXPECT_TRUE(s.end() == s.upper_bound(world));
-  EXPECT_TRUE(s.end() == s.upper_bound(zebra));
-
-  // equal_range
-  for (auto value : {buddy, hello, stake, world, zebra}) {
-    EXPECT_TRUE(
-        std::make_pair(s.lower_bound(value), s.upper_bound(value)) ==
-        s.equal_range(value))
-        << value;
-  }
-}
-
-TEST(SortedVectorTypes, BadHints) {
-  for (int toInsert = -1; toInsert <= 7; ++toInsert) {
-    for (int hintPos = 0; hintPos <= 4; ++hintPos) {
-      sorted_vector_set<int> s;
-      for (int i = 0; i <= 3; ++i) {
-        s.insert(i * 2);
-      }
-      s.insert(s.begin() + hintPos, toInsert);
-      size_t expectedSize = (toInsert % 2) == 0 ? 4 : 5;
-      EXPECT_EQ(s.size(), expectedSize);
-      check_invariant(s);
-    }
-  }
-}
-
 TEST(SortedVectorTypes, SimpleMapTest) {
   sorted_vector_map<int, float> m;
   for (int i = 0; i < 1000; ++i) {
@@ -438,56 +374,6 @@ TEST(SortedVectorTypes, SimpleMapTest) {
   sorted_vector_map<int, float> m6 = {};
   m6.insert({{1, 1.0f}, {2, 2.0f}, {1, 2.0f}});
   EXPECT_EQ(m6.at(2), 2.0f);
-}
-
-TEST(SortedVectorTypes, TransparentMapTest) {
-  using namespace folly::string_piece_literals;
-  using Compare = folly::transparent<std::less<folly::StringPiece>>;
-
-  constexpr auto buddy = "buddy"_sp;
-  constexpr auto hello = "hello"_sp;
-  constexpr auto stake = "stake"_sp;
-  constexpr auto world = "world"_sp;
-  constexpr auto zebra = "zebra"_sp;
-
-  sorted_vector_map<std::string, float, Compare> const m(
-      {{hello.str(), -1.}, {world.str(), +1.}});
-
-  // find
-  EXPECT_TRUE(m.end() == m.find(buddy));
-  EXPECT_EQ(hello, m.find(hello)->first);
-  EXPECT_TRUE(m.end() == m.find(stake));
-  EXPECT_EQ(world, m.find(world)->first);
-  EXPECT_TRUE(m.end() == m.find(zebra));
-
-  // count
-  EXPECT_EQ(0, m.count(buddy));
-  EXPECT_EQ(1, m.count(hello));
-  EXPECT_EQ(0, m.count(stake));
-  EXPECT_EQ(1, m.count(world));
-  EXPECT_EQ(0, m.count(zebra));
-
-  // lower_bound
-  EXPECT_TRUE(m.find(hello) == m.lower_bound(buddy));
-  EXPECT_TRUE(m.find(hello) == m.lower_bound(hello));
-  EXPECT_TRUE(m.find(world) == m.lower_bound(stake));
-  EXPECT_TRUE(m.find(world) == m.lower_bound(world));
-  EXPECT_TRUE(m.end() == m.lower_bound(zebra));
-
-  // upper_bound
-  EXPECT_TRUE(m.find(hello) == m.upper_bound(buddy));
-  EXPECT_TRUE(m.find(world) == m.upper_bound(hello));
-  EXPECT_TRUE(m.find(world) == m.upper_bound(stake));
-  EXPECT_TRUE(m.end() == m.upper_bound(world));
-  EXPECT_TRUE(m.end() == m.upper_bound(zebra));
-
-  // equal_range
-  for (auto value : {buddy, hello, stake, world, zebra}) {
-    EXPECT_TRUE(
-        std::make_pair(m.lower_bound(value), m.upper_bound(value)) ==
-        m.equal_range(value))
-        << value;
-  }
 }
 
 TEST(SortedVectorTypes, TransparentMapTest) {

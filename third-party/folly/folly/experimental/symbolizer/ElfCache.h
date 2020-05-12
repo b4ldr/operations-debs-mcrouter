@@ -21,7 +21,6 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 #include <boost/intrusive/avl_set.hpp>
 #include <boost/intrusive/list.hpp>

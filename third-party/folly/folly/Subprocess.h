@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 /**
  * Subprocess library, modeled after Python's subprocess module
  * (http://docs.python.org/2/library/subprocess.html)
@@ -102,6 +103,7 @@
 #include <vector>
 
 #include <boost/container/flat_map.hpp>
+#include <boost/operators.hpp>
 
 #include <folly/Exception.h>
 #include <folly/File.h>

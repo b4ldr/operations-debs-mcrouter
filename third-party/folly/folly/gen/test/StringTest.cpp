@@ -397,19 +397,3 @@ TEST(StringGen, UncurryPair) {
       rows | map(uncurry([](int x, int y) { return x * y; })) | sum;
   EXPECT_EQ(42, productSum);
 }
-
-TEST(StringGen, UncurryTuple) {
-  folly::StringPiece file = "1\t2\t3\n1\t4\t9";
-  auto rows = split(file, '\n') | eachToTuple<int, int, int>('\t');
-  auto productSum =
-      rows | map(uncurry([](int x, int y, int z) { return x * y * z; })) | sum;
-  EXPECT_EQ(42, productSum);
-}
-
-TEST(StringGen, UncurryPair) {
-  folly::StringPiece file = "2\t3\n4\t9";
-  auto rows = split(file, '\n') | eachToPair<int, int>('\t');
-  auto productSum =
-      rows | map(uncurry([](int x, int y) { return x * y; })) | sum;
-  EXPECT_EQ(42, productSum);
-}

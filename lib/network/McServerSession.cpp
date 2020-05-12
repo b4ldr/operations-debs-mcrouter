@@ -577,24 +577,6 @@ void McServerSession::writeToDebugFifo(const WriteBuffer* wb) noexcept {
   debugFifo_.writeData(wb->getIovsBegin(), wb->getIovsCount());
 }
 
-void McServerSession::writeToDebugFifo(const WriteBuffer* wb) noexcept {
-  if (!wb->isSubRequest()) {
-    debugFifo_.startMessage(MessageDirection::Sent, wb->typeId());
-    hasPendingMultiOp_ = false;
-  } else {
-    // Handle multi-op
-    if (!hasPendingMultiOp_) {
-      debugFifo_.startMessage(MessageDirection::Sent, wb->typeId());
-      hasPendingMultiOp_ = true;
-    }
-    if (wb->isEndContext()) {
-      // Multi-op replies always finish with an end context
-      hasPendingMultiOp_ = false;
-    }
-  }
-  debugFifo_.writeData(wb->getIovsBegin(), wb->getIovsCount());
-}
-
 void McServerSession::completeWrite() {
   writeBufs_.pop(!options_.singleWrite /* popBatch */);
 }

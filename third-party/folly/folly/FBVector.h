@@ -1659,18 +1659,6 @@ class fbvector {
     return !(*this < other);
   }
 
-  bool operator>(const fbvector& other) const {
-    return other < *this;
-  }
-
-  bool operator<=(const fbvector& other) const {
-    return !(*this > other);
-  }
-
-  bool operator>=(const fbvector& other) const {
-    return !(*this < other);
-  }
-
   //===========================================================================
   //---------------------------------------------------------------------------
   // friends

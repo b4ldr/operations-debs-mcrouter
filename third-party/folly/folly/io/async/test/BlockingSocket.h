@@ -105,14 +105,6 @@ class BlockingSocket : public folly::AsyncSocket::ConnectCallback,
     return dynamic_cast<folly::AsyncSSLSocket*>(sock_.get());
   }
 
-  folly::AsyncSocket* getSocket() {
-    return sock_.get();
-  }
-
-  folly::AsyncSSLSocket* getSSLSocket() {
-    return dynamic_cast<folly::AsyncSSLSocket*>(sock_.get());
-  }
-
  private:
   folly::EventBase eventBase_;
   folly::AsyncSocket::UniquePtr sock_;

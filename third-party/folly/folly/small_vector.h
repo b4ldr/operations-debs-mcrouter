@@ -55,7 +55,6 @@
 #include <folly/lang/Exception.h>
 #include <folly/memory/Malloc.h>
 #include <folly/portability/Malloc.h>
-#include <folly/portability/TypeTraits.h>
 
 #if (FOLLY_X64 || FOLLY_PPC64)
 #define FOLLY_SV_PACK_ATTR FOLLY_PACK_ATTR
@@ -810,10 +809,6 @@ class small_vector : public detail::small_vector_base<
 
   void push_back(value_type&& t) {
     emplace_back(std::move(t));
-  }
-
-  void push_back(value_type&& t) {
-    return emplace_back(std::move(t));
   }
 
   void push_back(value_type const& t) {

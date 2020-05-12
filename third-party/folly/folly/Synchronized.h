@@ -1059,15 +1059,6 @@ class LockedPtrBase {
   using MutexType = Mutex;
   friend class folly::ScopedUnlocker<SynchronizedType, LockPolicy>;
 
-  // used to disable copy construction and assignment
-  class NonImplementedType;
-
- public:
-  using LockedPtr = typename Base::LockedPtr;
-  using ConstLockedPtr = typename Base::ConstLockedPtr;
-  using DataType = T;
-  using MutexType = Mutex;
-
   /**
    * Friend all instantiations of LockedPtr and LockedPtrBase
    */

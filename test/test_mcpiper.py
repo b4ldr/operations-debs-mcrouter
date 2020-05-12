@@ -23,10 +23,6 @@ class TestMcpiper(McrouterTestCase):
     mcrouter_caret_extra_args = ['--debug-fifo-root',
                                  BaseDirectory('mcrouter_caret').path]
 
-    mcrouter_caret_config = './mcrouter/test/test_caret_server.json'
-    mcrouter_caret_extra_args = ['--debug-fifo-root',
-                                 BaseDirectory('mcrouter_caret').path]
-
     def setUp(self):
         self.memcached = self.add_server(Memcached())
         self.mcrouter_ascii = self.add_mcrouter(

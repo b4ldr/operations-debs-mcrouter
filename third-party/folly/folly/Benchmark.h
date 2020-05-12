@@ -34,9 +34,6 @@
 #include <boost/function_types/function_arity.hpp>
 #include <glog/logging.h>
 
-#include <boost/function_types/function_arity.hpp>
-#include <glog/logging.h>
-
 DECLARE_bool(benchmark);
 
 namespace folly {

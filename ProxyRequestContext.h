@@ -34,12 +34,6 @@ class ProxyBase;
 class CarbonRouterClientBase;
 class ShardSplitter;
 
-struct PoolContext {
-  folly::StringPiece poolName;
-  size_t indexInPool;
-  bool isShadow;
-};
-
 /**
  * This object is alive for the duration of user's request,
  * including any subrequests that might have been sent out.

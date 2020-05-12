@@ -679,18 +679,6 @@ class Range {
     if (UNLIKELY(n > size())) {
       throw_exception<std::out_of_range>("index out of range");
     }
-
-    return Range(b_ + first, std::min(length, size() - first));
-  }
-
-  // unchecked versions
-  void uncheckedAdvance(size_type n) {
-    DCHECK_LE(n, size());
-    b_ += n;
-  }
-
-  void uncheckedSubtract(size_type n) {
-    DCHECK_LE(n, size());
     e_ -= n;
   }
 

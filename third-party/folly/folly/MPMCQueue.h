@@ -42,9 +42,6 @@ class MPMCPipelineStageImpl;
 template <typename>
 class MPMCQueueBase;
 
-/// MPMCQueue base CRTP template
-template <typename> class MPMCQueueBase;
-
 } // namespace detail
 
 /// MPMCQueue<T> is a high-performance bounded concurrent queue that
@@ -1423,21 +1420,6 @@ struct SingleElementQueue {
             folly::IsRelocatable<T>::value,
             ImplByRelocation,
             ImplByMove>::type());
-  }
-
-  /// Waits until either:
-  /// 1: the enqueue turn preceding the given dequeue turn has arrived
-  /// 2: the given deadline has arrived
-  /// Case 1 returns true, case 2 returns false.
-  template <class Clock>
-  bool tryWaitForDequeueTurnUntil(
-      const uint32_t turn,
-      Atom<uint32_t>& spinCutoff,
-      const bool updateSpinCutoff,
-      const std::chrono::time_point<Clock>& when) noexcept {
-    return sequencer_.tryWaitForTurn(
-               turn * 2 + 1, spinCutoff, updateSpinCutoff, &when) !=
-        TurnSequencer<Atom>::TryWaitResult::TIMEDOUT;
   }
 
   /// Waits until either:

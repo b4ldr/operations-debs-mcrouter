@@ -122,7 +122,6 @@ class StringKeyedSetBase : private std::set<StringPiece, Compare, Alloc> {
   using Base::empty;
   using Base::end;
   using Base::find;
-  using Base::count;
   using Base::lower_bound;
   using Base::max_size;
   using Base::size;

@@ -89,26 +89,6 @@ class Random {
     }
   };
 
-  template <class T>
-  class SecureRNG {
-   public:
-    using result_type = typename std::enable_if<
-        std::is_integral<T>::value && !std::is_same<T, bool>::value,
-        T>::type;
-
-    result_type operator()() {
-      return Random::secureRandom<result_type>();
-    }
-
-    static constexpr result_type min() {
-      return std::numeric_limits<result_type>::min();
-    }
-
-    static constexpr result_type max() {
-      return std::numeric_limits<result_type>::max();
-    }
-  };
-
  public:
   // Default generator type.
 #if FOLLY_HAVE_EXTRANDOM_SFMT19937

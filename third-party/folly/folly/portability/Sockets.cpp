@@ -58,15 +58,6 @@ int socket_to_fd(SOCKET s) {
   return netops::detail::SocketFileDescriptorMap::socketToFd(s);
 }
 
-int translate_wsa_error(int wsaErr) {
-  switch (wsaErr) {
-    case WSAEWOULDBLOCK:
-      return EAGAIN;
-    default:
-      return wsaErr;
-  }
-}
-
 template <class R, class F, class... Args>
 static R wrapSocketFunction(F f, int s, Args... args) {
   NetworkSocket h = fd_to_network_socket(s);
@@ -144,51 +135,6 @@ ssize_t recvfrom(
     int flags,
     struct sockaddr* from,
     socklen_t* fromlen) {
-  if ((flags & MSG_TRUNC) == MSG_TRUNC) {
-    SOCKET h = fd_to_socket(s);
-
-    WSABUF wBuf{};
-    wBuf.buf = (CHAR*)buf;
-    wBuf.len = (ULONG)len;
-    WSAMSG wMsg{};
-    wMsg.dwBufferCount = 1;
-    wMsg.lpBuffers = &wBuf;
-    wMsg.name = from;
-    if (fromlen != nullptr) {
-      wMsg.namelen = *fromlen;
-    }
-
-    // WSARecvMsg is an extension, so we don't get
-    // the convenience of being able to call it directly, even though
-    // WSASendMsg is part of the normal API -_-...
-    LPFN_WSARECVMSG WSARecvMsg;
-    GUID WSARecgMsg_GUID = WSAID_WSARECVMSG;
-    DWORD recMsgBytes;
-    WSAIoctl(
-        h,
-        SIO_GET_EXTENSION_FUNCTION_POINTER,
-        &WSARecgMsg_GUID,
-        sizeof(WSARecgMsg_GUID),
-        &WSARecvMsg,
-        sizeof(WSARecvMsg),
-        &recMsgBytes,
-        nullptr,
-        nullptr);
-
-    DWORD bytesReceived;
-    int res = WSARecvMsg(h, &wMsg, &bytesReceived, nullptr, nullptr);
-    errno = translate_wsa_error(WSAGetLastError());
-    if (res == 0) {
-      return bytesReceived;
-    }
-    if (fromlen != nullptr) {
-      *fromlen = wMsg.namelen;
-    }
-    if ((wMsg.dwFlags & MSG_TRUNC) == MSG_TRUNC) {
-      return wBuf.len + 1;
-    }
-    return -1;
-  }
   return wrapSocketFunction<ssize_t>(
       netops::recvfrom, s, buf, len, flags, from, fromlen);
 }
@@ -270,15 +216,6 @@ int setsockopt(
     int optname,
     const void* optval,
     socklen_t optlen) {
-  if (optname == SO_REUSEADDR) {
-    // We don't have an equivelent to the Linux & OSX meaning of this
-    // on Windows, so ignore it.
-    return 0;
-  } else if (optname == SO_REUSEPORT) {
-    // Windows's SO_REUSEADDR option is closer to SO_REUSEPORT than
-    // it is to the Linux & OSX meaning of SO_REUSEADDR.
-    return -1;
-  }
   return wrapSocketFunction<int>(
       netops::setsockopt, s, level, optname, optval, optlen);
 }

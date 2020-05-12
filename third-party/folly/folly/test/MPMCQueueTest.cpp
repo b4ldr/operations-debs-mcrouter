@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include <folly/Format.h>
 #include <folly/MPMCQueue.h>
+#include <folly/Format.h>
 #include <folly/Memory.h>
 #include <folly/portability/GTest.h>
 #include <folly/portability/SysResource.h>

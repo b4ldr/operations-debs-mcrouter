@@ -435,8 +435,7 @@ struct StaticMeta final : StaticMetaBase {
     if (FOLLY_UNLIKELY(capacity <= id)) {
       getSlowReserveAndCache(ent, id, threadEntry, capacity);
     }
-    capacity = threadEntry->elementsCapacity;
-    assert(capacity > id);
+    return threadEntry->elements[id];
   }
 
   FOLLY_NOINLINE static void getSlowReserveAndCache(

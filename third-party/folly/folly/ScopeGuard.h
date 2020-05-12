@@ -39,17 +39,6 @@ class ScopeGuardImplBase {
     dismissed_ = true;
   }
 
-  template <typename T>
-  FOLLY_ALWAYS_INLINE static void runAndWarnAboutToCrashOnException(
-      T& function) noexcept {
-    try {
-      function();
-    } catch (...) {
-      warnAboutToCrash();
-      std::terminate();
-    }
-  }
-
  protected:
   ScopeGuardImplBase() noexcept : dismissed_(false) {}
 
@@ -64,9 +53,6 @@ class ScopeGuardImplBase {
   }
 
   bool dismissed_;
-
- private:
-  static void warnAboutToCrash() noexcept;
 };
 
 template <typename FunctionType, bool InvokeNoexcept>

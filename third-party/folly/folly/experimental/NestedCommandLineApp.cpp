@@ -325,8 +325,6 @@ void NestedCommandLineApp::doRun(const std::vector<std::string>& args) {
 
   cmdArgs.insert(cmdArgs.end(), endArgs.begin(), endArgs.end());
 
-  cmdArgs.insert(cmdArgs.end(), endArgs.begin(), endArgs.end());
-
   if (initFunction_) {
     initFunction_(cmd, vm, cmdArgs);
   }

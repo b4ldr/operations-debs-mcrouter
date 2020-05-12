@@ -140,50 +140,6 @@ ElfFile::OpenResult ElfFile::openAndFollow(
   return openNoThrow(name, options);
 }
 
-int ElfFile::openAndFollow(
-    const char* name,
-    bool readOnly,
-    const char** msg) noexcept {
-  auto result = openNoThrow(name, readOnly, msg);
-  if (!readOnly || result != kSuccess) {
-    return result;
-  }
-
-  /* NOTE .gnu_debuglink specifies only the name of the debugging info file
-   * (with no directory components). GDB checks 3 different directories, but
-   * ElfFile only supports the first version:
-   *     - dirname(name)
-   *     - dirname(name) + /.debug/
-   *     - X/dirname(name)/ - where X is set in gdb's `debug-file-directory`.
-   */
-  auto dirend = strrchr(name, '/');
-  // include ending '/' if any.
-  auto dirlen = dirend != nullptr ? dirend + 1 - name : 0;
-
-  auto debuginfo = getSectionByName(".gnu_debuglink");
-  if (!debuginfo) {
-    return result;
-  }
-
-  // The section starts with the filename, with any leading directory
-  // components removed, followed by a zero byte.
-  auto debugFileName = getSectionBody(*debuginfo);
-  auto debugFileLen = strlen(debugFileName.begin());
-  if (dirlen + debugFileLen >= PATH_MAX) {
-    return result;
-  }
-
-  char linkname[PATH_MAX];
-  memcpy(linkname, name, dirlen);
-  memcpy(linkname + dirlen, debugFileName.begin(), debugFileLen + 1);
-  reset();
-  result = openNoThrow(linkname, readOnly, msg);
-  if (result == kSuccess) {
-    return result;
-  }
-  return openNoThrow(name, readOnly, msg);
-}
-
 ElfFile::~ElfFile() {
   reset();
 }

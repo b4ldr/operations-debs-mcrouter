@@ -97,13 +97,6 @@ class Symbolizer {
       LocationInfoMode mode = kDefaultLocationInfoMode,
       size_t symbolCacheSize = 0);
 
-  explicit Symbolizer(Dwarf::LocationInfoMode mode = kDefaultLocationInfoMode)
-      : Symbolizer(nullptr, mode) {}
-
-  explicit Symbolizer(
-      ElfCacheBase* cache,
-      Dwarf::LocationInfoMode mode = kDefaultLocationInfoMode,
-      size_t symbolCacheSize = 0);
   /**
    *  Symbolize given addresses.
    *

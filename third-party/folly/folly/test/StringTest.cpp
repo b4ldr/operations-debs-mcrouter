@@ -24,9 +24,6 @@
 #include <cinttypes>
 #include <set>
 
-#include <cinttypes>
-#include <set>
-
 #include <boost/regex.hpp>
 #include <glog/logging.h>
 

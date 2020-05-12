@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #pragma once
 
 #include <functional>
@@ -469,14 +470,6 @@ inline dynamic::IterableProxy<dynamic::item_iterator> dynamic::items() {
   return &(get<ObjectImpl>());
 }
 
-inline dynamic::IterableProxy<dynamic::value_iterator> dynamic::values() {
-  return &(get<ObjectImpl>());
-}
-
-inline dynamic::IterableProxy<dynamic::item_iterator> dynamic::items() {
-  return &(get<ObjectImpl>());
-}
-
 inline bool dynamic::isString() const {
   return get_nothrow<std::string>() != nullptr;
 }
@@ -848,9 +841,6 @@ inline dynamic::const_item_iterator dynamic::find(StringPiece key) const {
 }
 
 inline dynamic::item_iterator dynamic::find(StringPiece key) {
-  return get<ObjectImpl>().find(key);
-}
-inline dynamic::item_iterator dynamic::find(dynamic const& key) {
   return get<ObjectImpl>().find(key);
 }
 

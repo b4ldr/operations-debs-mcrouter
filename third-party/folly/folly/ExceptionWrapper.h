@@ -13,9 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/*
- * Author: Eric Niebler <eniebler@fb.com>
- */
 
 /*
  * Author: Eric Niebler <eniebler@fb.com>
@@ -337,7 +334,6 @@ class exception_wrapper final {
     static exception_wrapper get_exception_ptr_(exception_wrapper const* that);
     static VTable const ops_;
   };
-  VTable const* vptr_{&uninit_};
 
   union {
     Buffer buff_{};

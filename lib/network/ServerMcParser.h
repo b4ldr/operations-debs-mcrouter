@@ -19,11 +19,7 @@ class ConnectionFifo;
 template <class Callback>
 class ServerMcParser : private McParser::ParserCallback {
  public:
-  ServerMcParser(
-      Callback& cb,
-      size_t minBufferSize,
-      size_t maxBufferSize,
-      ConnectionFifo* debugFifo = nullptr);
+  ServerMcParser(Callback& cb, size_t minBufferSize, size_t maxBufferSize);
 
   ~ServerMcParser() override;
 

@@ -31,9 +31,6 @@ class FOLLY_EXPORT BadFormatArg : public std::invalid_argument {
   using invalid_argument::invalid_argument;
 };
 
-[[noreturn]] void throwBadFormatArg(char const* msg);
-[[noreturn]] void throwBadFormatArg(std::string const& msg);
-
 /**
  * Parsed format argument.
  */

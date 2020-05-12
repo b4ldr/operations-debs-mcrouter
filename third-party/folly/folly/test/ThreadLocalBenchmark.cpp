@@ -123,43 +123,6 @@ BENCHMARK(BM_mt_boost_tsp_multi, iters) {
 }
 BENCHMARK_DRAW_LINE();
 
-struct foo {
-  int a{0};
-  int b{0};
-};
-
-template <typename TL>
-void run_multi(uint32_t iters) {
-  const int itersPerThread = iters / FLAGS_numThreads;
-  std::vector<std::thread> threads;
-  TL var;
-  for (int i = 0; i < FLAGS_numThreads; ++i) {
-    threads.push_back(std::thread([&]() {
-      var.reset(new foo);
-      for (int j = 0; j < itersPerThread; ++j) {
-        ++var.get()->a;
-        var.get()->b += var.get()->a;
-        --var.get()->a;
-        var.get()->b += var.get()->a;
-      }
-    }));
-  }
-  for (auto& t : threads) {
-    t.join();
-  }
-}
-
-BENCHMARK(BM_mt_tlp_multi, iters) {
-  run_multi<ThreadLocalPtr<foo>>(iters);
-}
-BENCHMARK(BM_mt_pthread_get_specific_multi, iters) {
-  run_multi<PThreadGetSpecific<foo>>(iters);
-}
-BENCHMARK(BM_mt_boost_tsp_multi, iters) {
-  run_multi<boost::thread_specific_ptr<foo>>(iters);
-}
-BENCHMARK_DRAW_LINE();
-
 int main(int argc, char** argv) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   gflags::SetCommandLineOptionWithMode(

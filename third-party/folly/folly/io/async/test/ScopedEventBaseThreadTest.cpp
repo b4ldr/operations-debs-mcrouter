@@ -113,17 +113,3 @@ TEST_F(ScopedEventBaseThreadTest, keepalive) {
   t1.join();
   t2.join();
 }
-
-TEST_F(ScopedEventBaseThreadTest, eb_dtor_in_io_thread) {
-  Optional<ScopedEventBaseThread> sebt;
-  sebt.emplace();
-  auto const io_thread_id = sebt->getThreadId();
-  EXPECT_NE(this_thread::get_id(), io_thread_id) << "sanity";
-
-  auto const eb = sebt->getEventBase();
-  thread::id eb_dtor_thread_id;
-  eb->runOnDestruction(new EventBase::FunctionLoopCallback(
-      [&] { eb_dtor_thread_id = this_thread::get_id(); }));
-  sebt.clear();
-  EXPECT_EQ(io_thread_id, eb_dtor_thread_id);
-}

@@ -252,21 +252,6 @@ OutputString hexlify(StringPiece input) {
   return hexlify<OutputString>(ByteRange{input});
 }
 
-template <class OutputString = std::string>
-OutputString hexlify(ByteRange input) {
-  OutputString output;
-  if (!hexlify(input, output)) {
-    // hexlify() currently always returns true, so this can't really happen
-    throw std::runtime_error("hexlify failed");
-  }
-  return output;
-}
-
-template <class OutputString = std::string>
-OutputString hexlify(StringPiece input) {
-  return hexlify<OutputString>(ByteRange{input});
-}
-
 /**
  * Same functionality as Python's binascii.unhexlify.  Returns true
  * on successful conversion.

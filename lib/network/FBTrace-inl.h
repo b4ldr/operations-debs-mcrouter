@@ -195,16 +195,7 @@ inline std::shared_ptr<TracingData> traceRequestReceived(const Request& req) {
   return traceRequestReceived(*getFbTraceInfo(req), Request::name);
 }
 
-inline const mc_fbtrace_info_s* getFbTraceInfo(
-    const carbon::RequestCommon& request) {
-  return request.fbtraceInfo();
-}
-
-// Start tracing for a request.
-// NOTE: this function does not exist if LIBMC_FBTRACE_DISABLE is defined.
-CommIdType traceRequestReceived(
-    const mc_fbtrace_info_t& trace,
-    folly::StringPiece requestType);
+#endif
 
 } // namespace mcrouter
 } // namespace facebook

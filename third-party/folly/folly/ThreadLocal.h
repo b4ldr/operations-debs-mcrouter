@@ -50,8 +50,6 @@
 #include <folly/ScopeGuard.h>
 #include <folly/SharedMutex.h>
 #include <folly/detail/ThreadLocalDetail.h>
-#include <type_traits>
-#include <utility>
 
 namespace folly {
 

@@ -262,8 +262,6 @@ TEST(RecordIOTest, Randomized) {
     EXPECT_EQ(records.size(), i);
   }
 }
-} // namespace test
-} // namespace folly
 
 TEST(RecordIOTest, validateRecordAPI) {
   uint32_t hdrSize = recordio_helpers::headerSize();

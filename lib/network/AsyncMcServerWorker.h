@@ -91,20 +91,6 @@ class AsyncMcServerWorker {
       void* userCtxt);
 
   /**
-   * Certain situations call for a user to provide their own
-   * AsyncTransportWrapper rather than an accepted socket. Move in an
-   * externally created AsyncTransportWrapper object.
-   * onAccept() will be called if set (despite the fact that the transport may
-   * not technically have been "accepted").
-   * @return    on success, a pointer to the created session.
-   *            Note: returned session is owned by the worker. It will close
-   *                  transport before fully destroyed.
-   */
-  McServerSession* addClientTransport(
-      folly::AsyncTransportWrapper::UniquePtr transport,
-      void* userCtxt);
-
-  /**
    * Install onRequest callback to call for each request.
    *
    * The callback must be a class with public methods specializing the template
@@ -234,8 +220,6 @@ class AsyncMcServerWorker {
   }
 
   std::shared_ptr<McServerOnRequest> onRequest_;
-
-  const CompressionCodecMap* compressionCodecMap_{nullptr};
 
   const CompressionCodecMap* compressionCodecMap_{nullptr};
 

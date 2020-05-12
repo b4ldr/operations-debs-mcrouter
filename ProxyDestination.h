@@ -68,10 +68,6 @@ class ProxyDestination : public ProxyDestinationBase {
 
   void resetInactive() override;
 
-  // Returns true if the current request should be dropped
-  template <class Request>
-  bool shouldDrop() const;
-
   /**
    * Gracefully closes the connection, allowing it to properly drain if
    * possible.

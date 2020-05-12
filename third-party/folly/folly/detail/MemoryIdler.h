@@ -177,8 +177,6 @@ struct MemoryIdler {
     if (idleTimeout < IdleTime::zero()) {
       return false;
     }
-    return fut.futexWaitUntil(expected, deadline, waitMask);
-  }
 
     // idleTimeout == 0 means flush immediately, without variation
     // idleTimeout > 0 means flush after delay, with variation

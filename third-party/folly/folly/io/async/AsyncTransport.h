@@ -84,14 +84,6 @@ constexpr WriteFlags& operator|=(WriteFlags& a, WriteFlags b) {
 }
 
 /*
- * compound assignment union operator
- */
-inline WriteFlags& operator|=(WriteFlags& a, WriteFlags b) {
-  a = a | b;
-  return a;
-}
-
-/*
  * intersection operator
  */
 constexpr WriteFlags operator&(WriteFlags a, WriteFlags b) {
@@ -103,14 +95,6 @@ constexpr WriteFlags operator&(WriteFlags a, WriteFlags b) {
  * compound assignment intersection operator
  */
 constexpr WriteFlags& operator&=(WriteFlags& a, WriteFlags b) {
-  a = a & b;
-  return a;
-}
-
-/*
- * compound assignment intersection operator
- */
-inline WriteFlags& operator&=(WriteFlags& a, WriteFlags b) {
   a = a & b;
   return a;
 }
@@ -427,43 +411,6 @@ class AsyncTransport : public DelayedDestruction, public AsyncSocketBase {
    * protocols.
    */
   virtual std::string getApplicationProtocol() const noexcept {
-    return "";
-  }
-
-  /**
-   * Returns the name of the security protocol being used.
-   */
-  virtual std::string getSecurityProtocol() const {
-    return "";
-  }
-
-  /**
-   * The local certificate used for this connection. May be null
-   */
-  virtual const X509* getSelfCert() const {
-    return nullptr;
-  }
-
-  /**
-   * Get the peer certificate information if any
-   */
-  virtual const AsyncTransportCertificate* getPeerCertificate() const {
-    return nullptr;
-  }
-
-  /**
-   * Get the certificate information of this transport, if any
-   */
-  virtual const AsyncTransportCertificate* getSelfCertificate() const {
-    return nullptr;
-  }
-
-  /**
-   * Return the application protocol being used by the underlying transport
-   * protocol. This is useful for transports which are used to tunnel other
-   * protocols.
-   */
-  virtual std::string getApplicationProtocol() noexcept {
     return "";
   }
 

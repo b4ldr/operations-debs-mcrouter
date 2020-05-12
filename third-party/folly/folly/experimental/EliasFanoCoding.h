@@ -49,10 +49,6 @@ static_assert(kIsLittleEndian, "EliasFanoCoding.h requires little endianness");
 
 constexpr size_t kCacheLineSize = 64;
 
-static_assert(kIsLittleEndian, "EliasFanoCoding.h requires little endianness");
-
-constexpr size_t kCacheLineSize = 64;
-
 template <class Pointer>
 struct EliasFanoCompressedListBase {
   EliasFanoCompressedListBase() = default;

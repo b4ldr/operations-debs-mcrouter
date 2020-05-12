@@ -1309,21 +1309,6 @@ TEST(FBString, testFixedBugs_D481173) {
     EXPECT_EQ(cp.c_str()[cp.size()], '\0');
     cp.push_back('?');
   }
-  { // D3698862
-    EXPECT_EQ(fbstring().find(fbstring(), 4), fbstring::npos);
-  }
-  if (usingJEMalloc()) { // D4355440
-    fbstring str(1337, 'f');
-    str.reserve(3840);
-    EXPECT_NE(str.capacity(), 3840);
-
-    struct {
-      std::atomic<size_t> refCount_;
-    } dummyRefCounted;
-    EXPECT_EQ(
-        str.capacity(),
-        goodMallocSize(3840) - sizeof(dummyRefCounted) - sizeof(char));
-  }
 }
 
 TEST(FBString, testFixedBugs_D580267_push_back) {
