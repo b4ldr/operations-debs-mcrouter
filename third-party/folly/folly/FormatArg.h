@@ -1,11 +1,11 @@
 /*
- * Copyright 2012-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,15 +23,13 @@
 #include <folly/Likely.h>
 #include <folly/Portability.h>
 #include <folly/Range.h>
+#include <folly/lang/Exception.h>
 
 namespace folly {
 
 class FOLLY_EXPORT BadFormatArg : public std::invalid_argument {
   using invalid_argument::invalid_argument;
 };
-
-[[noreturn]] void throwBadFormatArg(char const* msg);
-[[noreturn]] void throwBadFormatArg(std::string const& msg);
 
 /**
  * Parsed format argument.
@@ -42,18 +40,18 @@ struct FormatArg {
    * passed-in string -- does not copy the given characters.
    */
   explicit FormatArg(StringPiece sp)
-    : fullArgString(sp),
-      fill(kDefaultFill),
-      align(Align::DEFAULT),
-      sign(Sign::DEFAULT),
-      basePrefix(false),
-      thousandsSeparator(false),
-      trailingDot(false),
-      width(kDefaultWidth),
-      widthIndex(kNoIndex),
-      precision(kDefaultPrecision),
-      presentation(kDefaultPresentation),
-      nextKeyMode_(NextKeyMode::NONE) {
+      : fullArgString(sp),
+        fill(kDefaultFill),
+        align(Align::DEFAULT),
+        sign(Sign::DEFAULT),
+        basePrefix(false),
+        thousandsSeparator(false),
+        trailingDot(false),
+        width(kDefaultWidth),
+        widthIndex(kNoIndex),
+        precision(kDefaultPrecision),
+        presentation(kDefaultPresentation),
+        nextKeyMode_(NextKeyMode::NONE) {
     if (!sp.empty()) {
       initSlow();
     }
@@ -74,8 +72,9 @@ struct FormatArg {
    * message will contain the argument string as well as any passed-in
    * arguments to enforce, formatted using folly::to<std::string>.
    */
-  template <typename... Args>
-  void enforce(bool v, Args&&... args) const {
+  template <typename Check, typename... Args>
+  void enforce(Check const& v, Args&&... args) const {
+    static_assert(std::is_constructible<bool, Check>::value, "not castable");
     if (UNLIKELY(!v)) {
       error(std::forward<Args>(args)...);
     }
@@ -162,7 +161,7 @@ struct FormatArg {
    * Split a key component from "key", which must be non-empty (an exception
    * is thrown otherwise).
    */
-  template <bool emptyOk=false>
+  template <bool emptyOk = false>
   StringPiece splitKey();
 
   /**
@@ -209,13 +208,15 @@ struct FormatArg {
 template <typename... Args>
 inline std::string FormatArg::errorStr(Args&&... args) const {
   return to<std::string>(
-    "invalid format argument {", fullArgString, "}: ",
-    std::forward<Args>(args)...);
+      "invalid format argument {",
+      fullArgString,
+      "}: ",
+      std::forward<Args>(args)...);
 }
 
 template <typename... Args>
 [[noreturn]] inline void FormatArg::error(Args&&... args) const {
-  throwBadFormatArg(errorStr(std::forward<Args>(args)...));
+  throw_exception<BadFormatArg>(errorStr(std::forward<Args>(args)...));
 }
 
 template <bool emptyOk>
@@ -228,14 +229,14 @@ template <bool emptyOk>
 inline StringPiece FormatArg::doSplitKey() {
   if (nextKeyMode_ == NextKeyMode::STRING) {
     nextKeyMode_ = NextKeyMode::NONE;
-    if (!emptyOk) {  // static
+    if (!emptyOk) { // static
       enforce(!nextKey_.empty(), "non-empty key required");
     }
     return nextKey_;
   }
 
   if (key_.empty()) {
-    if (!emptyOk) {  // static
+    if (!emptyOk) { // static
       error("non-empty key required");
     }
     return StringPiece();
@@ -257,7 +258,7 @@ inline StringPiece FormatArg::doSplitKey() {
     p = e;
     key_.clear();
   }
-  if (!emptyOk) {  // static
+  if (!emptyOk) { // static
     enforce(b != p, "non-empty key required");
   }
   return StringPiece(b, p);
@@ -268,12 +269,9 @@ inline int FormatArg::splitIntKey() {
     nextKeyMode_ = NextKeyMode::NONE;
     return nextIntKey_;
   }
-  try {
-    return to<int>(doSplitKey<true>());
-  } catch (const std::out_of_range&) {
-    error("integer key required");
-    return 0;  // unreached
-  }
+  auto result = tryTo<int>(doSplitKey<true>());
+  enforce(result, "integer key required");
+  return *result;
 }
 
 } // namespace folly

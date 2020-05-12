@@ -1,11 +1,11 @@
 /*
- * Copyright 2011-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 //
 // @author xliu (xliux@fb.com)
 //
@@ -37,18 +38,22 @@ static const int kMaxReaders = 50;
 static std::atomic<bool> stopThread;
 using namespace folly;
 
-template <typename RWSpinLockT> struct RWSpinLockTest: public testing::Test {
+template <typename RWSpinLockT>
+struct RWSpinLockTest : public testing::Test {
   typedef RWSpinLockT RWSpinLockType;
 };
 
-typedef testing::Types<RWSpinLock
+typedef testing::Types<
+    RWSpinLock
 #ifdef RW_SPINLOCK_USE_X86_INTRINSIC_
-        , RWTicketSpinLockT<32, true>,
-        RWTicketSpinLockT<32, false>,
-        RWTicketSpinLockT<64, true>,
-        RWTicketSpinLockT<64, false>
+    ,
+    RWTicketSpinLockT<32, true>,
+    RWTicketSpinLockT<32, false>,
+    RWTicketSpinLockT<64, true>,
+    RWTicketSpinLockT<64, false>
 #endif
-> Implementations;
+    >
+    Implementations;
 
 TYPED_TEST_CASE(RWSpinLockTest, Implementations);
 
@@ -68,10 +73,9 @@ static void run(RWSpinLockType* lock) {
   // VLOG(0) << "total reads: " << reads << "; total writes: " << writes;
 }
 
-
 TYPED_TEST(RWSpinLockTest, Writer_Wait_Readers) {
-  typedef typename TestFixture::RWSpinLockType RWSpinLockType;
-  RWSpinLockType l;
+  typedef typename TestFixture::RWSpinLockType LockType;
+  LockType l;
 
   for (int i = 0; i < kMaxReaders; ++i) {
     EXPECT_TRUE(l.try_lock_shared());
@@ -87,8 +91,8 @@ TYPED_TEST(RWSpinLockTest, Writer_Wait_Readers) {
 }
 
 TYPED_TEST(RWSpinLockTest, Readers_Wait_Writer) {
-  typedef typename TestFixture::RWSpinLockType RWSpinLockType;
-  RWSpinLockType l;
+  typedef typename TestFixture::RWSpinLockType LockType;
+  LockType l;
 
   EXPECT_TRUE(l.try_lock());
 
@@ -103,8 +107,8 @@ TYPED_TEST(RWSpinLockTest, Readers_Wait_Writer) {
 }
 
 TYPED_TEST(RWSpinLockTest, Writer_Wait_Writer) {
-  typedef typename TestFixture::RWSpinLockType RWSpinLockType;
-  RWSpinLockType l;
+  typedef typename TestFixture::RWSpinLockType LockType;
+  LockType l;
 
   EXPECT_TRUE(l.try_lock());
   EXPECT_FALSE(l.try_lock());
@@ -115,11 +119,11 @@ TYPED_TEST(RWSpinLockTest, Writer_Wait_Writer) {
 }
 
 TYPED_TEST(RWSpinLockTest, Read_Holders) {
-  typedef typename TestFixture::RWSpinLockType RWSpinLockType;
-  RWSpinLockType l;
+  typedef typename TestFixture::RWSpinLockType LockType;
+  LockType l;
 
   {
-    typename RWSpinLockType::ReadHolder guard(&l);
+    typename LockType::ReadHolder guard(&l);
     EXPECT_FALSE(l.try_lock());
     EXPECT_TRUE(l.try_lock_shared());
     l.unlock_shared();
@@ -132,10 +136,10 @@ TYPED_TEST(RWSpinLockTest, Read_Holders) {
 }
 
 TYPED_TEST(RWSpinLockTest, Write_Holders) {
-  typedef typename TestFixture::RWSpinLockType RWSpinLockType;
-  RWSpinLockType l;
+  typedef typename TestFixture::RWSpinLockType LockType;
+  LockType l;
   {
-    typename RWSpinLockType::WriteHolder guard(&l);
+    typename LockType::WriteHolder guard(&l);
     EXPECT_FALSE(l.try_lock());
     EXPECT_FALSE(l.try_lock_shared());
   }
@@ -147,13 +151,13 @@ TYPED_TEST(RWSpinLockTest, Write_Holders) {
 }
 
 TYPED_TEST(RWSpinLockTest, ConcurrentTests) {
-  typedef typename TestFixture::RWSpinLockType RWSpinLockType;
-  RWSpinLockType l;
+  typedef typename TestFixture::RWSpinLockType LockType;
+  LockType l;
   srand(time(nullptr));
 
   std::vector<std::thread> threads;
   for (int i = 0; i < FLAGS_num_threads; ++i) {
-    threads.push_back(std::thread(&run<RWSpinLockType>, &l));
+    threads.push_back(std::thread(&run<LockType>, &l));
   }
 
   sleep(1);
@@ -199,19 +203,18 @@ TEST(RWSpinLock, concurrent_holder_test) {
   auto go = [&] {
     while (!stop.load(std::memory_order_acquire)) {
       auto r = (uint32_t)(rand()) % 10;
-      if (r < 3) {          // starts from write lock
+      if (r < 3) { // starts from write lock
         RWSpinLock::ReadHolder rg{
-          RWSpinLock::UpgradedHolder{
-            RWSpinLock::WriteHolder{&lock}}};
-        writes.fetch_add(1, std::memory_order_acq_rel);;
-      } else if (r < 6) {   // starts from upgrade lock
+            RWSpinLock::UpgradedHolder{RWSpinLock::WriteHolder{&lock}}};
+        writes.fetch_add(1, std::memory_order_acq_rel);
+      } else if (r < 6) { // starts from upgrade lock
         RWSpinLock::UpgradedHolder ug(&lock);
         if (r < 4) {
           RWSpinLock::WriteHolder wg(std::move(ug));
         } else {
           RWSpinLock::ReadHolder rg(std::move(ug));
         }
-        upgrades.fetch_add(1, std::memory_order_acq_rel);;
+        upgrades.fetch_add(1, std::memory_order_acq_rel);
       } else {
         RWSpinLock::ReadHolder rg{&lock};
         reads.fetch_add(1, std::memory_order_acq_rel);
@@ -232,8 +235,8 @@ TEST(RWSpinLock, concurrent_holder_test) {
   }
 
   LOG(INFO) << "reads: " << reads.load(std::memory_order_acquire)
-    << "; writes: " << writes.load(std::memory_order_acquire)
-    << "; upgrades: " << upgrades.load(std::memory_order_acquire);
+            << "; writes: " << writes.load(std::memory_order_acquire)
+            << "; upgrades: " << upgrades.load(std::memory_order_acquire);
 }
 
 } // namespace

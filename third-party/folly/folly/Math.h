@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -101,8 +101,7 @@ inline constexpr T divRoundAwayBranchful(T num, T denom) {
 template <typename N, typename D>
 using IdivResultType = typename std::enable_if<
     std::is_integral<N>::value && std::is_integral<D>::value &&
-        !std::is_same<N, bool>::value &&
-        !std::is_same<D, bool>::value,
+        !std::is_same<N, bool>::value && !std::is_same<D, bool>::value,
     decltype(N{1} / D{1})>::type;
 } // namespace detail
 

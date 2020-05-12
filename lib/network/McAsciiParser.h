@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <exception>
@@ -13,11 +13,11 @@
 #include <folly/Optional.h>
 #include <folly/io/IOBuf.h>
 
-#include "mcrouter/lib/Operation.h"
+#include "mcrouter/lib/Reply.h"
 #include "mcrouter/lib/carbon/Variant.h"
 #include "mcrouter/lib/fbi/cpp/TypeList.h"
 #include "mcrouter/lib/network/CarbonMessageList.h"
-#include "mcrouter/lib/network/gen/Memcache.h"
+#include "mcrouter/lib/network/gen/MemcacheMessages.h"
 
 namespace facebook {
 namespace memcache {
@@ -81,6 +81,9 @@ class McAsciiParserBase {
       folly::IOBuf& buffer,
       const char* posStart,
       const char* posEnd);
+
+  // limit the value size.
+  static constexpr uint32_t maxValueBytes = 1 * 1024 * 1024 * 1024; // 1GB
 
   std::string currentErrorDescription_;
 
@@ -202,6 +205,10 @@ class McServerAsciiParser : public McAsciiParserBase {
   void initGetLike();
   template <class Request>
   void consumeGetLike(folly::IOBuf& buffer);
+  template <class Request>
+  void initGatLike();
+  template <class Request>
+  void consumeGatLike(folly::IOBuf& buffer);
 
   // Update-like.
   template <class Request>

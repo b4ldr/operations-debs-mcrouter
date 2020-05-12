@@ -1,11 +1,11 @@
 /*
- * Copyright 2012-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -27,7 +27,9 @@
 #include <folly/Likely.h>
 #include <folly/Optional.h>
 #include <folly/Traits.h>
+#include <folly/Utility.h>
 #include <folly/dynamic.h>
+#include <folly/lang/Exception.h>
 
 namespace folly {
 template <typename T>
@@ -61,10 +63,13 @@ BOOST_MPL_HAS_XXX_TRAIT_DEF(iterator)
 BOOST_MPL_HAS_XXX_TRAIT_DEF(mapped_type)
 BOOST_MPL_HAS_XXX_TRAIT_DEF(key_type)
 
-template <typename T> struct iterator_class_is_container {
+template <typename T>
+struct iterator_class_is_container {
   typedef std::reverse_iterator<typename T::iterator> some_iterator;
-  enum { value = has_value_type<T>::value &&
-              std::is_constructible<T, some_iterator, some_iterator>::value };
+  enum {
+    value = has_value_type<T>::value &&
+        std::is_constructible<T, some_iterator, some_iterator>::value
+  };
 };
 
 template <typename T>
@@ -107,7 +112,7 @@ struct Dereferencer {
   static inline void derefToCache(
       Optional<T>* /* mem */,
       const dynamic::const_item_iterator& /* it */) {
-    throw TypeError("array", dynamic::Type::OBJECT);
+    throw_exception<TypeError>("array", dynamic::Type::OBJECT);
   }
 
   static inline void derefToCache(
@@ -177,7 +182,8 @@ inline std::move_iterator<Transformer<T, It>> conversionIterator(const It& it) {
  */
 
 // default - intentionally unimplemented
-template <typename T, typename Enable = void> struct DynamicConverter;
+template <typename T, typename Enable = void>
+struct DynamicConverter;
 
 // boolean
 template <>
@@ -245,7 +251,7 @@ struct DynamicConverter<std::pair<F, S>> {
       auto it = d.items().begin();
       return std::make_pair(convertTo<F>(it->first), convertTo<S>(it->second));
     } else {
-      throw TypeError("array (size 2) or object (size 1)", d.type());
+      throw_exception<TypeError>("array (size 2) or object (size 1)", d.type());
     }
   }
 };
@@ -259,15 +265,15 @@ struct DynamicConverter<
         !dynamicconverter_detail::is_associative<C>::value>::type> {
   static C convert(const dynamic& d) {
     if (d.isArray()) {
-      return C(dynamicconverter_detail::conversionIterator<C>(d.begin()),
-               dynamicconverter_detail::conversionIterator<C>(d.end()));
+      return C(
+          dynamicconverter_detail::conversionIterator<C>(d.begin()),
+          dynamicconverter_detail::conversionIterator<C>(d.end()));
     } else if (d.isObject()) {
-      return C(dynamicconverter_detail::conversionIterator<C>
-                 (d.items().begin()),
-               dynamicconverter_detail::conversionIterator<C>
-                 (d.items().end()));
+      return C(
+          dynamicconverter_detail::conversionIterator<C>(d.items().begin()),
+          dynamicconverter_detail::conversionIterator<C>(d.items().end()));
     } else {
-      throw TypeError("object or array", d.type());
+      throw_exception<TypeError>("object or array", d.type());
     }
   }
 };
@@ -291,7 +297,7 @@ struct DynamicConverter<
           dynamicconverter_detail::conversionIterator<C>(d.items().begin()),
           dynamicconverter_detail::conversionIterator<C>(d.items().end()));
     } else {
-      throw TypeError("object or array", d.type());
+      throw_exception<TypeError>("object or array", d.type());
     }
     return ret;
   }
@@ -320,6 +326,16 @@ struct DynamicConstructor<
     typename std::enable_if<std::is_same<C, dynamic>::value>::type> {
   static dynamic construct(const C& x) {
     return x;
+  }
+};
+
+// enums
+template <typename C>
+struct DynamicConstructor<
+    C,
+    typename std::enable_if<std::is_enum<C>::value>::type> {
+  static dynamic construct(const C& x) {
+    return dynamic(to_underlying(x));
   }
 };
 

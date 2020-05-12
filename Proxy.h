@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <dirent.h>
@@ -22,6 +22,8 @@
 #include <vector>
 
 #include <folly/Range.h>
+#include <folly/SharedMutex.h>
+#include <folly/Synchronized.h>
 #include <folly/concurrency/CacheLocality.h>
 
 #include "mcrouter/ExponentialSmoothData.h"
@@ -55,7 +57,6 @@ class CarbonRouterInstance;
 class CarbonRouterInstanceBase;
 template <class RouterInfo>
 class ProxyConfig;
-class ProxyDestination;
 class ProxyRequestContext;
 template <class RouterInfo, class Request>
 class ProxyRequestContextTyped;
@@ -90,7 +91,9 @@ class Proxy : public ProxyBase {
    * The caller may only access the config through the reference
    * while the lock is held.
    */
-  std::pair<std::unique_lock<SFRReadLock>, ProxyConfig<RouterInfo>&>
+  std::pair<
+      std::unique_ptr<folly::SharedMutex::ReadHolder>,
+      ProxyConfig<RouterInfo>&>
   getConfigLocked() const;
 
   /**
@@ -137,7 +140,7 @@ class Proxy : public ProxyBase {
   bool beingDestroyed_{false};
 
   /** Read/write lock for config pointer */
-  SFRLock configLock_;
+  folly::SharedMutex configLock_;
   std::shared_ptr<ProxyConfig<RouterInfo>> config_;
 
   typename RouterInfo::RouterStats requestStats_;

@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <chrono>
@@ -68,6 +68,12 @@ struct AsyncMcServerWorkerOptions {
   size_t maxConns{0};
 
   /**
+   * Number of reserved FDs to be used when calculating the sizes of the
+   * connection LRUs from RLIMIT_NOFILE.
+   */
+  size_t reservedFDs{8192};
+
+  /**
    * Smallest allowed buffer size.
    */
   size_t minBufferSize{256};
@@ -94,9 +100,19 @@ struct AsyncMcServerWorkerOptions {
   std::shared_ptr<CpuController> cpuController;
 
   /**
-   * The congestion controller for memory utilization at the server.
+   * Payloads >= tcpZeroCopyThresholdBytes will undergo copy avoidance and
+   * the kernel will queue a completion notification once transmission is
+   * complete.
+   *
+   * Note that here we are replacing the per byte copy cost with page
+   * accounting and the overhead of notification completion. This will
+   * typically only be effective at writes > 10K and should be tuned on a per
+   * use-case basis.
+   *
+   * Default tcpZeroCopyThresholdBytes of 0 means that tcpZeroCopy is
+   * disabled.
    */
-  std::shared_ptr<MemoryController> memController;
+  size_t tcpZeroCopyThresholdBytes{0};
 
   /**
    * EXPERIMENTAL FEATURE!
@@ -106,6 +122,16 @@ struct AsyncMcServerWorkerOptions {
    * stop sending requests over this connection after processing this message.
    */
   std::chrono::milliseconds goAwayTimeout{0};
+
+  /**
+   * Whether to try KTLS for accepted TLS 1.2 connections
+   */
+  bool useKtls12{false};
+
+  /**
+   * Whether to enable tos reflection
+   */
+  bool tosReflection{false};
 };
-} // memcache
-} // facebook
+} // namespace memcache
+} // namespace facebook

@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include <memory>
 #include <random>
 #include <vector>
@@ -14,7 +14,7 @@
 #include <folly/json.h>
 
 #include "mcrouter/lib/config/RouteHandleFactory.h"
-#include "mcrouter/lib/network/gen/Memcache.h"
+#include "mcrouter/lib/network/gen/MemcacheMessages.h"
 #include "mcrouter/lib/test/RouteHandleTestUtil.h"
 #include "mcrouter/routes/McrouterRouteHandle.h"
 #include "mcrouter/routes/RateLimitRoute.h"
@@ -36,23 +36,30 @@ namespace {
 template <class Data, class Request>
 void test(
     Data data,
+    Data fallbackData,
     Request,
-    mc_res_t ok,
-    mc_res_t reject,
+    carbon::Result ok,
+    carbon::Result reject,
+    carbon::Result fallbackRes,
     const std::string& type,
-    bool burst = false) {
+    bool burst = false,
+    bool fallback = false) {
   vector<std::shared_ptr<TestHandle>> normalHandle{
       make_shared<TestHandle>(std::move(data)),
   };
   auto normalRh = get_route_handles(normalHandle)[0];
 
+  vector<std::shared_ptr<TestHandle>> fallbackHandle{
+      make_shared<TestHandle>(std::move(fallbackData)),
+  };
+  auto fallbackRh = get_route_handles(fallbackHandle)[0];
+
   auto json = parseJsonString(
       (burst
            ? string("{\"") + type + "_rate\": 4.0, \"" + type + "_burst\": 3.0}"
            : string("{\"") + type + "_rate\": 2.0}"));
-
   McrouterRouteHandle<RateLimitRoute<McrouterRouteHandleIf>> rh(
-      normalRh, RateLimiter(json));
+      normalRh, RateLimiter(json), fallback ? fallbackRh : nullptr);
 
   Request req("key");
   // McSetRequest requires value be set; this is a no-op for Get and Delete
@@ -70,47 +77,56 @@ void test(
     reply = rh.route(req);
     EXPECT_EQ(reply.result(), ok);
     reply = rh.route(req);
-    EXPECT_EQ(reply.result(), reject);
+    EXPECT_EQ(reply.result(), fallback ? fallbackRes : reject);
   } else {
     usleep(501000);
     auto reply = rh.route(req);
     EXPECT_EQ(reply.result(), ok);
     reply = rh.route(req);
-    EXPECT_EQ(reply.result(), reject);
+    EXPECT_EQ(reply.result(), fallback ? fallbackRes : reject);
   }
 }
 
-void testSets(bool burst = false) {
+void testSets(bool burst = false, bool fallback = false) {
   test(
-      UpdateRouteTestData(mc_res_stored),
+      UpdateRouteTestData(carbon::Result::STORED),
+      UpdateRouteTestData(carbon::Result::LOCAL_ERROR),
       McSetRequest(),
-      mc_res_stored,
-      mc_res_notstored,
+      carbon::Result::STORED,
+      carbon::Result::NOTSTORED,
+      carbon::Result::LOCAL_ERROR,
       "sets",
-      burst);
+      burst,
+      fallback);
 }
 
-void testGets(bool burst = false) {
+void testGets(bool burst = false, bool fallback = false) {
   test(
-      GetRouteTestData(mc_res_found, "a"),
+      GetRouteTestData(carbon::Result::FOUND, "a"),
+      GetRouteTestData(carbon::Result::LOCAL_ERROR, "a"),
       McGetRequest(),
-      mc_res_found,
-      mc_res_notfound,
+      carbon::Result::FOUND,
+      carbon::Result::NOTFOUND,
+      carbon::Result::LOCAL_ERROR,
       "gets",
-      burst);
+      burst,
+      fallback);
 }
 
-void testDeletes(bool burst = false) {
+void testDeletes(bool burst = false, bool fallback = false) {
   test(
-      DeleteRouteTestData(mc_res_deleted),
+      DeleteRouteTestData(carbon::Result::DELETED),
+      DeleteRouteTestData(carbon::Result::LOCAL_ERROR),
       McDeleteRequest(),
-      mc_res_deleted,
-      mc_res_notfound,
+      carbon::Result::DELETED,
+      carbon::Result::NOTFOUND,
+      carbon::Result::LOCAL_ERROR,
       "deletes",
-      burst);
+      burst,
+      fallback);
 }
 
-} // anonymous
+} // namespace
 
 TEST(rateLimitRouteTest, setsBasic) {
   testSets();
@@ -118,15 +134,24 @@ TEST(rateLimitRouteTest, setsBasic) {
 TEST(rateLimitRouteTest, setsBurst) {
   testSets(true);
 }
+TEST(rateLimitRouteTest, setsFallback) {
+  testSets(false, true);
+}
 TEST(rateLimitRouteTest, getsBasic) {
   testGets();
 }
 TEST(rateLimitRouteTest, getsBurst) {
   testGets(true);
 }
+TEST(rateLimitRouteTest, getsFallback) {
+  testGets(false, true);
+}
 TEST(rateLimitRouteTest, deletesBasic) {
   testDeletes();
 }
 TEST(rateLimitRouteTest, deletesBurst) {
   testDeletes(true);
+}
+TEST(rateLimitRouteTest, deletesFallback) {
+  testDeletes(false, true);
 }

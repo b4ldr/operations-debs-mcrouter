@@ -1,11 +1,11 @@
 /*
- * Copyright 2014-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include <folly/Memory.h>
 #include <folly/io/async/AsyncPipe.h>
+#include <folly/Memory.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/portability/GTest.h>
 
@@ -58,7 +58,7 @@ class TestReadCallback : public folly::AsyncReader::ReadCallback {
   std::string getData() {
     auto buf = readBuffer_.move();
     buf->coalesce();
-    return std::string((char *)buf->data(), buf->length());
+    return std::string((char*)buf->data(), buf->length());
   }
 
   void reset() {
@@ -74,7 +74,9 @@ class TestReadCallback : public folly::AsyncReader::ReadCallback {
 
 class TestWriteCallback : public folly::AsyncWriter::WriteCallback {
  public:
-  void writeSuccess() noexcept override { writes_++; }
+  void writeSuccess() noexcept override {
+    writes_++;
+  }
 
   void writeErr(size_t, const folly::AsyncSocketException&) noexcept override {
     error_ = true;
@@ -89,7 +91,7 @@ class TestWriteCallback : public folly::AsyncWriter::WriteCallback {
   bool error_{false};
 };
 
-class AsyncPipeTest: public Test {
+class AsyncPipeTest : public Test {
  public:
   void reset(bool movable) {
     reader_.reset();
@@ -103,9 +105,9 @@ class AsyncPipeTest: public Test {
     EXPECT_EQ(::fcntl(pipeFds_[0], F_SETFL, O_NONBLOCK), 0);
     EXPECT_EQ(::fcntl(pipeFds_[1], F_SETFL, O_NONBLOCK), 0);
     reader_ = folly::AsyncPipeReader::newReader(
-      &eventBase_, pipeFds_[0]);
+        &eventBase_, folly::NetworkSocket::fromFd(pipeFds_[0]));
     writer_ = folly::AsyncPipeWriter::newWriter(
-      &eventBase_, pipeFds_[1]);
+        &eventBase_, folly::NetworkSocket::fromFd(pipeFds_[1]));
 
     readCallback_.setMovable(movable);
   }

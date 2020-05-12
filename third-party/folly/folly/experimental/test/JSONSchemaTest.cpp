@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// Copyright 2004-present Facebook. All Rights Reserved.
 
 #include <folly/experimental/JSONSchema.h>
 #include <folly/json.h>
@@ -215,8 +214,8 @@ TEST(JSONSchemaTest, TestArrayItemsNotPresent) {
 TEST(JSONSchemaTest, TestRef) {
   dynamic schema = dynamic::object(
       "definitions",
-      dynamic::object("positiveInteger",
-                      dynamic::object("minimum", 1)("type", "integer")))(
+      dynamic::object(
+          "positiveInteger", dynamic::object("minimum", 1)("type", "integer")))(
       "items", dynamic::object("$ref", "#/definitions/positiveInteger"));
   ASSERT_TRUE(check(schema, dynamic::array(1, 2, 3, 4)));
   ASSERT_FALSE(check(schema, dynamic::array(4, -5)));
@@ -236,10 +235,10 @@ TEST(JSONSchemaTest, TestRecursiveRef) {
 }
 
 TEST(JSONSchemaTest, TestDoubleRecursiveRef) {
-  dynamic schema =
-      dynamic::object("properties",
-                      dynamic::object("more", dynamic::object("$ref", "#"))(
-                          "less", dynamic::object("$ref", "#")));
+  dynamic schema = dynamic::object(
+      "properties",
+      dynamic::object("more", dynamic::object("$ref", "#"))(
+          "less", dynamic::object("$ref", "#")));
   dynamic d = dynamic::object;
   ASSERT_TRUE(check(schema, d));
   d["more"] = dynamic::object;
@@ -290,9 +289,10 @@ TEST(JSONSchemaTest, TestProperties) {
   ASSERT_FALSE(check(schema, dynamic::object("other_property", 6)));
 }
 TEST(JSONSchemaTest, TestPropertyAndPattern) {
-  dynamic schema = dynamic::object
-    ("properties", dynamic::object("p1", dynamic::object("minimum", 1)))
-    ("patternProperties", dynamic::object("p.", dynamic::object("maximum", 5)));
+  dynamic schema = dynamic::object(
+      "properties", dynamic::object("p1", dynamic::object("minimum", 1)))(
+      "patternProperties",
+      dynamic::object("p.", dynamic::object("maximum", 5)));
   ASSERT_TRUE(check(schema, dynamic::object("p1", 3)));
   ASSERT_FALSE(check(schema, dynamic::object("p1", 0)));
   ASSERT_FALSE(check(schema, dynamic::object("p1", 6)));

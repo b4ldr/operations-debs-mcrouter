@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include <gtest/gtest.h>
 
 #include "mcrouter/lib/network/ServerMcParser.h"
@@ -14,7 +14,7 @@ using namespace facebook::memcache;
 
 namespace facebook {
 namespace memcache {
-struct UmbrellaMessageInfo;
+struct CaretMessageInfo;
 }
 }
 
@@ -177,16 +177,11 @@ class TestRunner {
     bool failed_{false};
 
     // ServerMcParser callbacks.
-    void caretRequestReady(const UmbrellaMessageInfo&, const folly::IOBuf&) {
+    void caretRequestReady(const CaretMessageInfo&, const folly::IOBuf&) {
       FAIL() << "caretRequestReady should never be called for ASCII";
     }
 
-    template <class Request>
-    void umbrellaRequestReady(Request&&, uint64_t) {
-      FAIL() << "umbrellaRequestReady should never be called for ASCII";
-    }
-
-    void parseError(mc_res_t, folly::StringPiece reason) {
+    void parseError(carbon::Result, folly::StringPiece reason) {
       ASSERT_NE(nullptr, parser_)
           << "Test framework bug, didn't provide parser to callback!";
       EXPECT_TRUE(isError_) << "Unexpected parsing error: " << reason
@@ -533,6 +528,15 @@ TEST(McServerAsciiParserHarness, version) {
       .expectNext(McVersionRequest())
       .run("version\r\n")
       .run("version    \r\n");
+}
+
+TEST(McServerAsciiParserHarness, quitWithVersion) {
+  TestRunner()
+      .expectNext(McQuitRequest(), true)
+      .expectNext(McVersionRequest())
+      .run(
+          "quit\r\n"
+          "version\r\n");
 }
 
 TEST(McServerAsciiParserHarness, shutdown) {

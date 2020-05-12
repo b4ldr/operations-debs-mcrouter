@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <memory>
@@ -121,6 +121,16 @@ class Ref {
     auto t = ref_;
     ref_ = nullptr;
     return t;
+  }
+
+  /**
+   * reset the managed object
+   */
+  void reset() noexcept {
+    if (ref_) {
+      RefPolicy::decref(ref_);
+      ref_ = nullptr;
+    }
   }
 
   ~Ref() noexcept {

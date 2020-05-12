@@ -1,11 +1,11 @@
 /*
- * Copyright 2017-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,6 +18,9 @@
 
 #include <folly/executors/thread_factory/ThreadFactory.h>
 
+#include <glog/logging.h>
+
+#include <folly/String.h>
 #include <folly/portability/SysResource.h>
 #include <folly/portability/SysTime.h>
 
@@ -43,10 +46,10 @@ class PriorityThreadFactory : public ThreadFactory {
 
   std::thread newThread(Func&& func) override {
     int priority = priority_;
-    return factory_->newThread([ priority, func = std::move(func) ]() mutable {
+    return factory_->newThread([priority, func = std::move(func)]() mutable {
       if (setpriority(PRIO_PROCESS, 0, priority) != 0) {
         LOG(ERROR) << "setpriority failed (are you root?) with error " << errno,
-            strerror(errno);
+            errnoStr(errno);
       }
       func();
     });

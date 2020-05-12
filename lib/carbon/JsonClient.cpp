@@ -1,33 +1,33 @@
 /*
- *  Copyright (c) 2017-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include "JsonClient.h"
 
 #include <folly/fibers/FiberManagerMap.h>
 
 #include "mcrouter/lib/network/AsyncMcClient.h"
 #include "mcrouter/lib/network/ConnectionOptions.h"
-#include "mcrouter/lib/network/ThreadLocalSSLContextProvider.h"
 
 using facebook::memcache::ConnectionOptions;
+using facebook::memcache::SecurityMech;
 
 namespace carbon {
 
 namespace {
 ConnectionOptions getConnectionOptions(const JsonClient::Options& opts) {
-  ConnectionOptions options(opts.host, opts.port, mc_caret_protocol);
+  auto mech = opts.useSsl ? SecurityMech::TLS : SecurityMech::NONE;
+  ConnectionOptions options(opts.host, opts.port, mc_caret_protocol, mech);
   if (opts.useSsl) {
-    options.sslContextProvider = [=]() {
-      return facebook::memcache::getSSLContext(
-          opts.pemCertPath, opts.pemKeyPath, opts.pemCaPath, folly::none, true);
-    };
-    options.sslServiceIdentity = opts.sslServiceIdentity;
-    options.sessionCachingEnabled = true;
-    options.tfoEnabledForSsl = true;
+    options.securityOpts.sslPemCertPath = opts.pemCertPath;
+    options.securityOpts.sslPemKeyPath = opts.pemKeyPath;
+    options.securityOpts.sslPemCaPath = opts.pemCaPath;
+    options.securityOpts.sslServiceIdentity = opts.sslServiceIdentity;
+    options.securityOpts.sessionCachingEnabled = true;
+    options.securityOpts.tfoEnabledForSsl = true;
   }
   return options;
 }

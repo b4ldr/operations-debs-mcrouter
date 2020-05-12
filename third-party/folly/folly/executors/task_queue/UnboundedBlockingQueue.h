@@ -1,11 +1,11 @@
 /*
- * Copyright 2017-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -27,17 +27,21 @@ class UnboundedBlockingQueue : public BlockingQueue<T> {
  public:
   virtual ~UnboundedBlockingQueue() {}
 
-  void add(T item) override {
+  BlockingQueueAddResult add(T item) override {
     queue_.enqueue(std::move(item));
-    sem_.post();
+    return sem_.post();
   }
 
   T take() override {
-    T item;
-    while (!queue_.try_dequeue(item)) {
-      sem_.wait();
+    sem_.wait();
+    return queue_.dequeue();
+  }
+
+  folly::Optional<T> try_take_for(std::chrono::milliseconds time) override {
+    if (!sem_.try_wait_for(time)) {
+      return folly::none;
     }
-    return item;
+    return queue_.dequeue();
   }
 
   size_t size() override {

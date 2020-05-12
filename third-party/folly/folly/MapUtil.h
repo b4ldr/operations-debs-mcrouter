@@ -1,11 +1,11 @@
 /*
- * Copyright 2012-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -36,7 +36,7 @@ template <
     class Map,
     typename Key = typename Map::key_type,
     typename Value = typename Map::mapped_type,
-    typename std::enable_if<!is_invocable<Value>::value>::type* = nullptr>
+    typename std::enable_if<!is_invocable_v<Value>>::type* = nullptr>
 typename Map::mapped_type
 get_default(const Map& map, const Key& key, Value&& dflt) {
   using M = typename Map::mapped_type;
@@ -52,9 +52,8 @@ template <
     class Map,
     typename Key = typename Map::key_type,
     typename Func,
-    typename = typename std::enable_if<std::is_convertible<
-        typename std::result_of<Func()>::type,
-        typename Map::mapped_type>::value>::type>
+    typename = typename std::enable_if<
+        is_invocable_r_v<typename Map::mapped_type, Func>>::type>
 typename Map::mapped_type
 get_default(const Map& map, const Key& key, Func&& dflt) {
   auto pos = map.find(key);
@@ -77,7 +76,7 @@ const typename Map::mapped_type& get_or_throw(
   if (pos != map.end()) {
     return pos->second;
   }
-  throw E(folly::to<std::string>(exceptionStrPrefix, key));
+  throw_exception<E>(folly::to<std::string>(exceptionStrPrefix, key));
 }
 
 template <
@@ -92,7 +91,7 @@ typename Map::mapped_type& get_or_throw(
   if (pos != map.end()) {
     return pos->second;
   }
-  throw E(folly::to<std::string>(exceptionStrPrefix, key));
+  throw_exception<E>(folly::to<std::string>(exceptionStrPrefix, key));
 }
 
 /**
@@ -152,11 +151,10 @@ template <
     class Map,
     typename Key = typename Map::key_type,
     typename Func,
-    typename = typename std::enable_if<std::is_convertible<
-        typename std::result_of<Func()>::type,
-        const typename Map::mapped_type&>::value>::type,
     typename = typename std::enable_if<
-        std::is_reference<typename std::result_of<Func()>::type>::value>::type>
+        is_invocable_r_v<const typename Map::mapped_type&, Func>>::type,
+    typename = typename std::enable_if<
+        std::is_reference<invoke_result_t<Func>>::value>::type>
 const typename Map::mapped_type&
 get_ref_default(const Map& map, const Key& key, Func&& dflt) {
   auto pos = map.find(key);
@@ -214,9 +212,26 @@ struct DefaultType<Key, KeysDefault...> {
 template <class... KeysDefault>
 auto extract_default(const KeysDefault&... keysDefault) ->
     typename DefaultType<KeysDefault...>::type const& {
-  return std::get<sizeof...(KeysDefault)-1>(std::tie(keysDefault...));
+  return std::get<sizeof...(KeysDefault) - 1>(std::tie(keysDefault...));
 }
 } // namespace detail
+
+/**
+ * Given a map of maps and a path of keys, return a Optional<V> if the nested
+ * key exists and None if the nested keys does not exist in the map.
+ */
+template <class Map, class Key1, class Key2, class... Keys>
+auto get_optional(
+    const Map& map,
+    const Key1& key1,
+    const Key2& key2,
+    const Keys&... keys)
+    -> folly::Optional<
+        typename detail::NestedMapType<Map, 2 + sizeof...(Keys)>::type> {
+  auto pos = map.find(key1);
+  return pos != map.end() ? get_optional(pos->second, key2, keys...)
+                          : folly::none;
+}
 
 /**
  * Given a map of maps and a path of keys, return a pointer to the nested value,

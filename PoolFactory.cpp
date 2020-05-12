@@ -1,15 +1,15 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include "PoolFactory.h"
 
 #include <folly/json.h>
 
-#include "mcrouter/ConfigApi.h"
+#include "mcrouter/ConfigApiIf.h"
 #include "mcrouter/lib/fbi/cpp/util.h"
 
 namespace facebook {
@@ -27,6 +27,14 @@ PoolFactory::PoolFactory(const folly::dynamic& config, ConfigApiIf& configApi)
           it.first.stringPiece(), std::make_pair(it.second, PoolState::NEW));
     }
   }
+}
+
+PoolFactory::PoolFactory(
+    const folly::dynamic& config,
+    ConfigApiIf& configApi,
+    folly::json::metadata_map configMetadataMap)
+    : PoolFactory(config, configApi) {
+  configMetadataMap_ = std::move(configMetadataMap);
 }
 
 PoolFactory::PoolJson PoolFactory::parseNamedPool(folly::StringPiece name) {
@@ -82,6 +90,6 @@ PoolFactory::PoolJson PoolFactory::parsePool(const folly::dynamic& json) {
   pools_.emplace(jname->stringPiece(), std::make_pair(json, PoolState::NEW));
   return parseNamedPool(jname->stringPiece());
 }
-}
-}
-} // facebook::memcache::mcrouter
+} // namespace mcrouter
+} // namespace memcache
+} // namespace facebook

@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,6 +20,7 @@
 #include <random>
 
 #include <boost/thread.hpp>
+#include <glog/logging.h>
 
 #include <folly/Random.h>
 #include <folly/experimental/FunctionScheduler.h>
@@ -35,6 +36,7 @@ using std::atomic;
 using std::chrono::duration_cast;
 using std::chrono::microseconds;
 using std::chrono::milliseconds;
+using std::chrono::steady_clock;
 
 namespace {
 
@@ -46,7 +48,9 @@ namespace {
  * to run.
  */
 static const auto timeFactor = std::chrono::milliseconds(400);
-std::chrono::milliseconds testInterval(int n) { return n * timeFactor; }
+std::chrono::milliseconds testInterval(int n) {
+  return n * timeFactor;
+}
 int getTicksWithinRange(int n, int min, int max) {
   assert(min <= max);
   n = std::max(min, n);
@@ -142,7 +146,9 @@ TEST(FunctionScheduler, AddCancel2) {
           fs.cancelFunction("selfCancel");
         }
       },
-      testInterval(1), "selfCancel", testInterval(1));
+      testInterval(1),
+      "selfCancel",
+      testInterval(1));
   delay(4);
   EXPECT_EQ(3, selfCancelCount);
   EXPECT_FALSE(fs.cancelFunction("selfCancel"));
@@ -190,8 +196,9 @@ TEST(FunctionScheduler, AddMultiple) {
   FunctionScheduler fs;
   fs.addFunction([&] { total += 2; }, testInterval(2), "add2");
   fs.addFunction([&] { total += 3; }, testInterval(3), "add3");
-  EXPECT_THROW(fs.addFunction([&] { total += 2; }, testInterval(2), "add2"),
-               std::invalid_argument); // function name already exists
+  EXPECT_THROW(
+      fs.addFunction([&] { total += 2; }, testInterval(2), "add2"),
+      std::invalid_argument); // function name already exists
 
   fs.start();
   delay(1);
@@ -323,8 +330,9 @@ TEST(FunctionScheduler, AddInvalid) {
   atomic<int> total{0};
   FunctionScheduler fs;
   // interval may not be negative
-  EXPECT_THROW(fs.addFunction([&] { total += 2; }, testInterval(-1), "add2"),
-               std::invalid_argument);
+  EXPECT_THROW(
+      fs.addFunction([&] { total += 2; }, testInterval(-1), "add2"),
+      std::invalid_argument);
 
   EXPECT_FALSE(fs.cancelFunction("addNoFunc"));
 }
@@ -372,13 +380,12 @@ TEST(FunctionScheduler, NoShutdown) {
 TEST(FunctionScheduler, StartDelay) {
   atomic<int> total{0};
   FunctionScheduler fs;
-  fs.addFunction([&] { total += 2; }, testInterval(2), "add2",
-                 testInterval(2));
-  fs.addFunction([&] { total += 3; }, testInterval(3), "add3",
-                 testInterval(2));
-  EXPECT_THROW(fs.addFunction([&] { total += 2; }, testInterval(3),
-                              "addX", testInterval(-1)),
-               std::invalid_argument);
+  fs.addFunction([&] { total += 2; }, testInterval(2), "add2", testInterval(2));
+  fs.addFunction([&] { total += 3; }, testInterval(3), "add3", testInterval(2));
+  EXPECT_THROW(
+      fs.addFunction(
+          [&] { total += 2; }, testInterval(3), "addX", testInterval(-1)),
+      std::invalid_argument);
   fs.start();
   delay(1); // t1
   EXPECT_EQ(0, total);
@@ -405,13 +412,13 @@ TEST(FunctionScheduler, NoSteadyCatchup) {
   std::atomic<int> ticks(0);
   FunctionScheduler fs;
   // fs.setSteady(false); is the default
-  fs.addFunction([&ticks] {
-                   if (++ticks == 2) {
-                     std::this_thread::sleep_for(
-                         std::chrono::milliseconds(200));
-                   }
-                 },
-                 milliseconds(5));
+  fs.addFunction(
+      [&ticks] {
+        if (++ticks == 2) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        }
+      },
+      milliseconds(5));
   fs.start();
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
@@ -424,13 +431,13 @@ TEST(FunctionScheduler, SteadyCatchup) {
   std::atomic<int> ticks(0);
   FunctionScheduler fs;
   fs.setSteady(true);
-  fs.addFunction([&ticks] {
-                   if (++ticks == 2) {
-                     std::this_thread::sleep_for(
-                         std::chrono::milliseconds(200));
-                   }
-                 },
-                 milliseconds(5));
+  fs.addFunction(
+      [&ticks] {
+        if (++ticks == 2) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        }
+      },
+      milliseconds(5));
   fs.start();
 
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -448,11 +455,12 @@ TEST(FunctionScheduler, UniformDistribution) {
   std::chrono::milliseconds maxInterval =
       testInterval(kTicks) + (timeFactor / 5);
   FunctionScheduler fs;
-  fs.addFunctionUniformDistribution([&] { total += 2; },
-                                    minInterval,
-                                    maxInterval,
-                                    "UniformDistribution",
-                                    std::chrono::milliseconds(0));
+  fs.addFunctionUniformDistribution(
+      [&] { total += 2; },
+      minInterval,
+      maxInterval,
+      "UniformDistribution",
+      std::chrono::milliseconds(0));
   fs.start();
   delay(1);
   EXPECT_EQ(2, total);
@@ -463,6 +471,41 @@ TEST(FunctionScheduler, UniformDistribution) {
   fs.shutdown();
   delay(2);
   EXPECT_EQ(6, total);
+}
+
+TEST(FunctionScheduler, ConsistentDelay) {
+  std::atomic<int> ticks(0);
+  FunctionScheduler fs;
+
+  std::atomic<long long> epoch(0);
+  epoch = duration_cast<milliseconds>(steady_clock::now().time_since_epoch())
+              .count();
+
+  // We should have runs at t = 0, 600, 800, 1200, or 4 total.
+  // If at const interval, it would be t = 0, 600, 1000, or 3 total.
+  fs.addFunctionConsistentDelay(
+      [&ticks, &epoch] {
+        auto now =
+            duration_cast<milliseconds>(steady_clock::now().time_since_epoch())
+                .count();
+        int t = ++ticks;
+        if (t != 2) {
+          // Sensitive to delays above 100ms.
+          EXPECT_NEAR((now - epoch) - (t - 1) * 400, 0, 100);
+        }
+        if (t == 1) {
+          /* sleep override */
+          std::this_thread::sleep_for(std::chrono::milliseconds(600));
+        }
+      },
+      milliseconds(400),
+      "ConsistentDelay");
+
+  fs.start();
+
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::milliseconds(1300));
+  EXPECT_EQ(ticks.load(), 4);
 }
 
 TEST(FunctionScheduler, ExponentialBackoff) {

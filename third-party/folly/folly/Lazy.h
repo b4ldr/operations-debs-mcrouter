@@ -1,11 +1,11 @@
 /*
- * Copyright 2013-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,6 +20,7 @@
 #include <utility>
 
 #include <folly/Optional.h>
+#include <folly/functional/Invoke.h>
 
 namespace folly {
 
@@ -88,7 +89,7 @@ namespace detail {
 
 template <class Func>
 struct Lazy {
-  typedef typename std::result_of<Func()>::type result_type;
+  typedef invoke_result_t<Func> result_type;
 
   static_assert(
       !std::is_const<Func>::value,
@@ -100,10 +101,7 @@ struct Lazy {
   explicit Lazy(Func&& f) : func_(std::move(f)) {}
   explicit Lazy(const Func& f) : func_(f) {}
 
-  Lazy(Lazy&& o)
-    : value_(std::move(o.value_))
-    , func_(std::move(o.func_))
-  {}
+  Lazy(Lazy&& o) : value_(std::move(o.value_)), func_(std::move(o.func_)) {}
 
   Lazy(const Lazy&) = delete;
   Lazy& operator=(const Lazy&) = delete;

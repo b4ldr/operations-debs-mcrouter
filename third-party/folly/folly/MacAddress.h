@@ -1,11 +1,11 @@
 /*
- * Copyright 2014-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,12 +18,19 @@
 
 #include <iosfwd>
 
+#include <folly/Conv.h>
+#include <folly/Expected.h>
 #include <folly/Range.h>
+#include <folly/Unit.h>
 #include <folly/lang/Bits.h>
 
 namespace folly {
 
 class IPAddressV6;
+
+enum class MacAddressFormatError {
+  Invalid,
+};
 
 /*
  * MacAddress represents an IEEE 802 MAC address.
@@ -49,9 +56,33 @@ class MacAddress {
    */
   explicit MacAddress(StringPiece str);
 
+  static Expected<MacAddress, MacAddressFormatError> tryFromString(
+      StringPiece value) {
+    MacAddress ret;
+    auto ok = ret.trySetFromString(value);
+    if (!ok) {
+      return makeUnexpected(ok.error());
+    }
+    return ret;
+  }
+  static MacAddress fromString(StringPiece value) {
+    MacAddress ret;
+    ret.setFromString(value);
+    return ret;
+  }
+
   /*
    * Construct a MAC address from its 6-byte binary value
    */
+  static Expected<MacAddress, MacAddressFormatError> tryFromBinary(
+      ByteRange value) {
+    MacAddress ret;
+    auto ok = ret.trySetFromBinary(value);
+    if (!ok) {
+      return makeUnexpected(ok.error());
+    }
+    return ret;
+  }
   static MacAddress fromBinary(ByteRange value) {
     MacAddress ret;
     ret.setFromBinary(value);
@@ -134,11 +165,16 @@ class MacAddress {
   /*
    * Update the current MacAddress object from a human-readable string.
    */
-  void parse(StringPiece str);
+  Expected<Unit, MacAddressFormatError> trySetFromString(StringPiece value);
+  void setFromString(StringPiece value);
+  void parse(StringPiece str) {
+    setFromString(str);
+  }
 
   /*
    * Update the current MacAddress object from a 6-byte binary representation.
    */
+  Expected<Unit, MacAddressFormatError> trySetFromBinary(ByteRange value);
   void setFromBinary(ByteRange value);
 
   bool isBroadcast() const {
@@ -203,6 +239,16 @@ class MacAddress {
     bytes_[1] = 0;
   }
 
+  template <typename OnError>
+  Expected<Unit, MacAddressFormatError> setFromString(
+      StringPiece value,
+      OnError err);
+
+  template <typename OnError>
+  Expected<Unit, MacAddressFormatError> setFromBinary(
+      ByteRange value,
+      OnError err);
+
   /* We store the 6 bytes starting at bytes_[2] (most significant)
      through bytes_[7] (least).
      bytes_[0] and bytes_[1] are always equal to 0 to simplify comparisons.
@@ -231,3 +277,15 @@ typename std::enable_if<IsSomeString<Tgt>::value>::type toAppend(
 std::ostream& operator<<(std::ostream& os, MacAddress address);
 
 } // namespace folly
+
+namespace std {
+
+// Provide an implementation for std::hash<MacAddress>
+template <>
+struct hash<folly::MacAddress> {
+  size_t operator()(const folly::MacAddress& address) const {
+    return std::hash<uint64_t>()(address.u64HBO());
+  }
+};
+
+} // namespace std

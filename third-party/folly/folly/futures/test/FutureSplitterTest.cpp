@@ -1,11 +1,11 @@
 /*
- * Copyright 2017-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,6 +15,8 @@
  */
 
 #include <folly/futures/FutureSplitter.h>
+
+#include <folly/executors/ManualExecutor.h>
 #include <folly/portability/GTest.h>
 
 using namespace folly;
@@ -22,7 +24,7 @@ using namespace folly;
 TEST(FutureSplitter, splitFutureSuccess) {
   Promise<int> p;
   folly::FutureSplitter<int> sp(
-      p.getSemiFuture().via(&folly::InlineExecutor::instance()));
+      p.getSemiFuture().via(&InlineExecutor::instance()));
   auto f1 = sp.getFuture();
   EXPECT_FALSE(f1.isReady());
   p.setValue(1);
@@ -36,7 +38,7 @@ TEST(FutureSplitter, splitFutureSuccess) {
 TEST(FutureSplitter, splitFutureSuccessSemiFuture) {
   Promise<int> p;
   folly::FutureSplitter<int> sp(
-      p.getSemiFuture().via(&folly::InlineExecutor::instance()));
+      p.getSemiFuture().via(&InlineExecutor::instance()));
   auto f1 = sp.getSemiFuture();
   EXPECT_FALSE(f1.isReady());
   p.setValue(1);
@@ -53,7 +55,7 @@ TEST(FutureSplitter, splitFutureSuccessNullExecutor) {
   // Double via because a null executor to SemiFuture.via is invalid but we
   // are testing a situation where we have a FutureSplitter from a future with
   // a null executor to account for legacy code.
-  auto f = std::move(sf).via(&folly::InlineExecutor::instance()).via(nullptr);
+  auto f = std::move(sf).via(&InlineExecutor::instance()).via(nullptr);
   folly::FutureSplitter<int> sp(std::move(f));
   auto f1 = sp.getFuture();
   EXPECT_FALSE(f1.isReady());
@@ -68,7 +70,7 @@ TEST(FutureSplitter, splitFutureSuccessNullExecutor) {
 TEST(FutureSplitter, splitFutureCopyable) {
   Promise<int> p;
   folly::FutureSplitter<int> sp1(
-      p.getSemiFuture().via(&folly::InlineExecutor::instance()));
+      p.getSemiFuture().via(&InlineExecutor::instance()));
   folly::FutureSplitter<int> sp2(sp1);
   auto f1 = sp1.getFuture();
   EXPECT_FALSE(f1.isReady());
@@ -87,7 +89,7 @@ TEST(FutureSplitter, splitFutureCopyable) {
 TEST(FutureSplitter, splitFutureMovable) {
   Promise<int> p;
   folly::FutureSplitter<int> sp1(
-      p.getSemiFuture().via(&folly::InlineExecutor::instance()));
+      p.getSemiFuture().via(&InlineExecutor::instance()));
   auto f1 = sp1.getFuture();
   folly::FutureSplitter<int> sp2(std::move(sp1));
   EXPECT_FALSE(f1.isReady());
@@ -106,7 +108,7 @@ TEST(FutureSplitter, splitFutureMovable) {
 TEST(FutureSplitter, splitFutureCopyAssignable) {
   Promise<int> p;
   folly::FutureSplitter<int> sp1(
-      p.getSemiFuture().via(&folly::InlineExecutor::instance()));
+      p.getSemiFuture().via(&InlineExecutor::instance()));
   folly::FutureSplitter<int> sp2{};
   sp2 = sp1;
   auto f1 = sp1.getFuture();
@@ -126,7 +128,7 @@ TEST(FutureSplitter, splitFutureCopyAssignable) {
 TEST(FutureSplitter, splitFutureMoveAssignable) {
   Promise<int> p;
   folly::FutureSplitter<int> sp1(
-      p.getSemiFuture().via(&folly::InlineExecutor::instance()));
+      p.getSemiFuture().via(&InlineExecutor::instance()));
   auto f1 = sp1.getFuture();
   folly::FutureSplitter<int> sp2{};
   sp2 = std::move(sp1);
@@ -146,7 +148,7 @@ TEST(FutureSplitter, splitFutureMoveAssignable) {
 TEST(FutureSplitter, splitFutureScope) {
   Promise<int> p;
   auto pSP = std::make_unique<folly::FutureSplitter<int>>(
-      p.getSemiFuture().via(&folly::InlineExecutor::instance()));
+      p.getSemiFuture().via(&InlineExecutor::instance()));
   auto f1 = pSP->getFuture();
   EXPECT_FALSE(f1.isReady());
   pSP.reset();
@@ -154,13 +156,13 @@ TEST(FutureSplitter, splitFutureScope) {
   p.setValue(1);
   EXPECT_TRUE(f1.isReady());
   EXPECT_TRUE(f1.hasValue());
-  EXPECT_EQ(1, f1.get());
+  EXPECT_EQ(1, std::move(f1).get());
 }
 
 TEST(FutureSplitter, splitFutureFailure) {
   Promise<int> p;
   folly::FutureSplitter<int> sp(
-      p.getSemiFuture().via(&folly::InlineExecutor::instance()));
+      p.getSemiFuture().via(&InlineExecutor::instance()));
   auto f1 = sp.getFuture();
   EXPECT_FALSE(f1.isReady());
   try {
@@ -173,4 +175,20 @@ TEST(FutureSplitter, splitFutureFailure) {
   auto f2 = sp.getFuture();
   EXPECT_TRUE(f2.isReady());
   EXPECT_TRUE(f2.hasException());
+}
+
+TEST(FutureSplitter, lifetime) {
+  struct ManualExecutorWithPriority : folly::ManualExecutor {
+    void addWithPriority(Func func, int8_t) override {
+      add(std::move(func));
+    }
+  };
+  ManualExecutorWithPriority ex;
+  auto ka = folly::ExecutorWithPriority::create(
+      folly::getKeepAliveToken(ex), folly::Executor::MID_PRI);
+  auto split = folly::splitFuture(folly::via(std::move(ka), [] { return 3; }));
+  ex.drain();
+  auto fut = split.getFuture().thenValue([](auto i) { return i + 1; });
+  ex.drain();
+  EXPECT_EQ(4, fut.value());
 }

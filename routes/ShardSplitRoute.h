@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <memory>
@@ -18,12 +18,13 @@
 #include "mcrouter/McrouterFiberContext.h"
 #include "mcrouter/ProxyRequestContext.h"
 #include "mcrouter/config.h"
-#include "mcrouter/lib/Operation.h"
+#include "mcrouter/lib/Reply.h"
 #include "mcrouter/lib/RouteHandleTraverser.h"
 #include "mcrouter/lib/carbon/RoutingGroups.h"
 #include "mcrouter/lib/fbi/cpp/globals.h"
 #include "mcrouter/lib/fbi/cpp/util.h"
 #include "mcrouter/routes/McRouteHandleBuilder.h"
+#include "mcrouter/routes/ShardHashFunc.h"
 #include "mcrouter/routes/ShardSplitter.h"
 
 namespace facebook {
@@ -85,7 +86,7 @@ class ShardSplitRoute {
       : rh_(std::move(rh)), shardSplitter_(std::move(shardSplitter)) {}
 
   template <class Request>
-  void traverse(
+  bool traverse(
       const Request& req,
       const RouteHandleTraverser<RouteHandleIf>& t) const {
     auto* ctx = fiber_local<RouterInfo>::getTraverseCtx();
@@ -94,31 +95,46 @@ class ShardSplitRoute {
     }
 
     folly::StringPiece shard;
-    auto split = shardSplitter_.getShardSplit(req.key().routingKey(), shard);
-
-    if (split == nullptr) {
-      t(*rh_, req);
-      return;
+    if (!getShardId(req.key().routingKey(), shard)) {
+      // key does not contain shard id, just do regular routing
+      return t(*rh_, req);
     }
 
-    auto splitSize = split->getSplitSizeForCurrentHost();
-    if (carbon::DeleteLike<Request>::value && split->fanoutDeletesEnabled()) {
+    // get splitSize to use from traverser options
+    auto splitSize = t.options().getSplitSize();
+    // use true value for fanoutDeletesEnabled when splitSize is specified
+    bool fanoutDeletesEnabled = true;
+
+    if (splitSize == 0) {
+      // if splitSize is not set in traverser options, get related info from
+      // shardSplitter
+
+      auto split = shardSplitter_.getShardSplit(shard);
+      splitSize = split.getSplitSizeForCurrentHost();
+      fanoutDeletesEnabled = split.fanoutDeletesEnabled();
+    }
+
+    if (carbon::DeleteLike<Request>::value && fanoutDeletesEnabled) {
       // Note: the order here is part of the API and must not be changed.
       // We traverse the primary split and then other splits in order.
-      t(*rh_, req);
+      if (t(*rh_, req)) {
+        return true;
+      }
       for (size_t i = 1; i < splitSize; ++i) {
-        t(*rh_, splitReq(req, i, shard));
+        if (t(*rh_, splitReq(req, i, shard))) {
+          return true;
+        }
       }
     } else {
       size_t i = globals::hostid() % splitSize;
       // Note that foreachPossibleClient always calls traverse on a request with
       // no flags set.
       if (i == 0) {
-        t(*rh_, req);
-        return;
+        return t(*rh_, req);
       }
-      t(*rh_, splitReq(req, i, shard));
+      return t(*rh_, splitReq(req, i, shard));
     }
+    return false;
   }
 
   template <class Request>
@@ -137,7 +153,7 @@ class ShardSplitRoute {
     if (carbon::DeleteLike<Request>::value && split->fanoutDeletesEnabled()) {
       for (size_t i = 1; i < splitSize; ++i) {
         folly::fibers::addTask(
-            [ r = rh_, req_ = splitReq(req, i, shard) ]() { r->route(req_); });
+            [r = rh_, req_ = splitReq(req, i, shard)]() { r->route(req_); });
       }
       return rh_->route(req);
     } else {

@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <string>
@@ -25,9 +25,10 @@
 #include "mcrouter/config.h"
 #include "mcrouter/lib/Reply.h"
 #include "mcrouter/lib/RouteHandleTraverser.h"
+#include "mcrouter/lib/carbon/FailoverUtil.h"
 #include "mcrouter/lib/config/RouteHandleBuilder.h"
 #include "mcrouter/lib/fbi/cpp/util.h"
-#include "mcrouter/lib/network/gen/Memcache.h"
+#include "mcrouter/lib/network/gen/MemcacheMessages.h"
 #include "mcrouter/routes/McrouterRouteHandle.h"
 
 namespace folly {
@@ -46,7 +47,7 @@ namespace mcrouter {
  * Routes a request to a single ProxyDestination.
  * This is the lowest level in Mcrouter's RouteHandle tree.
  */
-template <class RouterInfo>
+template <class RouterInfo, class Transport>
 class DestinationRoute {
  public:
   std::string routeName() const {
@@ -62,7 +63,7 @@ class DestinationRoute {
    * @param destination The destination where the request is to be sent
    */
   DestinationRoute(
-      std::shared_ptr<ProxyDestination> destination,
+      std::shared_ptr<ProxyDestination<Transport>> destination,
       folly::StringPiece poolName,
       size_t indexInPool,
       int32_t poolStatIdx,
@@ -73,20 +74,24 @@ class DestinationRoute {
         indexInPool_(indexInPool),
         poolStatIndex_(poolStatIdx),
         timeout_(timeout),
-        keepRoutingPrefix_(keepRoutingPrefix) {}
+        keepRoutingPrefix_(keepRoutingPrefix) {
+    destination_->setPoolStatsIndex(poolStatIdx);
+  }
 
   template <class Request>
-  void traverse(
-      const Request&,
-      const RouteHandleTraverser<typename RouterInfo::RouteHandleIf>&) const {
-    auto* ctx = fiber_local<RouterInfo>::getTraverseCtx();
-    if (ctx) {
-      bool isShadow =
-          fiber_local<RouterInfo>::getRequestClass().is(RequestClass::kShadow);
-      ctx->recordDestination(
-          PoolContext{poolName_, indexInPool_, isShadow},
-          *destination_->accessPoint());
+  bool traverse(
+      const Request& req,
+      const RouteHandleTraverser<typename RouterInfo::RouteHandleIf>& t) const {
+    PoolContext poolContext{
+        poolName_,
+        indexInPool_,
+        fiber_local<RouterInfo>::getRequestClass().is(RequestClass::kShadow)};
+    const auto& accessPoint = *destination_->accessPoint();
+    if (auto* ctx = fiber_local<RouterInfo>::getTraverseCtx()) {
+      ctx->recordDestination(poolContext, accessPoint);
     }
+    return t(accessPoint, poolContext, req) &&
+        !destination_->tracker()->isTko();
   }
 
   memcache::McDeleteReply route(const memcache::McDeleteRequest& req) const {
@@ -104,7 +109,7 @@ class DestinationRoute {
   }
 
  private:
-  const std::shared_ptr<ProxyDestination> destination_;
+  const std::shared_ptr<ProxyDestination<Transport>> destination_;
   const folly::StringPiece poolName_;
   const size_t indexInPool_;
   const int32_t poolStatIndex_{-1};
@@ -122,12 +127,15 @@ class DestinationRoute {
   template <class Request>
   ReplyT<Request> checkAndRoute(const Request& req) const {
     auto& ctx = fiber_local<RouterInfo>::getSharedCtx();
-    if (!destination_->may_send()) {
-      return constructAndLog(req, *ctx, TkoReply);
-    }
-
-    if (destination_->shouldDrop<Request>()) {
-      return constructAndLog(req, *ctx, BusyReply);
+    carbon::Result tkoReason;
+    if (!destination_->maySend(tkoReason)) {
+      return constructAndLog(
+          req,
+          *ctx,
+          TkoReply,
+          folly::to<std::string>(
+              "Server unavailable. Reason: ",
+              carbon::resultToString(tkoReason)));
     }
 
     if (poolStatIndex_ >= 0) {
@@ -170,7 +178,14 @@ class DestinationRoute {
       Args&&... args) const {
     auto now = nowUs();
     auto reply = createReply<Request>(std::forward<Args>(args)...);
-    ReplyStatsContext replyContext;
+    RpcStatsContext rpcContext;
+    ctx.onBeforeRequestSent(
+        poolName_,
+        *destination_->accessPoint(),
+        folly::StringPiece(),
+        req,
+        fiber_local<RouterInfo>::getRequestClass(),
+        now);
     ctx.onReplyReceived(
         poolName_,
         *destination_->accessPoint(),
@@ -181,7 +196,7 @@ class DestinationRoute {
         now,
         now,
         poolStatIndex_,
-        replyContext);
+        rpcContext);
     return reply;
   }
 
@@ -206,8 +221,15 @@ class DestinationRoute {
     }
 
     const auto& reqToSend = newReq ? *newReq : req;
-    ReplyStatsContext replyContext;
-    auto reply = destination_->send(reqToSend, dctx, timeout_, replyContext);
+    ctx.onBeforeRequestSent(
+        poolName_,
+        *destination_->accessPoint(),
+        strippedRoutingPrefix,
+        reqToSend,
+        fiber_local<RouterInfo>::getRequestClass(),
+        dctx.startTime);
+    RpcStatsContext rpcContext;
+    auto reply = destination_->send(reqToSend, dctx, timeout_, rpcContext);
     ctx.onReplyReceived(
         poolName_,
         *destination_->accessPoint(),
@@ -218,9 +240,9 @@ class DestinationRoute {
         dctx.startTime,
         dctx.endTime,
         poolStatIndex_,
-        replyContext);
+        rpcContext);
 
-    fiber_local<RouterInfo>::setServerLoad(replyContext.serverLoad);
+    fiber_local<RouterInfo>::setServerLoad(rpcContext.serverLoad);
     return reply;
   }
 
@@ -238,9 +260,13 @@ class DestinationRoute {
     auto& ap = *destination_->accessPoint();
     folly::fibers::Baton b;
     auto res = false;
+    auto attr = req.attributes();
+    const auto asyncWriteStartUs = nowUs();
     if (auto asyncWriter = proxy->router().asyncWriter()) {
-      res = asyncWriter->run([&b, &ap, proxy, key, asynclogName]() {
-        proxy->asyncLog().writeDelete(ap, key, asynclogName);
+      res = asyncWriter->run([&b, &ap, &attr, proxy, key, asynclogName]() {
+        if (proxy->asyncLog().writeDelete(ap, key, asynclogName, attr)) {
+          proxy->stats().increment(asynclog_spool_success_stat);
+        }
         b.post();
       });
     }
@@ -252,23 +278,25 @@ class DestinationRoute {
           key,
           asynclogName);
     } else {
-      /* Don't reply to the user until we safely logged the request to disk */
+      // Don't reply to the user until we safely logged the request to disk
       b.wait();
+      const auto asyncWriteDurationUs = nowUs() - asyncWriteStartUs;
+      proxy->stats().asyncLogDurationUs().insertSample(asyncWriteDurationUs);
       proxy->stats().increment(asynclog_requests_stat);
     }
     return true;
   }
 };
 
-template <class RouterInfo>
+template <class RouterInfo, class Transport>
 std::shared_ptr<typename RouterInfo::RouteHandleIf> makeDestinationRoute(
-    std::shared_ptr<ProxyDestination> destination,
+    std::shared_ptr<ProxyDestination<Transport>> destination,
     folly::StringPiece poolName,
     size_t indexInPool,
     int32_t poolStatsIndex,
     std::chrono::milliseconds timeout,
     bool keepRoutingPrefix) {
-  return makeRouteHandleWithInfo<RouterInfo, DestinationRoute>(
+  return makeRouteHandleWithInfo<RouterInfo, DestinationRoute, Transport>(
       std::move(destination),
       poolName,
       indexInPool,
@@ -277,6 +305,6 @@ std::shared_ptr<typename RouterInfo::RouteHandleIf> makeDestinationRoute(
       keepRoutingPrefix);
 }
 
-} // mcrouter
-} // memcache
-} // facebook
+} // namespace mcrouter
+} // namespace memcache
+} // namespace facebook

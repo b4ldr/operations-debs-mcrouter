@@ -1,11 +1,11 @@
 /*
- * Copyright 2014-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,7 +26,7 @@ EventBaseManager* EventBaseManager::get() {
     return mgr;
   }
 
-  EventBaseManager* new_mgr = new EventBaseManager;
+  auto new_mgr = new EventBaseManager;
   bool exchanged = globalManager.compare_exchange_strong(mgr, new_mgr);
   if (!exchanged) {
     delete new_mgr;
@@ -34,19 +34,18 @@ EventBaseManager* EventBaseManager::get() {
   } else {
     return new_mgr;
   }
-
 }
 
 /*
  * EventBaseManager methods
  */
 
-void EventBaseManager::setEventBase(EventBase *eventBase,
-                                     bool takeOwnership) {
-  EventBaseInfo *info = localStore_.get();
+void EventBaseManager::setEventBase(EventBase* eventBase, bool takeOwnership) {
+  EventBaseInfo* info = localStore_.get();
   if (info != nullptr) {
-    throw std::runtime_error("EventBaseManager: cannot set a new EventBase "
-                             "for this thread when one already exists");
+    throw std::runtime_error(
+        "EventBaseManager: cannot set a new EventBase "
+        "for this thread when one already exists");
   }
 
   info = new EventBaseInfo(eventBase, takeOwnership);
@@ -55,7 +54,7 @@ void EventBaseManager::setEventBase(EventBase *eventBase,
 }
 
 void EventBaseManager::clearEventBase() {
-  EventBaseInfo *info = localStore_.get();
+  EventBaseInfo* info = localStore_.get();
   if (info != nullptr) {
     this->untrackEventBase(info->eventBase);
     this->localStore_.reset(nullptr);
@@ -63,11 +62,11 @@ void EventBaseManager::clearEventBase() {
 }
 
 // XXX should this really be "const"?
-EventBase * EventBaseManager::getEventBase() const {
+EventBase* EventBaseManager::getEventBase() const {
   // have one?
-  auto *info = localStore_.get();
-  if (! info) {
-    info = new EventBaseInfo();
+  auto* info = localStore_.get();
+  if (!info) {
+    info = func_ ? new EventBaseInfo(func_()) : new EventBaseInfo();
     localStore_.reset(info);
 
     if (observer_) {
@@ -81,7 +80,7 @@ EventBase * EventBaseManager::getEventBase() const {
     // Simply removing the const causes trouble all over fbcode;
     // lots of services build a const EventBaseManager and errors
     // abound when we make this non-const.
-    (const_cast<EventBaseManager *>(this))->trackEventBase(info->eventBase);
+    (const_cast<EventBaseManager*>(this))->trackEventBase(info->eventBase);
   }
 
   return info->eventBase;

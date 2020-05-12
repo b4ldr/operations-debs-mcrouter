@@ -1,11 +1,11 @@
 /*
- * Copyright 2017-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -423,7 +423,7 @@ TEST(FlatCombining, direct_measurement) {
               << std::endl;
 
     uint64_t base =
-    test("no_combining - base         ", false, false, false, false, 0);
+        test("no_combining - base         ", false, false, false, false, 0);
     test("no_combining - dup          ", false, false, false, false, base);
     std::cout << "---------------------------------------" << std::endl;
 
@@ -457,6 +457,7 @@ TEST(FlatCombining, direct_measurement) {
   }
 }
 
+// clang-format off
 /*
 See benchmark results in https://phabricator.intern.facebook.com/P57204895
 
@@ -1785,3 +1786,4 @@ epb tpr_shadow vnmi flexpriority ept vpid xsaveopt dtherm arat pln pts
 ---
 
  */
+// clang-format on

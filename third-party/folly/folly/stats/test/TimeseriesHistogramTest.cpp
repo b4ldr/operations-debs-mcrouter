@@ -1,11 +1,11 @@
 /*
- * Copyright 2013-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,9 +19,7 @@
 #include <random>
 
 #include <folly/portability/GTest.h>
-#include <folly/stats/TimeseriesHistogram-defs.h>
 
-using namespace std;
 using namespace folly;
 using std::chrono::seconds;
 
@@ -438,7 +436,18 @@ TEST(TimeseriesHistogram, QueryByInterval) {
   };
 
   int expectedCounts[12] = {
-      60, 3600, 7200, 3540, 7139, 3600, 30, 3000, 7178, 2000, 6199, 3600,
+      60,
+      3600,
+      7200,
+      3540,
+      7139,
+      3600,
+      30,
+      3000,
+      7178,
+      2000,
+      6199,
+      3600,
   };
 
   // The first 7200 values added all fell below the histogram minimum,

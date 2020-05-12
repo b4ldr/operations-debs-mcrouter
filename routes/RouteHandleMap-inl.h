@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2016-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <memory>
@@ -201,7 +201,7 @@ RouteHandleMap<RouteHandleIf>::getTargetsForKeyFast(
     folly::StringPiece prefix,
     folly::StringPiece key) const {
   const std::vector<std::shared_ptr<RouteHandleIf>>* result = nullptr;
-  if (prefix.empty()) {
+  if (LIKELY(prefix.empty())) {
     // empty prefix => route to default route
     result = &defaultRouteMap_->getTargetsForKey(key);
   } else if (prefix == "/*/*/") {

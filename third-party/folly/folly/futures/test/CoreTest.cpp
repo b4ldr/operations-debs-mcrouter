@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include <folly/futures/Future.h>
 #include <folly/futures/detail/Core.h>
+#include <folly/futures/Future.h>
 #include <folly/portability/GTest.h>
 
 using namespace folly;
@@ -25,13 +25,11 @@ TEST(Core, size) {
   struct Gold {
     typename std::aligned_storage<lambdaBufSize>::type lambdaBuf_;
     folly::Optional<Try<Unit>> result_;
-    std::function<void(Try<Unit>&&)> callback_;
-    futures::detail::FSM<futures::detail::State> fsm_;
+    folly::Function<void(Try<Unit>&&)> callback_;
+    std::atomic<futures::detail::State> state_;
     std::atomic<unsigned char> attached_;
-    std::atomic<bool> active_;
     std::atomic<bool> interruptHandlerSet_;
-    folly::MicroSpinLock interruptLock_;
-    folly::MicroSpinLock executorLock_;
+    futures::detail::SpinLock interruptLock_;
     int8_t priority_;
     Executor* executor_;
     std::shared_ptr<RequestContext> context_;

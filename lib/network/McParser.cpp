@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include "McParser.h"
 
 #include <algorithm>
@@ -16,9 +16,10 @@
 #include <folly/experimental/JemallocNodumpAllocator.h>
 #include <folly/io/Cursor.h>
 #include <folly/lang/Bits.h>
+#include <glog/logging.h>
 
 #include "mcrouter/lib/Clocks.h"
-#include "mcrouter/lib/network/UmbrellaProtocol.h"
+#include "mcrouter/lib/network/CaretProtocol.h"
 
 namespace facebook {
 namespace memcache {
@@ -26,31 +27,25 @@ namespace memcache {
 namespace {
 // Adjust buffer size after this many CPU cycles (~2 billion)
 constexpr uint64_t kAdjustBufferSizeCpuCycles = 1UL << 31;
-
-size_t mcOpToRequestTypeId(mc_op_t mc_op) {
-  switch (mc_op) {
-#define THRIFT_OP(MC_OPERATION)                                           \
-  case MC_OPERATION::mc_op: {                                             \
-    using Request =                                                       \
-        typename TypeFromOp<MC_OPERATION::mc_op, RequestOpMapping>::type; \
-    return Request::typeId;                                               \
-  }
-#include "mcrouter/lib/McOpList.h"
-
-    default:
-      return 0;
-  }
-}
+// Max allowed body size is 1GB.
+constexpr size_t kMaxBodySize = 1UL << 30;
 
 #ifdef FOLLY_JEMALLOC_NODUMP_ALLOCATOR_SUPPORTED
-
 folly::ThreadLocal<folly::JemallocNodumpAllocator> allocator;
+void (*noDumpDeallocate)(void*, void*) =
+    folly::JemallocNodumpAllocator::deallocate;
+
+bool shouldSlowReserveNodumpBuffer(
+    const folly::IOBuf& readBuffer,
+    size_t bufSize) {
+  return (readBuffer.tailroom() < bufSize);
+}
 
 folly::IOBuf copyToNodumpBuffer(
-    const UmbrellaMessageInfo& umMsgInfo,
-    const folly::IOBuf& readBuffer) {
+    const folly::IOBuf& readBuffer,
+    size_t bufSize) {
+  assert(bufSize >= readBuffer.length());
   // Allocate buffer
-  const size_t bufSize = umMsgInfo.headerSize + umMsgInfo.bodySize;
   void* p = allocator->allocate(bufSize);
   if (!p) {
     LOG(WARNING) << "Not enough memory to create a nodump buffer";
@@ -65,13 +60,12 @@ folly::IOBuf copyToNodumpBuffer(
       p,
       bufSize,
       readBuffer.length(),
-      folly::JemallocNodumpAllocator::deallocate,
+      noDumpDeallocate,
       reinterpret_cast<void*>(allocator->getFlags()));
 }
-
 #endif
 
-} // anonymous
+} // namespace
 
 McParser::McParser(
     ParserCallback& callback,
@@ -81,11 +75,16 @@ McParser::McParser(
     ConnectionFifo* debugFifo)
     : callback_(callback),
       bufferSize_(minBufferSize),
+      minBufferSize_(minBufferSize),
       maxBufferSize_(maxBufferSize),
       debugFifo_(debugFifo),
       readBuffer_(folly::IOBuf::CREATE, bufferSize_),
       useJemallocNodumpAllocator_(useJemallocNodumpAllocator) {
-#ifndef FOLLY_JEMALLOC_NODUMP_ALLOCATOR_SUPPORTED
+#ifdef FOLLY_JEMALLOC_NODUMP_ALLOCATOR_SUPPORTED
+  if (useJemallocNodumpAllocator_) {
+    readBuffer_ = copyToNodumpBuffer(readBuffer_, readBuffer_.capacity());
+  }
+#else
   useJemallocNodumpAllocator_ = false;
 #endif
 }
@@ -106,62 +105,63 @@ std::pair<void*, size_t> McParser::getReadBuffer() {
     readBuffer_.retreat(readBuffer_.headroom());
   } else {
     /* Reallocate more space if necessary */
-    readBuffer_.reserve(0, bufferSize_);
+    readBuffReserve(minBufferSize_);
   }
   return std::make_pair(readBuffer_.writableTail(), readBuffer_.tailroom());
 }
 
-bool McParser::readUmbrellaOrCaretData() {
+void McParser::readBuffReserve(size_t minTailRoom) {
+#ifdef FOLLY_JEMALLOC_NODUMP_ALLOCATOR_SUPPORTED
+  if (useJemallocNodumpAllocator_) {
+    if (shouldSlowReserveNodumpBuffer(readBuffer_, minTailRoom)) {
+      readBuffer_ =
+          copyToNodumpBuffer(readBuffer_, readBuffer_.length() + minTailRoom);
+    }
+    return;
+  }
+#endif
+  readBuffer_.reserve(0 /* minHeadroom */, minTailRoom);
+}
+
+bool McParser::readCaretData() {
   while (readBuffer_.length() > 0) {
     // Parse header
-    UmbrellaParseStatus parseStatus;
-    if (protocol_ == mc_umbrella_protocol_DONOTUSE) {
-      parseStatus = umbrellaParseHeader(
-          readBuffer_.data(), readBuffer_.length(), umMsgInfo_);
-    } else {
-      parseStatus = caretParseHeader(
-          readBuffer_.data(), readBuffer_.length(), umMsgInfo_);
-    }
+    ParseStatus parseStatus;
+    parseStatus =
+        caretParseHeader(readBuffer_.data(), readBuffer_.length(), msgInfo_);
 
-    if (parseStatus == UmbrellaParseStatus::NOT_ENOUGH_DATA) {
+    if (parseStatus == ParseStatus::NotEnoughData) {
       return true;
     }
 
-    if (parseStatus != UmbrellaParseStatus::OK) {
+    if (parseStatus != ParseStatus::Ok) {
       callback_.parseError(
-          mc_res_remote_error,
+          carbon::Result::REMOTE_ERROR,
           folly::sformat(
               "Error parsing {} header", mc_protocol_to_string(protocol_)));
       return false;
     }
 
-    const auto messageSize = umMsgInfo_.headerSize + umMsgInfo_.bodySize;
+    const auto messageSize = msgInfo_.headerSize + msgInfo_.bodySize;
+
+    // Case 0: There was an overflow. Return an error and let mcrouter close the
+    // connection.
+    if (messageSize == 0) {
+      LOG(ERROR)
+          << "Got a 0 size message, likely due to overflow. Returning a parse error.";
+      return false;
+    }
 
     // Parse message body
     // Case 1: Entire message (and possibly part of next) is in the buffer
     if (readBuffer_.length() >= messageSize) {
       if (UNLIKELY(debugFifo_ && debugFifo_->isConnected())) {
-        if (protocol_ == mc_umbrella_protocol_DONOTUSE) {
-          const auto mc_op = umbrellaDetermineOperation(
-              readBuffer_.data(), umMsgInfo_.headerSize);
-          umMsgInfo_.typeId = mcOpToRequestTypeId(mc_op);
-          if (umMsgInfo_.typeId != 0 &&
-              umbrellaIsReply(readBuffer_.data(), umMsgInfo_.headerSize)) {
-            // We assume reply typeId is always one plus corresponding
-            // request's typeId. We rely on this in ClientServerMcParser.h.
-            ++umMsgInfo_.typeId;
-          }
-        }
-        debugFifo_->startMessage(MessageDirection::Received, umMsgInfo_.typeId);
+        debugFifo_->startMessage(MessageDirection::Received, msgInfo_.typeId);
         debugFifo_->writeData(readBuffer_.writableData(), messageSize);
       }
 
       bool cbStatus;
-      if (protocol_ == mc_umbrella_protocol_DONOTUSE) {
-        cbStatus = callback_.umMessageReady(umMsgInfo_, readBuffer_);
-      } else {
-        cbStatus = callback_.caretMessageReady(umMsgInfo_, readBuffer_);
-      }
+      cbStatus = callback_.caretMessageReady(msgInfo_, readBuffer_);
 
       if (!cbStatus) {
         readBuffer_.clear();
@@ -172,7 +172,7 @@ bool McParser::readUmbrellaOrCaretData() {
     }
 
     // Case 2: We don't have full header, so return to wait for more data
-    if (readBuffer_.length() < umMsgInfo_.headerSize) {
+    if (readBuffer_.length() < msgInfo_.headerSize) {
       return true;
     }
 
@@ -181,15 +181,23 @@ bool McParser::readUmbrellaOrCaretData() {
     // return to wait for remaining data.
     if (readBuffer_.length() + readBuffer_.tailroom() < messageSize) {
       assert(!readBuffer_.isChained());
+      if (messageSize > kMaxBodySize) {
+        LOG(ERROR) << "Body size was " << messageSize
+                   << ", but max size allowed is " << kMaxBodySize;
+        return false;
+      }
       readBuffer_.unshareOne();
       bufferSize_ = std::max<size_t>(bufferSize_, messageSize);
-      readBuffer_.reserve(
-          0 /* minHeadroom */,
-          bufferSize_ - readBuffer_.length() /* minTailroom */);
+      readBuffReserve(bufferSize_ - readBuffer_.length());
     }
 #ifdef FOLLY_JEMALLOC_NODUMP_ALLOCATOR_SUPPORTED
-    if (useJemallocNodumpAllocator_) {
-      readBuffer_ = copyToNodumpBuffer(umMsgInfo_, readBuffer_);
+    // This is an ugly patch to handle the case that somehow the readBuf got
+    // reallocated. This could happen for
+    // instance by calling IOBuf::reserve or IOBuf::unshare
+    if (useJemallocNodumpAllocator_ &&
+        readBuffer_.getFreeFn() != noDumpDeallocate) {
+      readBuffer_ =
+          copyToNodumpBuffer(readBuffer_, readBuffer_.length() + bufferSize_);
     }
 #endif
     return true;
@@ -197,11 +205,18 @@ bool McParser::readUmbrellaOrCaretData() {
 
   // We parsed everything, read buffer is empty.
   // Try to shrink it to reduce memory footprint
+  // TODO: should compare the readbuffer capacity not bufferSize
   if (bufferSize_ > maxBufferSize_) {
     auto curCycles = cycles::getCpuCycles();
     if (curCycles > lastShrinkCycles_ + kAdjustBufferSizeCpuCycles) {
       lastShrinkCycles_ = curCycles;
       bufferSize_ = maxBufferSize_;
+#ifdef FOLLY_JEMALLOC_NODUMP_ALLOCATOR_SUPPORTED
+      if (useJemallocNodumpAllocator_) {
+        readBuffer_ = copyToNodumpBuffer(readBuffer_, bufferSize_);
+        return true;
+      }
+#endif
       readBuffer_ = folly::IOBuf(folly::IOBuf::CREATE, bufferSize_);
     }
   }
@@ -221,9 +236,7 @@ bool McParser::readDataAvailable(size_t len) {
     if (protocol_ == mc_ascii_protocol) {
       outOfOrder_ = false;
     } else {
-      assert(
-          protocol_ == mc_umbrella_protocol_DONOTUSE ||
-          protocol_ == mc_caret_protocol);
+      assert(protocol_ == mc_caret_protocol);
       outOfOrder_ = true;
     }
   }
@@ -232,13 +245,8 @@ bool McParser::readDataAvailable(size_t len) {
     callback_.handleAscii(readBuffer_);
     return true;
   }
-  return readUmbrellaOrCaretData();
+  return readCaretData();
 }
 
-double McParser::getDropProbability() const {
-  return static_cast<double>(umMsgInfo_.dropProbability) /
-      kDropProbabilityNormalizer;
-}
-
-} // memcache
-} // facebook
+} // namespace memcache
+} // namespace facebook

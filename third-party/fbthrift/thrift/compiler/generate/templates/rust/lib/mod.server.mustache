@@ -1,0 +1,324 @@
+{{!
+
+  Copyright (c) Facebook, Inc. and its affiliates.
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+
+}}
+
+    use async_trait::async_trait;
+    use fbthrift::*;
+    use std::marker::PhantomData;{{!
+}}{{#program:services}}
+
+    #[async_trait]
+    pub trait {{service:name}}: Send + Sync + 'static {{>lib/block}}{{!
+    }}{{#service:requestContext?}}
+        type RequestContext: Sync;{{!
+    }}{{/service:requestContext?}}
+    {{#service:functions}}{{^function:any_streams?}}
+        async fn {{function:name}}(
+            &self,{{!
+            }}{{#service:requestContext?}}
+            _request_context: &Self::RequestContext,{{!
+            }}{{/service:requestContext?}}{{!
+            }}{{#function:args}}
+            _{{field:name}}: {{#field:type}}{{>lib/type}}{{/field:type}},{{!
+            }}{{/function:args}}
+        ) -> Result<{{!
+            }}{{#function:returnType}}{{>lib/type}}{{/function:returnType}}, {{!
+            }}{{program:crate}}::services::{{service:snake}}::{{function:upcamel}}Exn{{!
+        }}> {
+            Err({{program:crate}}::services::{{service:snake}}::{{function:upcamel}}Exn::ApplicationException(
+                ApplicationException::unimplemented_method(
+                    "{{service:name}}",
+                    "{{function:name}}",
+                ),
+            ))
+        }
+    {{/function:any_streams?}}{{/service:functions}}
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct {{service:name}}Processor<P, H, R{{!
+        }}{{#service:extends?}}, SS{{/service:extends?}}{{!
+        }}{{!
+    }}> {
+        service: H,{{!
+        }}{{#service:extends?}}
+        supa: SS,{{!
+        }}{{/service:extends?}}{{!
+        }}{{^service:extends?}}
+        supa: fbthrift::NullServiceProcessor<P, R>,{{!
+        }}{{/service:extends?}}
+        _phantom: PhantomData<(P, H, R)>,
+    }
+
+    impl<P, H, R{{!
+        }}{{#service:extends?}}, SS{{/service:extends?}}{{!
+    }}> {{service:name}}Processor<P, H, R{{!
+        }}{{#service:extends?}}, SS{{/service:extends?}}{{!
+    }}>
+    where
+        P: Protocol + Send + Sync + 'static,
+        P::Deserializer: Send,
+        H: {{service:name}}{{!
+        }}{{#service:requestContext?}}<RequestContext = R>{{/service:requestContext?}},{{!
+        }}{{#service:extends?}}
+        SS: ThriftService<P::Frame>,
+        SS::Handler: {{>lib/super}},
+        P::Frame: Send + 'static,
+        R: Sync,{{!
+        }}{{/service:extends?}}
+    {
+        pub fn new({{!
+            }}service: H{{!
+            }}{{#service:extends?}}, supa: SS{{/service:extends?}}{{!
+        }}) -> Self {
+            Self {
+                service,
+                supa{{^service:extends?}}{{!
+                    }}: fbthrift::NullServiceProcessor::new(){{!
+                }}{{/service:extends?}},
+                _phantom: PhantomData,
+            }
+        }
+
+        pub fn into_inner(self) -> H {
+            self.service
+        }{{!
+        }}{{#service:functions}}{{^function:any_streams?}}
+
+        async fn handle_{{function:name}}<'a>(
+            &'a self,
+            p: &'a mut P::Deserializer,
+            {{^service:requestContext?}}_{{/service:requestContext?}}req_ctxt: &R,
+            seqid: u32,
+        ) -> anyhow::Result<ProtocolEncodedFinal<P>> {{>lib/block}}{{!
+            }}{{#function:args}}
+            let mut field_{{field:name}} = None;{{!
+            }}{{/function:args}}
+            let _ = p.read_struct_begin(|_| ())?;
+            loop {
+                let (_, fty, fid) = p.read_field_begin(|_| ())?;
+                match (fty, fid as i32) {
+                    (TType::Stop, _) => break,{{!
+                    }}{{#function:args}}
+                    ({{#field:type}}{{>lib/ttype}}{{/field:type}}, {{field:key}}) => {{!
+                        }}field_{{field:name}} = Some(Deserialize::read(p)?),{{!
+                    }}{{/function:args}}
+                    (fty, _) => p.skip(fty)?,
+                }
+                p.read_field_end()?;
+            }
+            p.read_struct_end()?;
+            let res = self.service.{{function:name}}({{!
+                }}{{#service:requestContext?}}
+                req_ctxt,{{!
+                }}{{/service:requestContext?}}{{!
+                }}{{#function:args}}
+                field_{{field:name}}.ok_or_else(|| {
+                    ApplicationException::missing_arg(
+                        "{{function:name}}",
+                        "{{field:name}}",
+                    )
+                })?,{{!
+                }}{{/function:args}}
+            ).await;
+            let res = match res {
+                Ok(res) => {
+                    {{program:crate}}::services::{{service:snake}}::{{function:upcamel}}Exn::Success(res)
+                }
+                Err({{program:crate}}::services::{{service:snake}}::{{function:upcamel}}Exn::ApplicationException(aexn)) => {
+                    return Err(aexn.into())
+                }
+                Err({{program:crate}}::services::{{service:snake}}::{{function:upcamel}}Exn::Success(_)) => {
+                    panic!(
+                        "{} attempted to return success via error",
+                        "{{function:name}}",
+                    )
+                }
+                {{#function:exceptions?}}
+                Err(exn) => exn,
+                {{/function:exceptions?}}
+            };
+            let res = serialize!(P, |p| fbthrift::protocol::write_message(
+                p,
+                "{{function:name}}",
+                MessageType::Reply,
+                seqid,
+                |p| res.write(p),
+            ));
+            Ok(res)
+        }{{!
+        }}{{/function:any_streams?}}{{/service:functions}}
+    }
+
+    #[async_trait]
+    impl<P, H, R{{!
+        }}{{#service:extends?}}, SS{{/service:extends?}}{{!
+    }}> fbthrift::ServiceProcessor<P> for {{service:name}}Processor<P, H, R{{!
+        }}{{#service:extends?}}, SS{{/service:extends?}}{{!
+    }}>
+    where
+        P: Protocol + Send + Sync + 'static,
+        P::Deserializer: Send,
+        H: {{service:name}}{{!
+        }}{{#service:requestContext?}}<RequestContext = R>{{/service:requestContext?}},{{!
+        }}{{#service:extends?}}
+        SS: ThriftService<P::Frame>,
+        SS::Handler: {{>lib/super}},
+        P::Frame: Send + 'static,{{!
+        }}{{/service:extends?}}
+        R: Send + Sync + 'static,
+    {
+        type RequestContext = R;
+
+        #[inline]
+        fn method_idx(&self, name: &[u8]) -> Result<usize, ApplicationException> {
+            match name {{>lib/block}}{{!
+                }}{{#service:functions}}{{^function:any_streams?}}
+                b"{{function:name}}" => Ok({{function:index}}usize),{{!
+                }}{{/function:any_streams?}}{{/service:functions}}
+                _ => Err(ApplicationException::unknown_method()),
+            }
+        }
+
+        async fn handle_method(
+            &self,
+            idx: usize,
+            {{^service:functions?}}_{{/service:functions?}}{{!
+            }}p: &mut P::Deserializer,
+            {{^service:functions?}}_{{/service:functions?}}{{!
+            }}r: &R,
+            {{^service:functions?}}_{{/service:functions?}}{{!
+            }}seqid: u32,
+        ) -> anyhow::Result<ProtocolEncodedFinal<P>> {
+            match idx {{>lib/block}}{{!
+                }}{{#service:functions}}{{^function:any_streams?}}
+                {{function:index}}usize => self.handle_{{function:name}}(p, r, seqid).await,{{!
+                }}{{/function:any_streams?}}{{/service:functions}}
+                bad => panic!(
+                    "{}: unexpected method idx {}",
+                    "{{service:name}}Processor",
+                    bad
+                ),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl<P, H, R{{!
+        }}{{#service:extends?}}, SS{{/service:extends?}}{{!
+    }}> ThriftService<P::Frame> for {{service:name}}Processor<P, H, R{{!
+        }}{{#service:extends?}}, SS{{/service:extends?}}{{!
+    }}>
+    where
+        P: Protocol + Send + Sync + 'static,
+        P::Deserializer: Send,
+        P::Frame: Send + 'static,
+        H: {{service:name}}{{!
+        }}{{#service:requestContext?}}<RequestContext = R>{{/service:requestContext?}},{{!
+        }}{{#service:extends?}}
+        SS: ThriftService<P::Frame, RequestContext = R>,
+        SS::Handler: {{>lib/super}},
+        P::Frame: Send + 'static,{{!
+        }}{{/service:extends?}}
+        R: Send + Sync + 'static,
+    {
+        type Handler = H;
+        type RequestContext = R;
+
+        async fn call(
+            &self,
+            req: ProtocolDecoded<P>,
+            req_ctxt: &R,
+        ) -> anyhow::Result<ProtocolEncodedFinal<P>> {
+            let mut p = P::deserializer(req);
+            let (idx, mty, seqid) = p.read_message_begin(|name| self.method_idx(name))?;
+            if mty != MessageType::Call {
+                return Err(From::from(ApplicationException::new(
+                    ApplicationExceptionErrorCode::InvalidMessageType,
+                    format!("message type {:?} not handled", mty)
+                )));
+            }
+            let idx = match idx {
+                Ok(idx) => idx,
+                Err(_) => {
+                    let cur = P::into_buffer(p).reset();
+                    return self.supa.call(cur, req_ctxt).await;
+                }
+            };
+            let res = self.handle_method(idx, &mut p, req_ctxt, seqid).await;
+            p.read_message_end()?;
+            match res {
+                Ok(bytes) => Ok(bytes),
+                Err(err) => match err.downcast_ref::<fbthrift::ProtocolError>() {
+                    Some(fbthrift::ProtocolError::ApplicationException(ae)) => {
+                        let res = serialize!(P, |p| {
+                            fbthrift::protocol::write_message(
+                                p,
+                                "{{service:name}}Processor",
+                                MessageType::Exception,
+                                seqid,
+                                |p| ae.write(p),
+                            )
+                        });
+                        Ok(res)
+                    }
+                    _ => Err(err),
+                },
+            }
+        }
+    }
+
+    pub fn make_{{service:name}}_server<F, H, R{{!
+        }}{{#service:extends?}}, SMAKE, SS{{/service:extends?}}{{!
+    }}>(
+        proto: ProtocolID,
+        handler: H,{{!
+        }}{{#service:extends?}}
+        supa: SMAKE,{{!
+        }}{{/service:extends?}}
+    ) -> Result<Box<dyn ThriftService<F, Handler = H, RequestContext = R> + Send + 'static>, ApplicationException>
+    where
+        F: Framing + Send + Sync + 'static,
+        H: {{service:name}}{{!
+        }}{{#service:requestContext?}}<RequestContext = R>{{/service:requestContext?}},{{!
+        }}{{#service:extends?}}
+        SMAKE: Fn(ProtocolID) -> Result<SS, ApplicationException>,
+        SS: ThriftService<F, RequestContext = R>,
+        SS::Handler: {{>lib/super}},{{!
+        }}{{/service:extends?}}
+        R: Send + Sync + 'static,
+    {
+        match proto {
+            ProtocolID::BinaryProtocol => {
+                Ok(Box::new({{service:name}}Processor::<BinaryProtocol<F>, H, R{{!
+                    }}{{#service:extends?}}, SS{{/service:extends?}}{{!
+                }}>::new(handler{{!
+                    }}{{#service:extends?}}, supa(proto)?{{/service:extends?}}{{!
+                }})))
+            }
+            ProtocolID::CompactProtocol => {
+                Ok(Box::new({{service:name}}Processor::<CompactProtocol<F>, H, R{{!
+                    }}{{#service:extends?}}, SS{{/service:extends?}}{{!
+                }}>::new(handler{{!
+                    }}{{#service:extends?}}, supa(proto)?{{/service:extends?}}{{!
+                }})))
+            }
+            bad => Err(ApplicationException::invalid_protocol(bad)),
+        }
+    }{{!
+}}{{/program:services}}
+{{!newline}}

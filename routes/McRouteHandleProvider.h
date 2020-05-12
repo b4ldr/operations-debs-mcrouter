@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <functional>
@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <folly/Range.h>
+#include <folly/json.h>
 
 #include "mcrouter/PoolFactory.h"
 #include "mcrouter/lib/config/RouteHandleProviderIf.h"
@@ -53,6 +54,8 @@ class McRouteHandleProvider
       RouteHandleFactory<RouteHandleIf>& factory,
       folly::StringPiece type,
       const folly::dynamic& json) final;
+
+  const folly::dynamic& parsePool(const folly::dynamic& json) final;
 
   folly::StringKeyedUnorderedMap<RouteHandlePtr> releaseAsyncLogRoutes() {
     return std::move(asyncLogRoutes_);
@@ -99,6 +102,18 @@ class McRouteHandleProvider
   RouteHandlePtr createAsynclogRoute(
       RouteHandlePtr route,
       std::string asynclogName);
+
+  template <class Transport>
+  RouteHandlePtr createDestinationRoute(
+      std::shared_ptr<AccessPoint> ap,
+      std::chrono::milliseconds timeout,
+      std::chrono::milliseconds connectTimeout,
+      uint64_t qosClass,
+      uint64_t qosPath,
+      folly::StringPiece poolName,
+      size_t indexInPool,
+      int32_t poolStatIndex,
+      bool keepRoutingPrefix);
 
   RouteHandleFactoryMap buildRouteMap();
 

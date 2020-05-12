@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,8 +24,7 @@ using namespace folly;
 
 class DestructionOnCallback : public DelayedDestructionBase {
  public:
-  DestructionOnCallback() : state_(0), deleted_(false) {
-  }
+  DestructionOnCallback() : state_(0), deleted_(false) {}
 
   void onComplete(int n, int& state) {
     DestructorGuard dg(this);
@@ -35,8 +34,12 @@ class DestructionOnCallback : public DelayedDestructionBase {
     state = state_;
   }
 
-  int state() const { return state_; }
-  bool deleted() const { return deleted_; }
+  int state() const {
+    return state_;
+  }
+  bool deleted() const {
+    return deleted_;
+  }
 
  protected:
   void onStackedComplete(int recur) {
@@ -47,6 +50,7 @@ class DestructionOnCallback : public DelayedDestructionBase {
     }
     onStackedComplete(--recur);
   }
+
  private:
   int state_;
   bool deleted_;
@@ -58,8 +62,7 @@ class DestructionOnCallback : public DelayedDestructionBase {
   }
 };
 
-struct DelayedDestructionBaseTest : public ::testing::Test {
-};
+struct DelayedDestructionBaseTest : public ::testing::Test {};
 
 TEST_F(DelayedDestructionBaseTest, basic) {
   DestructionOnCallback* d = new DestructionOnCallback();

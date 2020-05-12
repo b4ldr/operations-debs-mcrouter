@@ -1,11 +1,11 @@
 /*
- * Copyright 2017-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -52,11 +52,12 @@ inline PolyVal<I>::PolyVal(T&& t) {
       "This Poly<> requires copyability, and the source object is not "
       "copyable");
   // The static and dynamic types should match; otherwise, this will slice.
-  assert(typeid(t) == typeid(_t<std::decay<T>>) ||
+  assert(typeid(t) == typeid(std::decay_t<T>) ||
        !"Dynamic and static exception types don't match. Object would "
         "be sliced when storing in Poly.");
   if (inSitu<U>()) {
-    ::new (static_cast<void*>(&_data_()->buff_)) U(static_cast<T&&>(t));
+    auto const buff = static_cast<void*>(&_data_()->buff_);
+    ::new (buff) U(static_cast<T&&>(t));
   } else {
     _data_()->pobj_ = new U(static_cast<T&&>(t));
   }
@@ -99,12 +100,14 @@ inline void PolyVal<I>::swap(Poly<I>& that) noexcept {
       break;
     case State::eOnHeap:
       if (State::eOnHeap == that.vptr_->state_) {
-        std::swap(_data_()->pobj_, _data_()->pobj_);
+        std::swap(_data_()->pobj_, that._data_()->pobj_);
         std::swap(vptr_, that.vptr_);
+        return;
       }
       FOLLY_FALLTHROUGH;
     case State::eInSitu:
-      std::swap(*this, that); // NOTE: qualified, not ADL
+      std::swap(
+          *this, static_cast<PolyVal<I>&>(that)); // NOTE: qualified, not ADL
   }
 }
 

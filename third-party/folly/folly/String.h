@@ -1,11 +1,11 @@
 /*
- * Copyright 2011-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,38 +24,14 @@
 #include <unordered_set>
 #include <vector>
 
-#include <boost/regex/pending/unicode_iterator.hpp>
-
 #include <folly/Conv.h>
 #include <folly/ExceptionString.h>
-#include <folly/FBString.h>
-#include <folly/FBVector.h>
 #include <folly/Portability.h>
 #include <folly/Range.h>
 #include <folly/ScopeGuard.h>
 #include <folly/Traits.h>
 
-// Compatibility function, to make sure toStdString(s) can be called
-// to convert a std::string or fbstring variable s into type std::string
-// with very little overhead if s was already std::string
 namespace folly {
-
-inline
-std::string toStdString(const folly::fbstring& s) {
-  return std::string(s.data(), s.size());
-}
-
-inline
-const std::string& toStdString(const std::string& s) {
-  return s;
-}
-
-// If called with a temporary, the compiler will select this overload instead
-// of the above, so we don't return a (lvalue) reference to a temporary.
-inline
-std::string&& toStdString(std::string&& s) {
-  return std::move(s);
-}
 
 /**
  * C-Escape a string, making it suitable for representation as a C string
@@ -130,9 +106,10 @@ enum class UriEscapeMode : unsigned char {
   PATH = 2
 };
 template <class String>
-void uriEscape(StringPiece str,
-               String& out,
-               UriEscapeMode mode = UriEscapeMode::ALL);
+void uriEscape(
+    StringPiece str,
+    String& out,
+    UriEscapeMode mode = UriEscapeMode::ALL);
 
 /**
  * Similar to uriEscape above, but returns the escaped string.
@@ -151,9 +128,10 @@ String uriEscape(StringPiece str, UriEscapeMode mode = UriEscapeMode::ALL) {
  * XX is a valid hex sequence, otherwise we throw invalid_argument.
  */
 template <class String>
-void uriUnescape(StringPiece str,
-                 String& out,
-                 UriEscapeMode mode = UriEscapeMode::ALL);
+void uriUnescape(
+    StringPiece str,
+    String& out,
+    UriEscapeMode mode = UriEscapeMode::ALL);
 
 /**
  * Similar to uriUnescape above, but returns the unescaped string.
@@ -172,15 +150,16 @@ String uriUnescape(StringPiece str, UriEscapeMode mode = UriEscapeMode::ALL) {
  * the specified string and returns a reference to it.
  */
 std::string stringPrintf(FOLLY_PRINTF_FORMAT const char* format, ...)
-  FOLLY_PRINTF_FORMAT_ATTR(1, 2);
+    FOLLY_PRINTF_FORMAT_ATTR(1, 2);
 
 /* Similar to stringPrintf, with different signature. */
-void stringPrintf(std::string* out, FOLLY_PRINTF_FORMAT const char* fmt, ...)
-  FOLLY_PRINTF_FORMAT_ATTR(2, 3);
+void stringPrintf(std::string* out, FOLLY_PRINTF_FORMAT const char* format, ...)
+    FOLLY_PRINTF_FORMAT_ATTR(2, 3);
 
-std::string& stringAppendf(std::string* output,
-                          FOLLY_PRINTF_FORMAT const char* format, ...)
-  FOLLY_PRINTF_FORMAT_ATTR(2, 3);
+std::string& stringAppendf(
+    std::string* output,
+    FOLLY_PRINTF_FORMAT const char* format,
+    ...) FOLLY_PRINTF_FORMAT_ATTR(2, 3);
 
 /**
  * Similar to stringPrintf, but accepts a va_list argument.
@@ -253,15 +232,17 @@ String humanify(const String& input) {
  * replace it.
  */
 template <class InputString, class OutputString>
-bool hexlify(const InputString& input, OutputString& output,
-             bool append=false);
+bool hexlify(
+    const InputString& input,
+    OutputString& output,
+    bool append = false);
 
 template <class OutputString = std::string>
 OutputString hexlify(ByteRange input) {
   OutputString output;
   if (!hexlify(input, output)) {
     // hexlify() currently always returns true, so this can't really happen
-    throw std::runtime_error("hexlify failed");
+    throw_exception<std::runtime_error>("hexlify failed");
   }
   return output;
 }
@@ -284,12 +265,12 @@ OutputString unhexlify(StringPiece input) {
   if (!unhexlify(input, output)) {
     // unhexlify() fails if the input has non-hexidecimal characters,
     // or if it doesn't consist of a whole number of bytes
-    throw std::domain_error("unhexlify() called with non-hex input");
+    throw_exception<std::domain_error>("unhexlify() called with non-hex input");
   }
   return output;
 }
 
-/*
+/**
  * A pretty-printer for numbers that appends suffixes of units of the
  * given type.  It prints 4 sig-figs of value with the most
  * appropriate unit.
@@ -299,6 +280,7 @@ OutputString unhexlify(StringPiece input) {
  *
  * Current types are:
  *   PRETTY_TIME         - s, ms, us, ns, etc.
+ *   PRETTY_TIME_HMS     - h, m, s, ms, us, ns, etc.
  *   PRETTY_BYTES_METRIC - kB, MB, GB, etc (goes up by 10^3 = 1000 each time)
  *   PRETTY_BYTES        - kB, MB, GB, etc (goes up by 2^10 = 1024 each time)
  *   PRETTY_BYTES_IEC    - KiB, MiB, GiB, etc
@@ -307,10 +289,12 @@ OutputString unhexlify(StringPiece input) {
  *   PRETTY_UNITS_BINARY_IEC - Ki, Mi, Gi, etc
  *   PRETTY_SI           - full SI metric prefixes from yocto to Yotta
  *                         http://en.wikipedia.org/wiki/Metric_prefix
+ *
  * @author Mark Rabkin <mrabkin@fb.com>
  */
 enum PrettyType {
   PRETTY_TIME,
+  PRETTY_TIME_HMS,
 
   PRETTY_BYTES_METRIC,
   PRETTY_BYTES_BINARY,
@@ -344,10 +328,11 @@ std::string prettyPrint(double val, PrettyType, bool addSpace = true);
  * '10 Mx' => 10 000 000, prettyString == "x"
  * 'abc' => throws std::range_error
  */
-double prettyToDouble(folly::StringPiece *const prettyString,
-                      const PrettyType type);
+double prettyToDouble(
+    folly::StringPiece* const prettyString,
+    const PrettyType type);
 
-/*
+/**
  * Same as prettyToDouble(folly::StringPiece*, PrettyType), but
  * expects whole string to be correctly parseable. Throws std::range_error
  * otherwise
@@ -377,11 +362,11 @@ void hexDump(const void* ptr, size_t size, OutIt out);
 std::string hexDump(const void* ptr, size_t size);
 
 /**
- * Return a fbstring containing the description of the given errno value.
+ * Return a string containing the description of the given errno value.
  * Takes care not to overwrite the actual system errno, so calling
  * errnoStr(errno) is valid.
  */
-fbstring errnoStr(int err);
+std::string errnoStr(int err);
 
 /*
  * Split a string into a list of tokens by delimiter.
@@ -413,26 +398,32 @@ fbstring errnoStr(int err);
  */
 
 template <class Delim, class String, class OutputType>
-void split(const Delim& delimiter,
-           const String& input,
-           std::vector<OutputType>& out,
-           const bool ignoreEmpty = false);
+void split(
+    const Delim& delimiter,
+    const String& input,
+    std::vector<OutputType>& out,
+    const bool ignoreEmpty = false);
+
+template <class T, class Allocator>
+class fbvector;
 
 template <class Delim, class String, class OutputType>
-void split(const Delim& delimiter,
-           const String& input,
-           folly::fbvector<OutputType>& out,
-           const bool ignoreEmpty = false);
+void split(
+    const Delim& delimiter,
+    const String& input,
+    folly::fbvector<OutputType, std::allocator<OutputType>>& out,
+    const bool ignoreEmpty = false);
 
 template <
     class OutputValueType,
     class Delim,
     class String,
     class OutputIterator>
-void splitTo(const Delim& delimiter,
-             const String& input,
-             OutputIterator out,
-             const bool ignoreEmpty = false);
+void splitTo(
+    const Delim& delimiter,
+    const String& input,
+    OutputIterator out,
+    const bool ignoreEmpty = false);
 
 /*
  * Split a string into a fixed number of string pieces and/or numeric types
@@ -472,6 +463,9 @@ namespace detail {
 template <typename Void, typename OutputType>
 struct IsConvertible : std::false_type {};
 
+template <>
+struct IsConvertible<void, decltype(std::ignore)> : std::true_type {};
+
 template <typename OutputType>
 struct IsConvertible<
     void_t<decltype(parseTo(StringPiece{}, std::declval<OutputType&>()))>,
@@ -495,36 +489,32 @@ split(const Delim& delimiter, StringPiece input, OutputTypes&... outputs);
  */
 
 template <class Delim, class Iterator, class String>
-void join(const Delim& delimiter,
-          Iterator begin,
-          Iterator end,
-          String& output);
+void join(const Delim& delimiter, Iterator begin, Iterator end, String& output);
 
 template <class Delim, class Container, class String>
-void join(const Delim& delimiter,
-          const Container& container,
-          String& output) {
+void join(const Delim& delimiter, const Container& container, String& output) {
   join(delimiter, container.begin(), container.end(), output);
 }
 
 template <class Delim, class Value, class String>
-void join(const Delim& delimiter,
-          const std::initializer_list<Value>& values,
-          String& output) {
+void join(
+    const Delim& delimiter,
+    const std::initializer_list<Value>& values,
+    String& output) {
   join(delimiter, values.begin(), values.end(), output);
 }
 
 template <class Delim, class Container>
-std::string join(const Delim& delimiter,
-                 const Container& container) {
+std::string join(const Delim& delimiter, const Container& container) {
   std::string output;
   join(delimiter, container.begin(), container.end(), output);
   return output;
 }
 
 template <class Delim, class Value>
-std::string join(const Delim& delimiter,
-                 const std::initializer_list<Value>& values) {
+std::string join(
+    const Delim& delimiter,
+    const std::initializer_list<Value>& values) {
   std::string output;
   join(delimiter, values.begin(), values.end(), output);
   return output;
@@ -556,8 +546,8 @@ StringPiece ltrimWhitespace(StringPiece sp);
 StringPiece rtrimWhitespace(StringPiece sp);
 
 /**
- * Returns a subpiece with all whitespace removed from the back and front of @sp.
- * Whitespace means any of [' ', '\n', '\r', '\t'].
+ * Returns a subpiece with all whitespace removed from the back and front of
+ * @sp. Whitespace means any of [' ', '\n', '\r', '\t'].
  */
 inline StringPiece trimWhitespace(StringPiece sp) {
   return ltrimWhitespace(rtrimWhitespace(sp));
@@ -570,6 +560,41 @@ inline StringPiece trimWhitespace(StringPiece sp) {
  */
 inline StringPiece skipWhitespace(StringPiece sp) {
   return ltrimWhitespace(sp);
+}
+
+/**
+ * Returns a subpiece with all characters the provided @toTrim returns true
+ * for removed from the front of @sp.
+ */
+template <typename ToTrim>
+StringPiece ltrim(StringPiece sp, ToTrim toTrim) {
+  while (!sp.empty() && toTrim(sp.front())) {
+    sp.pop_front();
+  }
+
+  return sp;
+}
+
+/**
+ * Returns a subpiece with all characters the provided @toTrim returns true
+ * for removed from the back of @sp.
+ */
+template <typename ToTrim>
+StringPiece rtrim(StringPiece sp, ToTrim toTrim) {
+  while (!sp.empty() && toTrim(sp.back())) {
+    sp.pop_back();
+  }
+
+  return sp;
+}
+
+/**
+ * Returns a subpiece with all characters the provided @toTrim returns true
+ * for removed from the back and front of @sp.
+ */
+template <typename ToTrim>
+StringPiece trim(StringPiece sp, ToTrim toTrim) {
+  return ltrim(rtrim(sp, std::ref(toTrim)), std::ref(toTrim));
 }
 
 /**
@@ -600,22 +625,6 @@ inline void toLowerAscii(std::string& str) {
   // str[0] is legal also if the string is empty.
   toLowerAscii(&str[0], str.size());
 }
-
-template <
-    class Iterator = const char*,
-    class Base = folly::Range<boost::u8_to_u32_iterator<Iterator>>>
-class UTF8Range : public Base {
- public:
-  /* implicit */ UTF8Range(const folly::Range<Iterator> baseRange)
-      : Base(boost::u8_to_u32_iterator<Iterator>(
-                 baseRange.begin(), baseRange.begin(), baseRange.end()),
-             boost::u8_to_u32_iterator<Iterator>(
-                 baseRange.end(), baseRange.begin(), baseRange.end())) {}
-  /* implicit */ UTF8Range(const std::string& baseString)
-      : Base(folly::Range<Iterator>(baseString)) {}
-};
-
-using UTF8StringPiece = UTF8Range<const char*>;
 
 } // namespace folly
 

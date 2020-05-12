@@ -1,11 +1,11 @@
 /*
- * Copyright 2018-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include <thread>
 
 #include <folly/synchronization/ParkingLot.h>
@@ -20,49 +21,26 @@
 #include <folly/Benchmark.h>
 #include <folly/detail/Futex.h>
 #include <folly/synchronization/Baton.h>
+#include <folly/synchronization/test/Barrier.h>
 
 DEFINE_uint64(threads, 32, "Number of threads for benchmark");
 
 using namespace folly;
-
-namespace {
-struct SimpleBarrier {
-  explicit SimpleBarrier(size_t count) : lock_(), cv_(), count_(count) {}
-
-  void wait() {
-    std::unique_lock<std::mutex> lockHeld(lock_);
-    auto gen = gen_;
-    if (++num_ == count_) {
-      num_ = 0;
-      gen_++;
-      cv_.notify_all();
-    } else {
-      cv_.wait(lockHeld, [&]() { return gen == gen_; });
-    }
-  }
-
- private:
-  std::mutex lock_;
-  std::condition_variable cv_;
-  size_t num_{0};
-  size_t count_;
-  size_t gen_{0};
-};
-} // namespace
+using namespace folly::test;
 
 ParkingLot<> lot;
 
 BENCHMARK(FutexNoWaitersWake, iters) {
   BenchmarkSuspender susp;
   folly::detail::Futex<> fu;
-  SimpleBarrier b(FLAGS_threads + 1);
+  Barrier b(FLAGS_threads + 1);
 
   std::vector<std::thread> threads{FLAGS_threads};
   for (auto& t : threads) {
     t = std::thread([&]() {
       b.wait();
       for (auto i = 0u; i < iters; i++) {
-        fu.futexWake(1);
+        detail::futexWake(&fu, 1);
       }
     });
   }
@@ -76,7 +54,7 @@ BENCHMARK(FutexNoWaitersWake, iters) {
 
 BENCHMARK_RELATIVE(ParkingLotNoWaitersWake, iters) {
   BenchmarkSuspender susp;
-  SimpleBarrier b(FLAGS_threads + 1);
+  Barrier b(FLAGS_threads + 1);
 
   std::vector<std::thread> threads{FLAGS_threads};
   for (auto& t : threads) {
@@ -98,14 +76,14 @@ BENCHMARK_RELATIVE(ParkingLotNoWaitersWake, iters) {
 BENCHMARK(FutexWakeOne, iters) {
   BenchmarkSuspender susp;
   folly::detail::Futex<> fu;
-  SimpleBarrier b(FLAGS_threads + 1);
+  Barrier b(FLAGS_threads + 1);
 
   std::vector<std::thread> threads{FLAGS_threads};
   for (auto& t : threads) {
     t = std::thread([&]() {
       b.wait();
       while (true) {
-        fu.futexWait(0);
+        detail::futexWait(&fu, 0);
         if (fu.load(std::memory_order_relaxed)) {
           return;
         }
@@ -115,10 +93,10 @@ BENCHMARK(FutexWakeOne, iters) {
   susp.dismiss();
   b.wait();
   for (auto i = 0u; i < iters; i++) {
-    fu.futexWake(1);
+    detail::futexWake(&fu, 1);
   }
   fu.store(1);
-  fu.futexWake(threads.size());
+  detail::futexWake(&fu, threads.size());
 
   for (auto& t : threads) {
     t.join();
@@ -128,7 +106,7 @@ BENCHMARK(FutexWakeOne, iters) {
 BENCHMARK_RELATIVE(ParkingLotWakeOne, iters) {
   BenchmarkSuspender susp;
   std::atomic<bool> done{false};
-  SimpleBarrier b(FLAGS_threads + 1);
+  Barrier b(FLAGS_threads + 1);
 
   std::vector<std::thread> threads{FLAGS_threads};
   for (auto& t : threads) {
@@ -162,7 +140,7 @@ BENCHMARK_RELATIVE(ParkingLotWakeOne, iters) {
 
 BENCHMARK(FutexWakeAll, iters) {
   BenchmarkSuspender susp;
-  SimpleBarrier b(FLAGS_threads + 1);
+  Barrier b(FLAGS_threads + 1);
   folly::detail::Futex<> fu;
   std::atomic<bool> done{false};
 
@@ -171,7 +149,7 @@ BENCHMARK(FutexWakeAll, iters) {
     t = std::thread([&]() {
       b.wait();
       while (true) {
-        fu.futexWait(0);
+        detail::futexWait(&fu, 0);
         if (done.load(std::memory_order_relaxed)) {
           return;
         }
@@ -181,11 +159,11 @@ BENCHMARK(FutexWakeAll, iters) {
   susp.dismiss();
   b.wait();
   for (auto i = 0u; i < iters; i++) {
-    fu.futexWake(threads.size());
+    detail::futexWake(&fu, threads.size());
   }
   fu.store(1);
   done = true;
-  fu.futexWake(threads.size());
+  detail::futexWake(&fu, threads.size());
 
   for (auto& t : threads) {
     t.join();
@@ -194,7 +172,7 @@ BENCHMARK(FutexWakeAll, iters) {
 
 BENCHMARK_RELATIVE(ParkingLotWakeAll, iters) {
   BenchmarkSuspender susp;
-  SimpleBarrier b(FLAGS_threads + 1);
+  Barrier b(FLAGS_threads + 1);
   std::atomic<bool> done{false};
 
   std::vector<std::thread> threads{FLAGS_threads};

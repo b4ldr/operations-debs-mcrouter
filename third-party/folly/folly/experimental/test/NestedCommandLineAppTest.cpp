@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,7 +21,8 @@
 #include <folly/portability/GTest.h>
 #include <glog/logging.h>
 
-namespace folly { namespace test {
+namespace folly {
+namespace test {
 
 namespace {
 
@@ -35,9 +36,10 @@ std::string getHelperPath() {
   return path.string();
 }
 
-std::string callHelper(std::initializer_list<std::string> args,
-                       int expectedExitCode = 0,
-                       int stdoutFd = -1) {
+std::string callHelper(
+    std::initializer_list<std::string> args,
+    int expectedExitCode = 0,
+    int stdoutFd = -1) {
   static std::string helperPath = getHelperPath();
 
   std::vector<std::string> allArgs;
@@ -120,8 +122,7 @@ TEST(ProgramOptionsTest, Success) {
       "foo local-foo 44\n"
       "foo arg a\n"
       "foo arg b\n",
-      callHelper({"--global-foo", "43", "foo", "--local-foo", "44",
-                  "a", "b"}));
+      callHelper({"--global-foo", "43", "foo", "--local-foo", "44", "a", "b"}));
 
   // Check that global flags can still be given after the command
   EXPECT_EQ(
@@ -130,8 +131,7 @@ TEST(ProgramOptionsTest, Success) {
       "foo local-foo 44\n"
       "foo arg a\n"
       "foo arg b\n",
-      callHelper({"foo", "--global-foo", "43", "--local-foo", "44",
-                 "a", "b"}));
+      callHelper({"foo", "--global-foo", "43", "--local-foo", "44", "a", "b"}));
 }
 
 TEST(ProgramOptionsTest, Aliases) {
@@ -141,8 +141,16 @@ TEST(ProgramOptionsTest, Aliases) {
       "foo local-foo 44\n"
       "foo arg a\n"
       "foo arg b\n",
-      callHelper({"--global-foo", "43", "bar", "--local-foo", "44",
-                  "a", "b"}));
+      callHelper({"--global-foo", "43", "bar", "--local-foo", "44", "a", "b"}));
+}
+
+TEST(ProgramOptionsTest, BuiltinCommand) {
+  NestedCommandLineApp app;
+  ASSERT_TRUE(app.isBuiltinCommand(NestedCommandLineApp::kHelpCommand.str()));
+  ASSERT_TRUE(
+      app.isBuiltinCommand(NestedCommandLineApp::kVersionCommand.str()));
+  ASSERT_FALSE(app.isBuiltinCommand(
+      NestedCommandLineApp::kHelpCommand.str() + "nonsense"));
 }
 
 } // namespace test

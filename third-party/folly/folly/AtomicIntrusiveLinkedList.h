@@ -1,11 +1,11 @@
 /*
- * Copyright 2014-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -89,9 +89,8 @@ class AtomicIntrusiveLinkedList {
          compiler bugs (GCC prior to 4.8.3 (bug 60272), clang (bug 18899),
          MSVC (bug 819819); source:
          http://en.cppreference.com/w/cpp/atomic/atomic/compare_exchange */
-    } while (!head_.compare_exchange_weak(oldHead, t,
-                                          std::memory_order_release,
-                                          std::memory_order_relaxed));
+    } while (!head_.compare_exchange_weak(
+        oldHead, t, std::memory_order_release, std::memory_order_relaxed));
 
     return oldHead == nullptr;
   }
