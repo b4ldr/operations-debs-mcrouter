@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <memory>
@@ -18,9 +18,9 @@
 #include "mcrouter/config.h"
 #include "mcrouter/lib/FailoverContext.h"
 #include "mcrouter/lib/FailoverErrorsSettings.h"
-#include "mcrouter/lib/Operation.h"
+#include "mcrouter/lib/Reply.h"
 #include "mcrouter/lib/RouteHandleTraverser.h"
-#include "mcrouter/lib/network/gen/Memcache.h"
+#include "mcrouter/lib/network/gen/MemcacheMessages.h"
 #include "mcrouter/routes/FailoverPolicy.h"
 #include "mcrouter/routes/FailoverRateLimiter.h"
 
@@ -73,14 +73,13 @@ class FailoverRoute {
   }
 
   template <class Request>
-  void traverse(
+  bool traverse(
       const Request& req,
       const RouteHandleTraverser<RouteHandleIf>& t) const {
     if (fiber_local<RouterInfo>::getFailoverDisabled()) {
-      t(*targets_[0], req);
-    } else {
-      t(targets_, req);
+      return t(*targets_[0], req);
     }
+    return t(targets_, req);
   }
 
   FailoverRoute(
@@ -122,7 +121,7 @@ class FailoverRoute {
       mutReq.leaseToken() = item->originalToken;
       proxy.stats().increment(redirected_lease_set_count_stat);
       if (targets_.size() <= item->routeHandleChildIndex) {
-        McLeaseSetReply errorReply(mc_res_local_error);
+        McLeaseSetReply errorReply(carbon::Result::LOCAL_ERROR);
         errorReply.message() = "LeaseSet failover destination out-of-range.";
         return errorReply;
       }
@@ -185,13 +184,21 @@ class FailoverRoute {
     SCOPE_EXIT {
       if (conditionalFailover) {
         proxy.stats().increment(failover_conditional_stat);
+        proxy.stats().increment(failover_conditional_count_stat);
       }
     };
 
-    auto iter = failoverPolicy_.begin();
+    auto iter = failoverPolicy_.begin(req);
     auto normalReply = iter->route(req);
+    if (isErrorResult(normalReply.result())) {
+      if (!isTkoResult(normalReply.result())) {
+        proxy.stats().increment(failover_policy_result_error_stat);
+      } else {
+        proxy.stats().increment(failover_policy_tko_error_stat);
+      }
+    }
     ++iter;
-    if (iter == failoverPolicy_.end()) {
+    if (iter == failoverPolicy_.end(req)) {
       if (isErrorResult(normalReply.result())) {
         proxy.stats().increment(failover_all_failed_stat);
         proxy.stats().increment(failoverPolicy_.getFailoverFailedStat());
@@ -234,8 +241,7 @@ class FailoverRoute {
          &conditionalFailover]() {
           fiber_local<RouterInfo>::setFailoverTag(failoverTagging_);
           fiber_local<RouterInfo>::addRequestClass(RequestClass::kFailover);
-          auto doFailover = [this, &req, &proxy, &normalReply](
-              typename FailoverPolicyT::Iterator& child) {
+          auto doFailover = [this, &req, &proxy, &normalReply](auto& child) {
             auto failoverReply = child->route(req);
             FailoverContext failoverContext(
                 child.getTrueIndex(),
@@ -244,6 +250,14 @@ class FailoverRoute {
                 normalReply,
                 failoverReply);
             logFailover(proxy, failoverContext);
+            carbon::setIsFailoverIfPresent(failoverReply, true);
+            if (isErrorResult(failoverReply.result())) {
+              if (!isTkoResult(failoverReply.result())) {
+                proxy.stats().increment(failover_policy_result_error_stat);
+              } else {
+                proxy.stats().increment(failover_policy_tko_error_stat);
+              }
+            }
             return failoverReply;
           };
 
@@ -253,8 +267,17 @@ class FailoverRoute {
             childIndex = cur.getTrueIndex();
           };
           auto nx = cur;
-          for (++nx; nx != failoverPolicy_.end(); ++cur, ++nx) {
-            auto failoverReply = doFailover(cur);
+
+          ReplyT<Request> failoverReply;
+          uint32_t numErrors = 0;
+          for (++nx; nx != failoverPolicy_.end(req) &&
+               numErrors < failoverPolicy_.maxErrorTries();
+               ++cur, ++nx) {
+            failoverReply = doFailover(cur);
+            if (isErrorResult(failoverReply.result()) &&
+                !isTkoResult(failoverReply.result())) {
+              numErrors++;
+            }
             switch (shouldFailover(failoverReply, req)) {
               case FailoverErrorsSettingsBase::FailoverType::NONE:
                 return failoverReply;
@@ -266,11 +289,15 @@ class FailoverRoute {
             }
           }
 
-          auto failoverReply = doFailover(cur);
-          if (isErrorResult(failoverReply.result())) {
-            proxy.stats().increment(failover_all_failed_stat);
-            proxy.stats().increment(failoverPolicy_.getFailoverFailedStat());
+          if (numErrors < failoverPolicy_.maxErrorTries()) {
+            failoverReply = doFailover(cur);
+            if (isErrorResult(failoverReply.result())) {
+              proxy.stats().increment(failover_all_failed_stat);
+              proxy.stats().increment(failoverPolicy_.getFailoverFailedStat());
+            }
           }
+          proxy.stats().increment(
+              failover_num_collisions_stat, cur.getStats().num_collisions);
 
           return failoverReply;
         });

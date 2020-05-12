@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 /* -*- Mode: C++; tab-width: 2; c-basic-offset: 2; indent-tabs-mode: nil -*- */
 #pragma once
 
@@ -83,10 +84,8 @@ class ReadMostlySharedPtrCore {
   friend class ReadMostlyMainPtr<T, RefCount>;
   friend class ReadMostlyMainPtrDeleter<RefCount>;
 
-  explicit ReadMostlySharedPtrCore(std::shared_ptr<T> ptr) :
-      ptrRaw_(ptr.get()),
-      ptr_(std::move(ptr)) {
-  }
+  explicit ReadMostlySharedPtrCore(std::shared_ptr<T> ptr)
+      : ptrRaw_(ptr.get()), ptr_(std::move(ptr)) {}
 
   T* ptrRaw_;
   RefCount count_;
@@ -99,8 +98,7 @@ class ReadMostlySharedPtrCore {
 template <typename T, typename RefCount = DefaultRefCount>
 class ReadMostlyMainPtr {
  public:
-  ReadMostlyMainPtr() {
-  }
+  ReadMostlyMainPtr() {}
 
   explicit ReadMostlyMainPtr(std::shared_ptr<T> ptr) {
     reset(std::move(ptr));

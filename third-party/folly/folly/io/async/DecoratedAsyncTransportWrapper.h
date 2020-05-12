@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #pragma once
 
 #include <folly/io/async/AsyncTransport.h>
@@ -26,8 +27,8 @@ namespace folly {
 template <class T>
 class DecoratedAsyncTransportWrapper : public folly::AsyncTransportWrapper {
  public:
-  explicit DecoratedAsyncTransportWrapper(typename T::UniquePtr transport):
-    transport_(std::move(transport)) {}
+  explicit DecoratedAsyncTransportWrapper(typename T::UniquePtr transport)
+      : transport_(std::move(transport)) {}
 
   const AsyncTransportWrapper* getWrappedTransport() const override {
     return transport_.get();
@@ -120,10 +121,6 @@ class DecoratedAsyncTransportWrapper : public folly::AsyncTransportWrapper {
     return transport_->getPeerAddress(address);
   }
 
-  folly::ssl::X509UniquePtr getPeerCert() const override {
-    return transport_->getPeerCert();
-  }
-
   size_t getRawBytesReceived() const override {
     return transport_->getRawBytesReceived();
   }
@@ -172,7 +169,7 @@ class DecoratedAsyncTransportWrapper : public folly::AsyncTransportWrapper {
     transport_->shutdownWriteNow();
   }
 
-  std::string getApplicationProtocol() noexcept override {
+  std::string getApplicationProtocol() const noexcept override {
     return transport_->getApplicationProtocol();
   }
 
@@ -195,6 +192,18 @@ class DecoratedAsyncTransportWrapper : public folly::AsyncTransportWrapper {
 
   const AsyncTransportCertificate* getSelfCertificate() const override {
     return transport_->getSelfCertificate();
+  }
+
+  bool setZeroCopy(bool enable) override {
+    return transport_->setZeroCopy(enable);
+  }
+
+  bool getZeroCopy() const override {
+    return transport_->getZeroCopy();
+  }
+
+  void setZeroCopyEnableFunc(ZeroCopyEnableFunc func) override {
+    transport_->setZeroCopyEnableFunc(func);
   }
 
  protected:

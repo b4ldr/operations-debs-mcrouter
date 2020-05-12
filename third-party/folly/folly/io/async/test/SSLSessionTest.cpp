@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,32 +14,43 @@
  * limitations under the License.
  */
 
-#include <folly/io/async/test/AsyncSSLSocketTest.h>
-#include <folly/portability/GTest.h>
-#include <folly/portability/Sockets.h>
 #include <folly/ssl/SSLSession.h>
+#include <folly/io/async/test/AsyncSSLSocketTest.h>
+#include <folly/net/NetOps.h>
+#include <folly/net/NetworkSocket.h>
+#include <folly/portability/GTest.h>
+#include <folly/portability/OpenSSL.h>
+#include <folly/portability/Sockets.h>
+#include <folly/ssl/detail/OpenSSLSession.h>
 
 #include <memory>
 
-using namespace std;
-using namespace testing;
 using folly::ssl::SSLSession;
+using folly::ssl::detail::OpenSSLSession;
 
 namespace folly {
 
-void getfds(int fds[2]) {
-  if (socketpair(PF_LOCAL, SOCK_STREAM, 0, fds) != 0) {
-    LOG(ERROR) << "failed to create socketpair: " << strerror(errno);
+class SimpleCallbackManager {
+ public:
+  static int sessionCallback(SSL* ssl, SSL_SESSION* session) {
+    auto sessionPtr = folly::ssl::SSLSessionUniquePtr(session);
+    auto socket = folly::AsyncSSLSocket::getFromSSL(ssl);
+    auto sslSession =
+        std::dynamic_pointer_cast<folly::ssl::detail::OpenSSLSession>(
+            socket->getSSLSessionV2());
+    sslSession->setActiveSession(std::move(sessionPtr));
+    return 1;
+  }
+};
+
+void getfds(NetworkSocket fds[2]) {
+  if (netops::socketpair(PF_LOCAL, SOCK_STREAM, 0, fds) != 0) {
+    FAIL() << "failed to create socketpair: " << errnoStr(errno);
   }
   for (int idx = 0; idx < 2; ++idx) {
-    int flags = fcntl(fds[idx], F_GETFL, 0);
-    if (flags == -1) {
-      LOG(ERROR) << "failed to get flags for socket " << idx << ": "
-                 << strerror(errno);
-    }
-    if (fcntl(fds[idx], F_SETFL, flags | O_NONBLOCK) != 0) {
-      LOG(ERROR) << "failed to put socket " << idx
-                 << " in non-blocking mode: " << strerror(errno);
+    if (netops::set_socket_non_blocking(fds[idx]) != 0) {
+      FAIL() << "failed to put socket " << idx
+             << " in non-blocking mode: " << errnoStr(errno);
     }
   }
 }
@@ -48,6 +59,14 @@ void getctx(
     std::shared_ptr<folly::SSLContext> clientCtx,
     std::shared_ptr<folly::SSLContext> serverCtx) {
   clientCtx->ciphers("ALL:!ADH:!LOW:!EXP:!MD5:@STRENGTH");
+  clientCtx->loadTrustedCertificates(kTestCA);
+  auto clientCtx_ = clientCtx->getSSLCtx();
+
+  // The following two actions (setting session cache mode and
+  // setting the session callback) will eventually be done in
+  // SSLContext instead
+  SSL_CTX_set_session_cache_mode(clientCtx_, SSL_SESS_CACHE_CLIENT);
+  SSL_CTX_sess_set_new_cb(clientCtx_, SimpleCallbackManager::sessionCallback);
 
   serverCtx->ciphers("ALL:!ADH:!LOW:!EXP:!MD5:@STRENGTH");
   serverCtx->loadCertificate(kTestCert);
@@ -75,100 +94,9 @@ class SSLSessionTest : public testing::Test {
   std::string serverName;
 };
 
-/**
- * 1. Client sends TLSEXT_HOSTNAME in client hello.
- * 2. Server found a match SSL_CTX and use this SSL_CTX to
- *    continue the SSL handshake.
- * 3. Server sends back TLSEXT_HOSTNAME in server hello.
- */
 TEST_F(SSLSessionTest, BasicTest) {
-  std::unique_ptr<SSLSession> sess;
-
-  {
-    int fds[2];
-    getfds(fds);
-    AsyncSSLSocket::UniquePtr clientSock(
-        new AsyncSSLSocket(clientCtx, &eventBase, fds[0], serverName));
-    auto clientPtr = clientSock.get();
-    AsyncSSLSocket::UniquePtr serverSock(
-        new AsyncSSLSocket(dfServerCtx, &eventBase, fds[1], true));
-    SSLHandshakeClient client(std::move(clientSock), false, false);
-    SSLHandshakeServerParseClientHello server(
-        std::move(serverSock), false, false);
-
-    eventBase.loop();
-    ASSERT_TRUE(client.handshakeSuccess_);
-
-    sess = std::make_unique<SSLSession>(clientPtr->getSSLSession());
-    ASSERT_NE(sess.get(), nullptr);
-  }
-
-  {
-    int fds[2];
-    getfds(fds);
-    AsyncSSLSocket::UniquePtr clientSock(
-        new AsyncSSLSocket(clientCtx, &eventBase, fds[0], serverName));
-    auto clientPtr = clientSock.get();
-    clientSock->setSSLSession(sess->getRawSSLSessionDangerous(), true);
-    AsyncSSLSocket::UniquePtr serverSock(
-        new AsyncSSLSocket(dfServerCtx, &eventBase, fds[1], true));
-    SSLHandshakeClient client(std::move(clientSock), false, false);
-    SSLHandshakeServerParseClientHello server(
-        std::move(serverSock), false, false);
-
-    eventBase.loop();
-    ASSERT_TRUE(client.handshakeSuccess_);
-    ASSERT_TRUE(clientPtr->getSSLSessionReused());
-  }
-}
-TEST_F(SSLSessionTest, SerializeDeserializeTest) {
-  std::string sessiondata;
-
-  {
-    int fds[2];
-    getfds(fds);
-    AsyncSSLSocket::UniquePtr clientSock(
-        new AsyncSSLSocket(clientCtx, &eventBase, fds[0], serverName));
-    auto clientPtr = clientSock.get();
-    AsyncSSLSocket::UniquePtr serverSock(
-        new AsyncSSLSocket(dfServerCtx, &eventBase, fds[1], true));
-    SSLHandshakeClient client(std::move(clientSock), false, false);
-    SSLHandshakeServerParseClientHello server(
-        std::move(serverSock), false, false);
-
-    eventBase.loop();
-    ASSERT_TRUE(client.handshakeSuccess_);
-
-    std::unique_ptr<SSLSession> sess =
-        std::make_unique<SSLSession>(clientPtr->getSSLSession());
-    sessiondata = sess->serialize();
-    ASSERT_TRUE(!sessiondata.empty());
-  }
-
-  {
-    int fds[2];
-    getfds(fds);
-    AsyncSSLSocket::UniquePtr clientSock(
-        new AsyncSSLSocket(clientCtx, &eventBase, fds[0], serverName));
-    auto clientPtr = clientSock.get();
-    std::unique_ptr<SSLSession> sess =
-        std::make_unique<SSLSession>(sessiondata);
-    ASSERT_NE(sess.get(), nullptr);
-    clientSock->setSSLSession(sess->getRawSSLSessionDangerous(), true);
-    AsyncSSLSocket::UniquePtr serverSock(
-        new AsyncSSLSocket(dfServerCtx, &eventBase, fds[1], true));
-    SSLHandshakeClient client(std::move(clientSock), false, false);
-    SSLHandshakeServerParseClientHello server(
-        std::move(serverSock), false, false);
-
-    eventBase.loop();
-    ASSERT_TRUE(client.handshakeSuccess_);
-    ASSERT_TRUE(clientPtr->getSSLSessionReused());
-  }
-}
-
-TEST_F(SSLSessionTest, GetSessionID) {
-  int fds[2];
+  std::shared_ptr<SSLSession> sslSession;
+  NetworkSocket fds[2];
   getfds(fds);
   AsyncSSLSocket::UniquePtr clientSock(
       new AsyncSSLSocket(clientCtx, &eventBase, fds[0], serverName));
@@ -182,10 +110,15 @@ TEST_F(SSLSessionTest, GetSessionID) {
   eventBase.loop();
   ASSERT_TRUE(client.handshakeSuccess_);
 
-  std::unique_ptr<SSLSession> sess =
-      std::make_unique<SSLSession>(clientPtr->getSSLSession());
-  ASSERT_NE(sess, nullptr);
-  auto sessID = sess->getSessionID();
-  ASSERT_GE(sessID.length(), 0);
+  sslSession = clientPtr->getSSLSessionV2();
+  ASSERT_NE(sslSession, nullptr);
+
+  // The underlying SSL_SESSION is set in the session callback
+  // that is attached to the SSL_CTX. The session is guaranteed to
+  // be resumable here in TLS 1.2, but not in TLS 1.3
+  auto opensslSession = std::dynamic_pointer_cast<OpenSSLSession>(sslSession);
+  auto sessionPtr = opensslSession->getActiveSession();
+  ASSERT_NE(sessionPtr.get(), nullptr);
 }
+
 } // namespace folly

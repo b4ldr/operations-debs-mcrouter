@@ -33,6 +33,8 @@ using MemcacheRequestList = carbon::List<
     McExecRequest,
     McFlushAllRequest,
     McFlushReRequest,
+    McGatRequest,
+    McGatsRequest,
     McGetRequest,
     McGetsRequest,
     McIncrRequest,
@@ -47,7 +49,6 @@ using MemcacheRequestList = carbon::List<
     McStatsRequest,
     McTouchRequest,
     McVersionRequest>;
-
 } // namespace detail
 
 template <class OnRequest>
@@ -62,6 +63,5 @@ class MemcacheRequestHandler
       : carbon::CarbonRequestHandler<OnRequest, detail::MemcacheRequestList>(
             std::forward<Args>(args)...) {}
 };
-
 } // namespace memcache
 } // namespace facebook

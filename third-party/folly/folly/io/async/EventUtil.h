@@ -1,11 +1,11 @@
 /*
- * Copyright 2014-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,24 +22,43 @@
 
 namespace folly {
 
-# if LIBEVENT_VERSION_NUMBER <= 0x02010101
-#   define FOLLY_LIBEVENT_COMPAT_PLUCK(name) ev_##name
-# else
-#   define FOLLY_LIBEVENT_COMPAT_PLUCK(name) ev_evcallback.evcb_##name
-# endif
-# define FOLLY_LIBEVENT_DEF_ACCESSORS(name) \
-    inline auto event_ref_##name(struct event* ev) -> \
-      decltype(std::ref(ev->FOLLY_LIBEVENT_COMPAT_PLUCK(name))) \
-      { return std::ref(ev->FOLLY_LIBEVENT_COMPAT_PLUCK(name)); } \
-    inline auto event_ref_##name(struct event const* ev) -> \
-      decltype(std::cref(ev->FOLLY_LIBEVENT_COMPAT_PLUCK(name))) \
-      { return std::cref(ev->FOLLY_LIBEVENT_COMPAT_PLUCK(name)); } \
-    //
+#if LIBEVENT_VERSION_NUMBER <= 0x02010101
+#define FOLLY_LIBEVENT_COMPAT_PLUCK(name) ev_##name
+#define FOLLY_LIBEVENT_COMPAT_PLUCK2(name) ev_##name
+#else
+#define FOLLY_LIBEVENT_COMPAT_PLUCK(name) ev_evcallback.evcb_##name
+#define FOLLY_LIBEVENT_COMPAT_PLUCK2(name) \
+  ev_evcallback.evcb_cb_union.evcb_##name
+#endif
+#define FOLLY_LIBEVENT_DEF_ACCESSORS(name)                           \
+  inline auto event_ref_##name(struct event* ev)                     \
+      ->decltype(std::ref(ev->FOLLY_LIBEVENT_COMPAT_PLUCK(name))) {  \
+    return std::ref(ev->FOLLY_LIBEVENT_COMPAT_PLUCK(name));          \
+  }                                                                  \
+  inline auto event_ref_##name(struct event const* ev)               \
+      ->decltype(std::cref(ev->FOLLY_LIBEVENT_COMPAT_PLUCK(name))) { \
+    return std::cref(ev->FOLLY_LIBEVENT_COMPAT_PLUCK(name));         \
+  }                                                                  \
+  //
 
+#define FOLLY_LIBEVENT_DEF_ACCESSORS2(name)                           \
+  inline auto event_ref_##name(struct event* ev)                      \
+      ->decltype(std::ref(ev->FOLLY_LIBEVENT_COMPAT_PLUCK2(name))) {  \
+    return std::ref(ev->FOLLY_LIBEVENT_COMPAT_PLUCK2(name));          \
+  }                                                                   \
+  inline auto event_ref_##name(struct event const* ev)                \
+      ->decltype(std::cref(ev->FOLLY_LIBEVENT_COMPAT_PLUCK2(name))) { \
+    return std::cref(ev->FOLLY_LIBEVENT_COMPAT_PLUCK2(name));         \
+  }                                                                   \
+  //
+
+FOLLY_LIBEVENT_DEF_ACCESSORS(arg)
 FOLLY_LIBEVENT_DEF_ACCESSORS(flags)
+// evcb_callback is inside a union{...} evcb_cb_union
+FOLLY_LIBEVENT_DEF_ACCESSORS2(callback)
 
-# undef FOLLY_LIBEVENT_COMPAT_PLUCK
-# undef FOLLY_LIBEVENT_DEF_ACCESSORS
+#undef FOLLY_LIBEVENT_COMPAT_PLUCK
+#undef FOLLY_LIBEVENT_DEF_ACCESSORS
 
 /**
  * low-level libevent utility functions
@@ -49,8 +68,8 @@ class EventUtil {
   static bool isEventRegistered(const struct event* ev) {
     // If any of these flags are set, the event is registered.
     enum {
-      EVLIST_REGISTERED = (EVLIST_INSERTED | EVLIST_ACTIVE |
-                           EVLIST_TIMEOUT | EVLIST_SIGNAL)
+      EVLIST_REGISTERED =
+          (EVLIST_INSERTED | EVLIST_ACTIVE | EVLIST_TIMEOUT | EVLIST_SIGNAL)
     };
     return (event_ref_flags(ev) & EVLIST_REGISTERED);
   }

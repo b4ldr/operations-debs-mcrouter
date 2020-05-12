@@ -1,11 +1,11 @@
 /*
- * Copyright 2011-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,20 +16,16 @@
 
 #include <folly/dynamic.h>
 
+#include <glog/logging.h>
+
+#include <folly/Range.h>
+#include <folly/json.h>
 #include <folly/portability/GTest.h>
 
-#include <boost/next_prior.hpp>
+#include <iterator>
 
 using folly::dynamic;
-
-// This test runs without any external dependencies, including json.
-// This means that if there's a test failure, there's no way to print
-// a useful runtime representation of the folly::dynamic.  We will
-// live with this in order to test dependencies.  This method is
-// normally provided by json.cpp.
-void dynamic::print_as_pseudo_json(std::ostream& out) const {
-  out << "<folly::dynamic object of type " << type_ << ">";
-}
+using folly::StringPiece;
 
 TEST(Dynamic, Default) {
   dynamic obj;
@@ -41,11 +37,31 @@ TEST(Dynamic, ObjectBasics) {
   EXPECT_EQ(obj.at("a"), false);
   EXPECT_EQ(obj.size(), 1);
   obj.insert("a", true);
+
+  dynamic key{"a"};
+  folly::StringPiece sp{"a"};
+  std::string s{"a"};
+
   EXPECT_EQ(obj.size(), 1);
   EXPECT_EQ(obj.at("a"), true);
-  obj.at("a") = nullptr;
+  EXPECT_EQ(obj.at(sp), true);
+  EXPECT_EQ(obj.at(key), true);
+
+  obj.at(sp) = nullptr;
   EXPECT_EQ(obj.size(), 1);
-  EXPECT_TRUE(obj.at("a") == nullptr);
+  EXPECT_TRUE(obj.at(s) == nullptr);
+
+  obj["a"] = 12;
+  EXPECT_EQ(obj[sp], 12);
+  obj[key] = "foo";
+  EXPECT_EQ(obj["a"], "foo");
+  (void)obj["b"];
+  EXPECT_EQ(obj.size(), 2);
+
+  obj.erase("a");
+  EXPECT_TRUE(obj.find(sp) == obj.items().end());
+  obj.erase("b");
+  EXPECT_EQ(obj.size(), 0);
 
   dynamic newObject = dynamic::object;
 
@@ -57,15 +73,18 @@ TEST(Dynamic, ObjectBasics) {
   EXPECT_EQ(*newObject.keys().begin(), newObject.items().begin()->first);
   EXPECT_EQ(*newObject.values().begin(), newObject.items().begin()->second);
   std::vector<std::pair<std::string, dynamic>> found;
-  found.emplace_back(newObject.keys().begin()->asString(),
-                     *newObject.values().begin());
+  found.emplace_back(
+      newObject.keys().begin()->asString(), *newObject.values().begin());
 
-  EXPECT_EQ(*boost::next(newObject.keys().begin()),
-            boost::next(newObject.items().begin())->first);
-  EXPECT_EQ(*boost::next(newObject.values().begin()),
-            boost::next(newObject.items().begin())->second);
-  found.emplace_back(boost::next(newObject.keys().begin())->asString(),
-                     *boost::next(newObject.values().begin()));
+  EXPECT_EQ(
+      *std::next(newObject.keys().begin()),
+      std::next(newObject.items().begin())->first);
+  EXPECT_EQ(
+      *std::next(newObject.values().begin()),
+      std::next(newObject.items().begin())->second);
+  found.emplace_back(
+      std::next(newObject.keys().begin())->asString(),
+      *std::next(newObject.values().begin()));
 
   std::sort(found.begin(), found.end());
 
@@ -102,6 +121,7 @@ TEST(Dynamic, ObjectBasics) {
   EXPECT_EQ(objInsert.find("1")->second.size(), 1);
 
   // Looking up objects as keys
+  // clang-format off
   dynamic objDefinedInOneOrder = folly::dynamic::object
     ("bar", "987")
     ("baz", folly::dynamic::array(1, 2, 3))
@@ -110,6 +130,7 @@ TEST(Dynamic, ObjectBasics) {
     ("bar", "987")
     ("foo2", folly::dynamic::object("1", "2"))
     ("baz", folly::dynamic::array(1, 2, 3));
+  // clang-format on
 
   newObject[objDefinedInOneOrder] = 12;
   EXPECT_EQ(newObject.at(objDefinedInOneOrder).getInt(), 12);
@@ -117,24 +138,30 @@ TEST(Dynamic, ObjectBasics) {
 
   // Merge two objects
   dynamic origMergeObj1 = folly::dynamic::object();
+  // clang-format off
   dynamic mergeObj1 = origMergeObj1 = folly::dynamic::object
     ("key1", "value1")
     ("key2", "value2");
   dynamic mergeObj2 = folly::dynamic::object
     ("key2", "value3")
     ("key3", "value4");
+  // clang-format on
 
   // Merged object where we prefer the values in mergeObj2
+  // clang-format off
   dynamic combinedPreferObj2 = folly::dynamic::object
     ("key1", "value1")
     ("key2", "value3")
     ("key3", "value4");
+  // clang-format on
 
   // Merged object where we prefer the values in mergeObj1
+  // clang-format off
   dynamic combinedPreferObj1 = folly::dynamic::object
     ("key1", "value1")
     ("key2", "value2")
     ("key3", "value4");
+  // clang-format on
 
   auto newMergeObj = dynamic::merge(mergeObj1, mergeObj2);
   EXPECT_EQ(newMergeObj, combinedPreferObj2);
@@ -150,9 +177,194 @@ TEST(Dynamic, ObjectBasics) {
   EXPECT_EQ(mergeObj1, combinedPreferObj1);
 }
 
+TEST(Dynamic, ArrayInsertErase) {
+  auto arr = dynamic::array(1, 2, 3, 4, 5, 6);
+
+  arr.erase(arr.begin() + 3);
+  EXPECT_EQ(5, arr[3].asInt());
+
+  arr.insert(arr.begin() + 3, 4);
+  EXPECT_EQ(4, arr[3].asInt());
+  EXPECT_EQ(5, arr[4].asInt());
+
+  auto x = dynamic::array(55, 66);
+  arr.insert(arr.begin() + 4, std::move(x));
+  EXPECT_EQ(55, arr[4][0].asInt());
+  EXPECT_EQ(66, arr[4][1].asInt());
+  EXPECT_EQ(5, arr[5].asInt());
+
+  dynamic obj = dynamic::object;
+  obj.insert(3, 4);
+  EXPECT_EQ(4, obj[3].asInt());
+}
+
+namespace {
+
+struct StaticStrings {
+  static constexpr auto kA = "a";
+  static constexpr const char* kB = "b";
+  static const folly::StringPiece kFoo;
+  static const std::string kBar;
+};
+/* static */ const folly::StringPiece StaticStrings::kFoo{"foo"};
+/* static */ const std::string StaticStrings::kBar{"bar"};
+
+} // namespace
+
+TEST(Dynamic, ObjectHeterogeneousAccess) {
+  dynamic empty;
+  dynamic foo{"foo"};
+  const char* a = "a";
+  StringPiece sp{"a"};
+  std::string str{"a"};
+  dynamic bar{"bar"};
+  const char* b = "b";
+
+  dynamic obj = dynamic::object("a", 123)(empty, 456)(foo, 789);
+
+  // at()
+  EXPECT_EQ(obj.at(empty), 456);
+  EXPECT_EQ(obj.at(nullptr), 456);
+  EXPECT_EQ(obj.at(foo), 789);
+
+  EXPECT_EQ(obj.at(a), 123);
+  EXPECT_EQ(obj.at(StaticStrings::kA), 123);
+  EXPECT_EQ(obj.at("a"), 123);
+
+  EXPECT_EQ(obj.at(sp), 123);
+  EXPECT_EQ(obj.at(StringPiece{"a"}), 123);
+  EXPECT_EQ(obj.at(StaticStrings::kFoo), 789);
+
+  EXPECT_EQ(obj.at(std::string{"a"}), 123);
+  EXPECT_EQ(obj.at(str), 123);
+
+  EXPECT_THROW(obj.at(b), std::out_of_range);
+  EXPECT_THROW(obj.at(StringPiece{b}), std::out_of_range);
+  EXPECT_THROW(obj.at(StaticStrings::kBar), std::out_of_range);
+
+  // get_ptr()
+  EXPECT_NE(obj.get_ptr(empty), nullptr);
+  EXPECT_EQ(*obj.get_ptr(empty), 456);
+  EXPECT_NE(obj.get_ptr(nullptr), nullptr);
+  EXPECT_EQ(*obj.get_ptr(nullptr), 456);
+  EXPECT_NE(obj.get_ptr(foo), nullptr);
+  EXPECT_EQ(*obj.get_ptr(foo), 789);
+
+  EXPECT_NE(obj.get_ptr(a), nullptr);
+  EXPECT_EQ(*obj.get_ptr(a), 123);
+  EXPECT_NE(obj.get_ptr(StaticStrings::kA), nullptr);
+  EXPECT_EQ(*obj.get_ptr(StaticStrings::kA), 123);
+  EXPECT_NE(obj.get_ptr("a"), nullptr);
+  EXPECT_EQ(*obj.get_ptr("a"), 123);
+
+  EXPECT_NE(obj.get_ptr(sp), nullptr);
+  EXPECT_EQ(*obj.get_ptr(sp), 123);
+  EXPECT_NE(obj.get_ptr(StringPiece{"a"}), nullptr);
+  EXPECT_EQ(*obj.get_ptr(StringPiece{"a"}), 123);
+  EXPECT_NE(obj.get_ptr(StaticStrings::kFoo), nullptr);
+  EXPECT_EQ(*obj.get_ptr(StaticStrings::kFoo), 789);
+
+  EXPECT_NE(obj.get_ptr(std::string{"a"}), nullptr);
+  EXPECT_EQ(*obj.get_ptr(std::string{"a"}), 123);
+  EXPECT_NE(obj.get_ptr(str), nullptr);
+  EXPECT_EQ(*obj.get_ptr(str), 123);
+
+  EXPECT_EQ(obj.get_ptr(b), nullptr);
+  EXPECT_EQ(obj.get_ptr(StringPiece{b}), nullptr);
+  EXPECT_EQ(obj.get_ptr(StaticStrings::kBar), nullptr);
+
+  // find()
+  EXPECT_EQ(obj.find(empty)->second, 456);
+  EXPECT_EQ(obj.find(nullptr)->second, 456);
+  EXPECT_EQ(obj.find(foo)->second, 789);
+
+  EXPECT_EQ(obj.find(a)->second, 123);
+  EXPECT_EQ(obj.find(StaticStrings::kA)->second, 123);
+  EXPECT_EQ(obj.find("a")->second, 123);
+
+  EXPECT_EQ(obj.find(sp)->second, 123);
+  EXPECT_EQ(obj.find(StringPiece{"a"})->second, 123);
+  EXPECT_EQ(obj.find(StaticStrings::kFoo)->second, 789);
+
+  EXPECT_EQ(obj.find(std::string{"a"})->second, 123);
+  EXPECT_EQ(obj.find(str)->second, 123);
+
+  EXPECT_TRUE(obj.find(b) == obj.items().end());
+  EXPECT_TRUE(obj.find(StringPiece{b}) == obj.items().end());
+  EXPECT_TRUE(obj.find(StaticStrings::kBar) == obj.items().end());
+
+  // count()
+  EXPECT_EQ(obj.count(empty), 1);
+  EXPECT_EQ(obj.count(nullptr), 1);
+  EXPECT_EQ(obj.count(foo), 1);
+
+  EXPECT_EQ(obj.count(a), 1);
+  EXPECT_EQ(obj.count(StaticStrings::kA), 1);
+  EXPECT_EQ(obj.count("a"), 1);
+
+  EXPECT_EQ(obj.count(sp), 1);
+  EXPECT_EQ(obj.count(StringPiece{"a"}), 1);
+  EXPECT_EQ(obj.count(StaticStrings::kFoo), 1);
+
+  EXPECT_EQ(obj.count(std::string{"a"}), 1);
+  EXPECT_EQ(obj.count(str), 1);
+
+  EXPECT_EQ(obj.count(b), 0);
+  EXPECT_EQ(obj.count(StringPiece{b}), 0);
+  EXPECT_EQ(obj.count(StaticStrings::kBar), 0);
+
+  // operator[]
+  EXPECT_EQ(obj[empty], 456);
+  EXPECT_EQ(obj[nullptr], 456);
+  EXPECT_EQ(obj[foo], 789);
+
+  EXPECT_EQ(obj[a], 123);
+  EXPECT_EQ(obj[StaticStrings::kA], 123);
+  EXPECT_EQ(obj["a"], 123);
+
+  EXPECT_EQ(obj[sp], 123);
+  EXPECT_EQ(obj[StringPiece{"a"}], 123);
+  EXPECT_EQ(obj[StaticStrings::kFoo], 789);
+
+  EXPECT_EQ(obj[std::string{"a"}], 123);
+  EXPECT_EQ(obj[str], 123);
+
+  EXPECT_EQ(obj[b], nullptr);
+  obj[b] = 42;
+  EXPECT_EQ(obj[StringPiece{b}], 42);
+  obj[StaticStrings::kBar] = 43;
+  EXPECT_EQ(obj["bar"], 43);
+
+  // erase() + dynamic&&
+  EXPECT_EQ(obj.erase(StaticStrings::kB), /* num elements erased */ 1);
+
+  dynamic obj2 = obj;
+  dynamic obj3 = obj;
+  dynamic obj4 = obj;
+  EXPECT_EQ(std::move(obj).find(StaticStrings::kFoo)->second, 789);
+  EXPECT_EQ(std::move(obj2).at(StaticStrings::kA), 123);
+  EXPECT_EQ(std::move(obj3)[nullptr], 456);
+  EXPECT_EQ(std::move(obj4).erase(StaticStrings::kBar), 1);
+}
+
+TEST(Dynamic, CastFromVectorOfBooleans) {
+  std::vector<bool> b;
+  b.push_back(true);
+  b.push_back(false);
+  dynamic obj = dynamic::object("a", b[0])("b", b[1]);
+  EXPECT_EQ(obj.at("a"), true);
+  EXPECT_EQ(obj.at("b"), false);
+}
+
+TEST(Dynamic, CastFromConstVectorOfBooleans) {
+  const std::vector<bool> b = {true, false};
+  dynamic obj = dynamic::object("a", b[0])("b", b[1]);
+  EXPECT_EQ(obj.at("a"), true);
+  EXPECT_EQ(obj.at("b"), false);
+}
+
 TEST(Dynamic, ObjectErase) {
-  dynamic obj = dynamic::object("key1", "val")
-                               ("key2", "val2");
+  dynamic obj = dynamic::object("key1", "val")("key2", "val2");
   EXPECT_EQ(obj.count("key1"), 1);
   EXPECT_EQ(obj.count("key2"), 1);
   EXPECT_EQ(obj.erase("key1"), 1);
@@ -170,7 +382,7 @@ TEST(Dynamic, ObjectErase) {
   obj["asd"] = 42.0;
   obj["foo"] = 42.0;
   EXPECT_EQ(obj.size(), 3);
-  auto ret = obj.erase(boost::next(obj.items().begin()), obj.items().end());
+  auto ret = obj.erase(std::next(obj.items().begin()), obj.items().end());
   EXPECT_TRUE(ret == obj.items().end());
   EXPECT_EQ(obj.size(), 1);
   obj.erase(obj.items().begin());
@@ -186,7 +398,7 @@ TEST(Dynamic, ArrayErase) {
   arr.erase(arr.begin());
   EXPECT_EQ(arr.size(), 5);
 
-  arr.erase(boost::next(arr.begin()), boost::prior(arr.end()));
+  arr.erase(std::next(arr.begin()), std::prev(arr.end()));
   EXPECT_EQ(arr.size(), 2);
   EXPECT_EQ(arr[0], 2);
   EXPECT_EQ(arr[1], 6);
@@ -234,9 +446,7 @@ TEST(Dynamic, DeepCopy) {
   EXPECT_EQ(val2.at(2).at(0), "foo3");
   EXPECT_EQ(val2.at(2).at(1), "bar3");
 
-  dynamic obj =
-    dynamic::object("a", "b")
-                   ("c", dynamic::array("d", "e", "f"));
+  dynamic obj = dynamic::object("a", "b")("c", dynamic::array("d", "e", "f"));
   EXPECT_EQ(obj.at("a"), "b");
   dynamic obj2 = obj;
   obj2.at("a") = dynamic::array(1, 2, 3);
@@ -260,8 +470,7 @@ TEST(Dynamic, Operator) {
     dynamic d1 = dynamic::object;
     dynamic d2 = dynamic::object;
     auto foo = d1 < d2;
-    LOG(ERROR) << "operator < returned "
-               << static_cast<int>(foo)
+    LOG(ERROR) << "operator < returned " << static_cast<int>(foo)
                << " instead of throwing";
   } catch (std::exception const&) {
     caught = true;
@@ -318,14 +527,27 @@ TEST(Dynamic, GetSetDefaultTest) {
   dynamic d4 = dynamic::array;
   EXPECT_ANY_THROW(d4.getDefault("foo", "bar"));
   EXPECT_ANY_THROW(d4.setDefault("foo", "bar"));
+
+  // Using dynamic keys
+  dynamic k10{10}, k20{20}, kTrue{true};
+  dynamic d5 = dynamic::object(k10, "foo");
+  EXPECT_EQ(d5.setDefault(k10, "bar"), "foo");
+  EXPECT_EQ(d5.setDefault(k20, "bar"), "bar");
+  EXPECT_EQ(d5.setDefault(kTrue, "baz"), "baz");
+  EXPECT_EQ(d5.setDefault(StaticStrings::kA, "foo"), "foo");
+  EXPECT_EQ(d5.setDefault(StaticStrings::kB, "foo"), "foo");
+  EXPECT_EQ(d5.setDefault(StaticStrings::kFoo, "bar"), "bar");
+  EXPECT_EQ(d5.setDefault(StaticStrings::kBar, "foo"), "foo");
 }
 
 TEST(Dynamic, ObjectForwarding) {
   // Make sure dynamic::object can be constructed the same way as any
   // dynamic.
   dynamic d = dynamic::object("asd", dynamic::array("foo", "bar"));
+  // clang-format off
   dynamic d2 = dynamic::object("key2", dynamic::array("value", "words"))
                               ("key", "value1");
+  // clang-format on
 }
 
 TEST(Dynamic, GetPtr) {
@@ -348,18 +570,22 @@ TEST(Dynamic, GetPtr) {
 }
 
 TEST(Dynamic, Assignment) {
-  const dynamic ds[] = { dynamic::array(1, 2, 3),
-                         dynamic::object("a", true),
-                         24,
-                         26.5,
-                         true,
-                         "hello", };
-  const dynamic dd[] = { dynamic::array(5, 6),
-                         dynamic::object("t", "T")(1, 7),
-                         9000,
-                         3.14159,
-                         false,
-                         "world", };
+  const dynamic ds[] = {
+      dynamic::array(1, 2, 3),
+      dynamic::object("a", true),
+      24,
+      26.5,
+      true,
+      "hello",
+  };
+  const dynamic dd[] = {
+      dynamic::array(5, 6),
+      dynamic::object("t", "T")(1, 7),
+      9000,
+      3.14159,
+      false,
+      "world",
+  };
   for (const auto& source : ds) {
     for (const auto& dest : dd) {
       dynamic tmp(dest);
@@ -376,6 +602,7 @@ std::string make_long_string() {
 
 TEST(Dynamic, GetDefault) {
   const auto s = make_long_string();
+  dynamic kDynamicKey{10};
   dynamic ds(s);
   dynamic tmp(s);
   dynamic d1 = dynamic::object("key1", s);
@@ -387,11 +614,31 @@ TEST(Dynamic, GetDefault) {
   EXPECT_EQ(ds, d1.getDefault("key1", ayy));
   EXPECT_EQ(ds, d1.getDefault("key1", ayy));
   EXPECT_EQ(ds, d1.getDefault("not-a-key", tmp));
+  EXPECT_EQ(ds, d1.getDefault(StaticStrings::kA, tmp));
+  EXPECT_EQ(ds, d1.getDefault(StaticStrings::kB, tmp));
+  EXPECT_EQ(ds, d1.getDefault(StaticStrings::kFoo, tmp));
+  EXPECT_EQ(ds, d1.getDefault(StaticStrings::kBar, tmp));
+  EXPECT_EQ(ds, d1.getDefault(kDynamicKey, tmp));
   EXPECT_EQ(ds, tmp);
   // lvalue - rvalue
   EXPECT_EQ(ds, d1.getDefault("key1", "ayy"));
   EXPECT_EQ(ds, d1.getDefault("key1", "ayy"));
   EXPECT_EQ(ds, d1.getDefault("not-a-key", std::move(tmp)));
+  EXPECT_NE(ds, tmp);
+  tmp = s;
+  EXPECT_EQ(ds, d1.getDefault(StaticStrings::kA, std::move(tmp)));
+  EXPECT_NE(ds, tmp);
+  tmp = s;
+  EXPECT_EQ(ds, d1.getDefault(StaticStrings::kB, std::move(tmp)));
+  EXPECT_NE(ds, tmp);
+  tmp = s;
+  EXPECT_EQ(ds, d1.getDefault(StaticStrings::kFoo, std::move(tmp)));
+  EXPECT_NE(ds, tmp);
+  tmp = s;
+  EXPECT_EQ(ds, d1.getDefault(StaticStrings::kBar, std::move(tmp)));
+  EXPECT_NE(ds, tmp);
+  tmp = s;
+  EXPECT_EQ(ds, d1.getDefault(kDynamicKey, std::move(tmp)));
   EXPECT_NE(ds, tmp);
   // rvalue - lvalue
   tmp = s;
@@ -400,11 +647,46 @@ TEST(Dynamic, GetDefault) {
   EXPECT_EQ(ds, std::move(d2).getDefault("not-a-key", tmp));
   EXPECT_EQ(dynamic(dynamic::object("key2", s)), d2);
   EXPECT_EQ(ds, tmp);
+  EXPECT_EQ(ds, std::move(d2).getDefault(StaticStrings::kA, tmp));
+  EXPECT_EQ(dynamic(dynamic::object("key2", s)), d2);
+  EXPECT_EQ(ds, tmp);
+  EXPECT_EQ(ds, std::move(d2).getDefault(StaticStrings::kB, tmp));
+  EXPECT_EQ(dynamic(dynamic::object("key2", s)), d2);
+  EXPECT_EQ(ds, tmp);
+  EXPECT_EQ(ds, std::move(d2).getDefault(StaticStrings::kFoo, tmp));
+  EXPECT_EQ(dynamic(dynamic::object("key2", s)), d2);
+  EXPECT_EQ(ds, tmp);
+  EXPECT_EQ(ds, std::move(d2).getDefault(StaticStrings::kBar, tmp));
+  EXPECT_EQ(dynamic(dynamic::object("key2", s)), d2);
+  EXPECT_EQ(ds, tmp);
+  EXPECT_EQ(ds, std::move(d2).getDefault(kDynamicKey, tmp));
+  EXPECT_EQ(dynamic(dynamic::object("key2", s)), d2);
+  EXPECT_EQ(ds, tmp);
   // rvalue - rvalue
   EXPECT_EQ(ds, std::move(d3).getDefault("key3", std::move(tmp)));
   EXPECT_NE(ds, d3["key3"]);
   EXPECT_EQ(ds, tmp);
   EXPECT_EQ(ds, std::move(d4).getDefault("not-a-key", std::move(tmp)));
+  EXPECT_EQ(dynamic(dynamic::object("key4", s)), d4);
+  EXPECT_NE(ds, tmp);
+  tmp = s;
+  EXPECT_EQ(ds, std::move(d4).getDefault(StaticStrings::kA, std::move(tmp)));
+  EXPECT_EQ(dynamic(dynamic::object("key4", s)), d4);
+  EXPECT_NE(ds, tmp);
+  tmp = s;
+  EXPECT_EQ(ds, std::move(d4).getDefault(StaticStrings::kB, std::move(tmp)));
+  EXPECT_EQ(dynamic(dynamic::object("key4", s)), d4);
+  EXPECT_NE(ds, tmp);
+  tmp = s;
+  EXPECT_EQ(ds, std::move(d4).getDefault(StaticStrings::kFoo, std::move(tmp)));
+  EXPECT_EQ(dynamic(dynamic::object("key4", s)), d4);
+  EXPECT_NE(ds, tmp);
+  tmp = s;
+  EXPECT_EQ(ds, std::move(d4).getDefault(StaticStrings::kBar, std::move(tmp)));
+  EXPECT_EQ(dynamic(dynamic::object("key4", s)), d4);
+  EXPECT_NE(ds, tmp);
+  tmp = s;
+  EXPECT_EQ(ds, std::move(d4).getDefault(kDynamicKey, std::move(tmp)));
   EXPECT_EQ(dynamic(dynamic::object("key4", s)), d4);
   EXPECT_NE(ds, tmp);
 }
@@ -771,6 +1053,8 @@ TEST(Dynamic, MergeDiffNestedObjects) {
 using folly::json_pointer;
 
 TEST(Dynamic, JSONPointer) {
+  using err_code = folly::dynamic::json_pointer_resolution_error_code;
+
   dynamic target = dynamic::object;
   dynamic ary = dynamic::array("bar", "baz", dynamic::array("bletch", "xyzzy"));
   target["foo"] = ary;
@@ -813,22 +1097,191 @@ TEST(Dynamic, JSONPointer) {
   // allow '-' to index in objects
   EXPECT_EQ("y", target.get_ptr(json_pointer::parse("/-/x"))->getString());
 
-  // invalid JSON pointers formatting when accessing array
-  EXPECT_THROW(
-      target.get_ptr(json_pointer::parse("/foo/01")), std::invalid_argument);
+  // validate parent pointer functionality
+
+  {
+    auto const resolved_value =
+        target.try_get_ptr(json_pointer::parse("")).value();
+    EXPECT_EQ(nullptr, resolved_value.parent);
+  }
+
+  {
+    auto parent_json_ptr = json_pointer::parse("/xyz");
+    auto json_ptr = json_pointer::parse("/xyz/def");
+
+    auto const parent = target.get_ptr(parent_json_ptr);
+    auto const resolved_value = target.try_get_ptr(json_ptr);
+
+    EXPECT_EQ(parent, resolved_value.value().parent);
+    EXPECT_TRUE(parent->isObject());
+    EXPECT_EQ("def", resolved_value.value().parent_key);
+  }
+
+  {
+    auto parent_json_ptr = json_pointer::parse("/foo");
+    auto json_ptr = json_pointer::parse("/foo/1");
+
+    auto const parent = target.get_ptr(parent_json_ptr);
+    auto const resolved_value = target.try_get_ptr(json_ptr);
+
+    EXPECT_EQ(parent, resolved_value.value().parent);
+    EXPECT_TRUE(parent->isArray());
+    EXPECT_EQ(1, resolved_value.value().parent_index);
+  }
+
+  //
+  // invalid pointer resolution cases
+  //
+
+  // invalid index formatting when accessing array
+  {
+    auto err = target.try_get_ptr(json_pointer::parse("/foo/01")).error();
+    EXPECT_EQ(err_code::index_has_leading_zero, err.error_code);
+    EXPECT_EQ(1, err.index);
+    EXPECT_EQ(target.get_ptr(json_pointer::parse("/foo")), err.context);
+    EXPECT_THROW(
+        target.get_ptr(json_pointer::parse("/foo/01")), std::invalid_argument);
+  }
 
   // non-existent keys/indexes
-  EXPECT_EQ(nullptr, ary.get_ptr(json_pointer::parse("/3")));
-  EXPECT_EQ(nullptr, target.get_ptr(json_pointer::parse("/unknown_key")));
-  // intermediate key not found
-  EXPECT_EQ(nullptr, target.get_ptr(json_pointer::parse("/foox/test")));
-  // Intermediate key is '-'
-  EXPECT_EQ(nullptr, target.get_ptr(json_pointer::parse("/foo/-/key")));
+  {
+    auto err = ary.try_get_ptr(json_pointer::parse("/3")).error();
+    EXPECT_EQ(err_code::index_out_of_bounds, err.error_code);
+    EXPECT_EQ(0, err.index);
+    EXPECT_EQ(ary.get_ptr(json_pointer::parse("")), err.context);
+    EXPECT_EQ(nullptr, ary.get_ptr(json_pointer::parse("/3")));
+  }
 
-  // invalid path in object (key in array)
-  EXPECT_THROW(
-      target.get_ptr(json_pointer::parse("/foo/1/bar")), folly::TypeError);
+  {
+    auto err = target.try_get_ptr(json_pointer::parse("/unknown_key")).error();
+    EXPECT_EQ(err_code::key_not_found, err.error_code);
+    EXPECT_EQ(0, err.index);
+    EXPECT_EQ(target.get_ptr(json_pointer::parse("")), err.context);
+    EXPECT_EQ(nullptr, target.get_ptr(json_pointer::parse("/unknown_key")));
+  }
+
+  // fail to resolve index inside string
+  {
+    auto err = target.try_get_ptr(json_pointer::parse("/foo/0/0")).error();
+    EXPECT_EQ(err_code::element_not_object_or_array, err.error_code);
+    EXPECT_EQ(2, err.index);
+    EXPECT_EQ(target.get_ptr(json_pointer::parse("/foo/0")), err.context);
+    EXPECT_THROW(
+        target.get_ptr(json_pointer::parse("/foo/0/0")), folly::TypeError);
+  }
+
+  // intermediate key not found
+  {
+    auto err = target.try_get_ptr(json_pointer::parse("/foox/test")).error();
+    EXPECT_EQ(err_code::key_not_found, err.error_code);
+    EXPECT_EQ(0, err.index);
+    EXPECT_EQ(target.get_ptr(json_pointer::parse("")), err.context);
+    EXPECT_EQ(nullptr, target.get_ptr(json_pointer::parse("/foox/test")));
+  }
+
+  // Intermediate key is '-' in _array_
+  {
+    auto err = target.try_get_ptr(json_pointer::parse("/foo/-/key")).error();
+    EXPECT_EQ(err_code::json_pointer_out_of_bounds, err.error_code);
+    EXPECT_EQ(2, err.index);
+    EXPECT_EQ(target.get_ptr(json_pointer::parse("/foo")), err.context);
+    EXPECT_EQ(nullptr, target.get_ptr(json_pointer::parse("/foo/-/key")));
+  }
+
+  // invalid path in object (non-numeric index in array)
+  {
+    auto err = target.try_get_ptr(json_pointer::parse("/foo/2/bar")).error();
+    EXPECT_EQ(err_code::index_not_numeric, err.error_code);
+    EXPECT_EQ(2, err.index);
+    EXPECT_EQ(target.get_ptr(json_pointer::parse("/foo/2")), err.context);
+    EXPECT_THROW(
+        target.get_ptr(json_pointer::parse("/foo/2/bar")),
+        std::invalid_argument);
+  }
 
   // Allow "-" index in the array
-  EXPECT_EQ(nullptr, target.get_ptr(json_pointer::parse("/foo/-")));
+  {
+    auto err = target.try_get_ptr(json_pointer::parse("/foo/-")).error();
+    EXPECT_EQ(err_code::append_requested, err.error_code);
+    EXPECT_EQ(1, err.index);
+    EXPECT_EQ(target.get_ptr(json_pointer::parse("/foo")), err.context);
+    EXPECT_EQ(nullptr, target.get_ptr(json_pointer::parse("/foo/-")));
+  }
+}
+
+TEST(Dynamic, Math) {
+  // tests int-int, int-double, double-int, and double-double math operations
+  std::vector<dynamic> values = {2, 5.0};
+
+  // addition
+  for (auto value1 : values) {
+    for (auto value2 : values) {
+      auto testValue = value1;
+      testValue += value2;
+      EXPECT_NEAR(
+          value1.asDouble() + value2.asDouble(), testValue.asDouble(), 0.0001);
+    }
+  }
+
+  // subtraction
+  for (auto value1 : values) {
+    for (auto value2 : values) {
+      auto testValue = value1;
+      testValue -= value2;
+      EXPECT_NEAR(
+          value1.asDouble() - value2.asDouble(), testValue.asDouble(), 0.0001);
+    }
+  }
+
+  // multiplication
+  for (auto value1 : values) {
+    for (auto value2 : values) {
+      auto testValue = value1;
+      testValue *= value2;
+      EXPECT_NEAR(
+          value1.asDouble() * value2.asDouble(), testValue.asDouble(), 0.0001);
+    }
+  }
+
+  // division
+  for (auto value1 : values) {
+    for (auto value2 : values) {
+      auto testValue = value1;
+      testValue /= value2;
+      EXPECT_NEAR(
+          value1.asDouble() / value2.asDouble(), testValue.asDouble(), 0.0001);
+    }
+  }
+}
+
+dynamic buildNestedKeys(size_t depth) {
+  if (depth == 0) {
+    return dynamic(0);
+  }
+  return dynamic::object(buildNestedKeys(depth - 1), 0);
+}
+
+dynamic buildNestedValues(size_t depth) {
+  if (depth == 0) {
+    return dynamic(0);
+  }
+  return dynamic::object(0, buildNestedValues(depth - 1));
+}
+
+TEST(Dynamic, EqualNestedKeys) {
+  // This tests for exponential behavior in the depth of the keys.
+  // If it is exponential this test won't finish.
+  size_t const kDepth = 100;
+  dynamic obj1 = buildNestedKeys(kDepth);
+  dynamic obj2 = obj1;
+  EXPECT_EQ(obj1, obj2);
+}
+
+TEST(Dynamic, EqualNestedValues) {
+  // This tests for exponential behavior in the depth of the values.
+  // If it is exponential this test won't finish.
+  size_t const kDepth = 100;
+  dynamic obj1 = buildNestedValues(kDepth);
+  dynamic obj2 = obj1;
+  EXPECT_EQ(obj1, obj2);
 }

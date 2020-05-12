@@ -1,11 +1,11 @@
 /*
- * Copyright 2012-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -45,10 +45,13 @@ void* Arena<Alloc>::allocateSlow(size_t size) {
   std::pair<Block*, size_t> p;
   char* start;
 
-  size_t allocSize = std::max(size, minBlockSize()) + sizeof(Block);
+  size_t allocSize;
+  if (!checked_add(&allocSize, std::max(size, minBlockSize()), sizeof(Block))) {
+    throw_exception<std::bad_alloc>();
+  }
   if (sizeLimit_ != kNoSizeLimit &&
       allocSize > sizeLimit_ - totalAllocatedSize_) {
-    throw std::bad_alloc();
+    throw_exception(std::bad_alloc());
   }
 
   if (size > minBlockSize()) {
@@ -84,7 +87,7 @@ void Arena<Alloc>::merge(Arena<Alloc>&& other) {
 
 template <class Alloc>
 Arena<Alloc>::~Arena() {
-  auto disposer = [this] (Block* b) { b->deallocate(this->alloc()); };
+  auto disposer = [this](Block* b) { b->deallocate(this->alloc()); };
   while (!blocks_.empty()) {
     blocks_.pop_front_and_dispose(disposer);
   }

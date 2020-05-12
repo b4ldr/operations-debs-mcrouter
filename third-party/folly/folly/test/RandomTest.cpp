@@ -1,11 +1,11 @@
 /*
- * Copyright 2012-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -83,16 +83,15 @@ TEST(Random, MultiThreaded) {
   std::vector<uint32_t> seeds(n);
   std::vector<std::thread> threads;
   for (int i = 0; i < n; ++i) {
-    threads.push_back(std::thread([i, &seeds] {
-      seeds[i] = randomNumberSeed();
-    }));
+    threads.push_back(
+        std::thread([i, &seeds] { seeds[i] = randomNumberSeed(); }));
   }
   for (auto& t : threads) {
     t.join();
   }
   std::sort(seeds.begin(), seeds.end());
-  for (int i = 0; i < n-1; ++i) {
-    EXPECT_LT(seeds[i], seeds[i+1]);
+  for (int i = 0; i < n - 1; ++i) {
+    EXPECT_LT(seeds[i], seeds[i + 1]);
   }
 }
 
@@ -138,3 +137,58 @@ TEST(Random, sanity) {
         std::unordered_set<uint64_t>(vals.begin(), vals.end()).size());
   }
 }
+
+TEST(Random, oneIn) {
+  for (auto i = 0; i < 10; ++i) {
+    EXPECT_FALSE(folly::Random::oneIn(0));
+    EXPECT_TRUE(folly::Random::oneIn(1));
+  }
+
+  // When using higher sampling rates, we'll just ensure that we see both
+  // outcomes. We won't worry about statistical validity since we defer that to
+  // folly::Random.
+  auto constexpr kSeenTrue{1};
+  auto constexpr kSeenFalse{2};
+  auto constexpr kSeenBoth{kSeenTrue | kSeenFalse};
+
+  auto seenSoFar{0};
+  for (auto i = 0; i < 1000 && seenSoFar != kSeenBoth; ++i) {
+    seenSoFar |= (folly::Random::oneIn(10) ? kSeenTrue : kSeenFalse);
+  }
+
+  EXPECT_EQ(kSeenBoth, seenSoFar);
+}
+
+#ifndef _WIN32
+TEST(Random, SecureFork) {
+  // Random buffer size is 128, must be less than that.
+  int retries = 100;
+  while (true) {
+    unsigned char buffer = 0;
+    // Init random buffer
+    folly::Random::secureRandom(&buffer, 1);
+
+    auto pid = fork();
+    EXPECT_NE(pid, -1);
+    if (pid) {
+      // parent
+      int status = 0;
+      folly::Random::secureRandom(&buffer, 1);
+      auto pid2 = wait(&status);
+      EXPECT_EQ(pid, pid2);
+      // Since this *is* random data, we could randomly end up with
+      // the same byte.  Try again a few times if so before assuming
+      // real failure.
+      if (WEXITSTATUS(status) == buffer && retries-- > 0) {
+        continue;
+      }
+      EXPECT_NE(WEXITSTATUS(status), buffer);
+      return;
+    } else {
+      // child
+      folly::Random::secureRandom(&buffer, 1);
+      exit(buffer); // Do not print gtest results
+    }
+  }
+}
+#endif

@@ -1,11 +1,11 @@
 /*
- * Copyright 2014-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -37,15 +37,15 @@ class EventBaseManager {
  public:
   // XXX Constructing a EventBaseManager directly is DEPRECATED and not
   // encouraged. You should instead use the global singleton if possible.
-  EventBaseManager() {
-  }
+  EventBaseManager() {}
 
-  ~EventBaseManager() {
-  }
+  explicit EventBaseManager(folly::EventBaseBackendBase::FactoryFunc func)
+      : func_(func) {}
 
-  explicit EventBaseManager(
-    const std::shared_ptr<EventBaseObserver>& observer
-  ) : observer_(observer) {}
+  ~EventBaseManager() {}
+
+  explicit EventBaseManager(const std::shared_ptr<EventBaseObserver>& observer)
+      : observer_(observer) {}
 
   /**
    * Get the global EventBaseManager for this program. Ideally all users
@@ -87,7 +87,7 @@ class EventBaseManager {
    * EventBase, to make sure the EventBaseManager points to the correct
    * EventBase that is actually running in this thread.
    */
-  void setEventBase(EventBase *eventBase, bool takeOwnership);
+  void setEventBase(EventBase* eventBase, bool takeOwnership);
 
   /**
    * Clear the EventBase for this thread.
@@ -107,22 +107,18 @@ class EventBaseManager {
     // grab the mutex for the caller
     std::lock_guard<std::mutex> g(*&eventBaseSetMutex_);
     // give them only a const set to work with
-    const std::set<EventBase *>& constSet = eventBaseSet_;
+    const std::set<EventBase*>& constSet = eventBaseSet_;
     runnable(constSet);
   }
 
-
  private:
   struct EventBaseInfo {
-    EventBaseInfo(EventBase *evb, bool owned)
-      : eventBase(evb),
-        owned_(owned) {}
+    EventBaseInfo(EventBase* evb, bool owned) : eventBase(evb), owned_(owned) {}
+    explicit EventBaseInfo(std::unique_ptr<EventBaseBackendBase>&& evb)
+        : eventBase(new EventBase(std::move(evb))), owned_(true) {}
+    EventBaseInfo() : eventBase(new EventBase), owned_(true) {}
 
-    EventBaseInfo()
-        : eventBase(new EventBase)
-        , owned_(true) {}
-
-    EventBase *eventBase;
+    EventBase* eventBase;
     bool owned_;
     ~EventBaseInfo() {
       if (owned_) {
@@ -132,25 +128,27 @@ class EventBaseManager {
   };
 
   // Forbidden copy constructor and assignment opererator
-  EventBaseManager(EventBaseManager const &);
-  EventBaseManager& operator=(EventBaseManager const &);
+  EventBaseManager(EventBaseManager const&);
+  EventBaseManager& operator=(EventBaseManager const&);
 
-  void trackEventBase(EventBase *evb) {
+  void trackEventBase(EventBase* evb) {
     std::lock_guard<std::mutex> g(*&eventBaseSetMutex_);
     eventBaseSet_.insert(evb);
   }
 
-  void untrackEventBase(EventBase *evb) {
+  void untrackEventBase(EventBase* evb) {
     std::lock_guard<std::mutex> g(*&eventBaseSetMutex_);
     eventBaseSet_.erase(evb);
   }
+
+  folly::EventBaseBackendBase::FactoryFunc func_;
 
   mutable folly::ThreadLocalPtr<EventBaseInfo> localStore_;
 
   // set of "active" EventBase instances
   // (also see the mutex "eventBaseSetMutex_" below
   // which governs access to this).
-  mutable std::set<EventBase *> eventBaseSet_;
+  mutable std::set<EventBase*> eventBaseSet_;
 
   // a mutex to use as a guard for the above set
   std::mutex eventBaseSetMutex_;

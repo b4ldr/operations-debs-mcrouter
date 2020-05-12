@@ -1,11 +1,11 @@
 /*
- * Copyright 2012-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,7 +20,7 @@
 
 #include <folly/Subprocess.h>
 
-#if __linux__
+#if defined(__linux__)
 #include <sys/prctl.h>
 #endif
 #include <fcntl.h>
@@ -28,6 +28,7 @@
 #include <algorithm>
 #include <array>
 #include <system_error>
+#include <thread>
 
 #include <boost/container/flat_set.hpp>
 #include <boost/range/adaptors.hpp>
@@ -60,12 +61,12 @@ ProcessReturnCode ProcessReturnCode::make(int status) {
 }
 
 ProcessReturnCode::ProcessReturnCode(ProcessReturnCode&& p) noexcept
-  : rawStatus_(p.rawStatus_) {
+    : rawStatus_(p.rawStatus_) {
   p.rawStatus_ = ProcessReturnCode::RV_NOT_STARTED;
 }
 
-ProcessReturnCode& ProcessReturnCode::operator=(ProcessReturnCode&& p)
-    noexcept {
+ProcessReturnCode& ProcessReturnCode::operator=(
+    ProcessReturnCode&& p) noexcept {
   rawStatus_ = p.rawStatus_;
   p.rawStatus_ = ProcessReturnCode::RV_NOT_STARTED;
   return *this;
@@ -91,8 +92,7 @@ void ProcessReturnCode::enforce(State expected) const {
   State s = state();
   if (s != expected) {
     throw std::logic_error(to<std::string>(
-      "Bad use of ProcessReturnCode; state is ", s, " expected ", expected
-    ));
+        "Bad use of ProcessReturnCode; state is ", s, " expected ", expected));
   }
 }
 
@@ -113,15 +113,17 @@ bool ProcessReturnCode::coreDumped() const {
 
 std::string ProcessReturnCode::str() const {
   switch (state()) {
-  case NOT_STARTED:
-    return "not started";
-  case RUNNING:
-    return "running";
-  case EXITED:
-    return to<std::string>("exited with status ", exitStatus());
-  case KILLED:
-    return to<std::string>("killed by signal ", killSignal(),
-                           (coreDumped() ? " (core dumped)" : ""));
+    case NOT_STARTED:
+      return "not started";
+    case RUNNING:
+      return "running";
+    case EXITED:
+      return to<std::string>("exited with status ", exitStatus());
+    case KILLED:
+      return to<std::string>(
+          "killed by signal ",
+          killSignal(),
+          (coreDumped() ? " (core dumped)" : ""));
   }
   assume_unreachable();
 }
@@ -149,7 +151,8 @@ SubprocessSpawnError::SubprocessSpawnError(
 namespace {
 
 // Copy pointers to the given strings in a format suitable for posix_spawn
-std::unique_ptr<const char*[]> cloneStrings(const std::vector<std::string>& s) {
+std::unique_ptr<const char* []> cloneStrings(
+    const std::vector<std::string>& s) {
   std::unique_ptr<const char*[]> d(new const char*[s.size() + 1]);
   for (size_t i = 0; i < s.size(); i++) {
     d[i] = s[i].c_str();
@@ -183,7 +186,7 @@ Subprocess::Options& Subprocess::Options::fd(int fd, int action) {
   return *this;
 }
 
-Subprocess::Subprocess() {}
+Subprocess::Subprocess() = default;
 
 Subprocess::Subprocess(
     const std::vector<std::string>& argv,
@@ -211,9 +214,16 @@ Subprocess::Subprocess(
   spawn(cloneStrings(argv), argv[0].c_str(), options, env);
 }
 
+Subprocess Subprocess::fromExistingProcess(pid_t pid) {
+  Subprocess sp;
+  sp.pid_ = pid;
+  sp.returnCode_ = ProcessReturnCode::makeRunning();
+  return sp;
+}
+
 Subprocess::~Subprocess() {
   CHECK_NE(returnCode_.state(), ProcessReturnCode::RUNNING)
-    << "Subprocess destroyed without reaping child";
+      << "Subprocess destroyed without reaping child";
 }
 
 namespace {
@@ -306,6 +316,12 @@ void Subprocess::spawn(
   // calling exec()
   readChildErrorPipe(errFds[0], executable);
 
+  // If we spawned a detached child, wait on the intermediate child process.
+  // It always exits immediately.
+  if (options.detach_) {
+    wait();
+  }
+
   // We have fully succeeded now, so release the guard on pipes_
   pipesGuard.dismiss();
 }
@@ -315,9 +331,7 @@ void Subprocess::spawn(
 // vfork.
 
 FOLLY_PUSH_WARNING
-#if !defined(__clang__)
 FOLLY_GCC_DISABLE_WARNING("-Wclobbered")
-#endif
 void Subprocess::spawnInternal(
     std::unique_ptr<const char*[]> argv,
     const char* executable,
@@ -367,7 +381,7 @@ void Subprocess::spawnInternal(
         pipe.pipe = folly::File(fds[0], /*ownsFd=*/true);
         cfd = fds[1];
       }
-      p.second = cfd;  // ensure it gets dup2()ed
+      p.second = cfd; // ensure it gets dup2()ed
       pipe.childFd = p.first;
       childFds.push_back(cfd);
     }
@@ -379,7 +393,7 @@ void Subprocess::spawnInternal(
   // Note that the const casts below are legit, per
   // http://pubs.opengroup.org/onlinepubs/009695399/functions/exec.html
 
-  char** argVec = const_cast<char**>(argv.get());
+  auto argVec = const_cast<char**>(argv.get());
 
   // Set up environment
   std::unique_ptr<const char*[]> envHolder;
@@ -414,26 +428,56 @@ void Subprocess::spawnInternal(
   SCOPE_EXIT {
     // Restore signal mask
     r = pthread_sigmask(SIG_SETMASK, &oldSignals, nullptr);
-    CHECK_EQ(r, 0) << "pthread_sigmask: " << errnoStr(r);  // shouldn't fail
+    CHECK_EQ(r, 0) << "pthread_sigmask: " << errnoStr(r); // shouldn't fail
   };
 
   // Call c_str() here, as it's not necessarily safe after fork.
   const char* childDir =
-    options.childDir_.empty() ? nullptr : options.childDir_.c_str();
+      options.childDir_.empty() ? nullptr : options.childDir_.c_str();
 
   pid_t pid;
 #ifdef __linux__
   if (options.cloneFlags_) {
     pid = syscall(SYS_clone, *options.cloneFlags_, 0, nullptr, nullptr);
-    checkUnixError(pid, errno, "clone");
   } else {
 #endif
-    pid = vfork();
-    checkUnixError(pid, errno, "vfork");
+    if (options.detach_) {
+      // If we are detaching we must use fork() instead of vfork() for the first
+      // fork, since we aren't going to simply call exec() in the child.
+      pid = fork();
+    } else {
+      pid = vfork();
+    }
 #ifdef __linux__
   }
 #endif
+  checkUnixError(pid, errno, "failed to fork");
   if (pid == 0) {
+    // Fork a second time if detach_ was requested.
+    // This must be done before signals are restored in prepareChild()
+    if (options.detach_) {
+#ifdef __linux__
+      if (options.cloneFlags_) {
+        pid = syscall(SYS_clone, *options.cloneFlags_, 0, nullptr, nullptr);
+      } else {
+#endif
+        pid = vfork();
+#ifdef __linux__
+      }
+#endif
+      if (pid == -1) {
+        // Inform our parent process of the error so it can throw in the parent.
+        childError(errFd, kChildFailure, errno);
+      } else if (pid != 0) {
+        // We are the intermediate process.  Exit immediately.
+        // Our child will still inform the original parent of success/failure
+        // through errFd.  The pid of the grandchild process never gets
+        // propagated back up to the original parent.  In the future we could
+        // potentially send it back using errFd if we needed to.
+        _exit(0);
+      }
+    }
+
     int errnoValue = prepareChild(options, &oldSignals, childDir);
     if (errnoValue != 0) {
       childError(errFd, kChildFailure, errnoValue);
@@ -456,9 +500,10 @@ void Subprocess::spawnInternal(
 }
 FOLLY_POP_WARNING
 
-int Subprocess::prepareChild(const Options& options,
-                             const sigset_t* sigmask,
-                             const char* childDir) const {
+int Subprocess::prepareChild(
+    const Options& options,
+    const sigset_t* sigmask,
+    const char* childDir) const {
   // While all signals are blocked, we must reset their
   // dispositions to default.
   for (int sig = 1; sig < NSIG; ++sig) {
@@ -469,7 +514,7 @@ int Subprocess::prepareChild(const Options& options,
     // Unblock signals; restore signal mask.
     int r = pthread_sigmask(SIG_SETMASK, sigmask, nullptr);
     if (r != 0) {
-      return r;  // pthread_sigmask() returns an errno value
+      return r; // pthread_sigmask() returns an errno value
     }
   }
 
@@ -508,7 +553,7 @@ int Subprocess::prepareChild(const Options& options,
     }
   }
 
-#if __linux__
+#if defined(__linux__)
   // Opt to receive signal on parent death, if requested
   if (options.parentDeathSignal_ != 0) {
     const auto parentDeathSignal =
@@ -520,7 +565,11 @@ int Subprocess::prepareChild(const Options& options,
 #endif
 
   if (options.processGroupLeader_) {
+#if !defined(__FreeBSD__)
     if (setpgrp() == -1) {
+#else
+    if (setpgrp(getpid(), getpgrp()) == -1) {
+#endif
       return errno;
     }
   }
@@ -535,9 +584,11 @@ int Subprocess::prepareChild(const Options& options,
   return 0;
 }
 
-int Subprocess::runChild(const char* executable,
-                         char** argv, char** env,
-                         const Options& options) const {
+int Subprocess::runChild(
+    const char* executable,
+    char** argv,
+    char** env,
+    const Options& options) const {
   // Now, finally, exec.
   if (options.usePath_) {
     ::execvp(executable, argv);
@@ -563,8 +614,8 @@ void Subprocess::readChildErrorPipe(int pfd, const char* executable) {
     // normally, as if the child executed successfully.  If something bad
     // happened the caller should at least get a non-normal exit status from
     // the child.
-    LOG(ERROR) << "unexpected error trying to read from child error pipe " <<
-      "rc=" << rc << ", errno=" << errno;
+    LOG(ERROR) << "unexpected error trying to read from child error pipe "
+               << "rc=" << rc << ", errno=" << errno;
     return;
   }
 
@@ -612,7 +663,7 @@ ProcessReturnCode Subprocess::wait() {
   } while (found == -1 && errno == EINTR);
   // The only two remaining errors are ECHILD (other code reaped the
   // child?), or EINVAL (cosmic rays?), and both merit an abort:
-  PCHECK(found != -1) << "waitpid(" << pid_ << ", &status, WNOHANG)";
+  PCHECK(found != -1) << "waitpid(" << pid_ << ", &status, 0)";
   // Though the child process had quit, this call does not close the pipes
   // since its descendants may still be using them.
   DCHECK_EQ(found, pid_);
@@ -626,10 +677,83 @@ void Subprocess::waitChecked() {
   checkStatus(returnCode_);
 }
 
+ProcessReturnCode Subprocess::waitTimeout(TimeoutDuration timeout) {
+  returnCode_.enforce(ProcessReturnCode::RUNNING);
+  DCHECK_GT(pid_, 0) << "The subprocess has been waited already";
+
+  auto pollUntil = std::chrono::steady_clock::now() + timeout;
+  auto sleepDuration = std::chrono::milliseconds{2};
+  constexpr auto maximumSleepDuration = std::chrono::milliseconds{100};
+
+  for (;;) {
+    // Always call waitpid once after the full timeout has elapsed.
+    auto now = std::chrono::steady_clock::now();
+
+    int status;
+    pid_t found;
+    do {
+      found = ::waitpid(pid_, &status, WNOHANG);
+    } while (found == -1 && errno == EINTR);
+    PCHECK(found != -1) << "waitpid(" << pid_ << ", &status, WNOHANG)";
+    if (found) {
+      // Just on the safe side, make sure it's the actual pid we are waiting.
+      DCHECK_EQ(found, pid_);
+      returnCode_ = ProcessReturnCode::make(status);
+      // Change pid_ to -1 to detect programming error like calling
+      // this method multiple times.
+      pid_ = -1;
+      return returnCode_;
+    }
+    if (now > pollUntil) {
+      // Timed out: still running().
+      return returnCode_;
+    }
+    // The subprocess is still running, sleep for increasing periods of time.
+    std::this_thread::sleep_for(sleepDuration);
+    sleepDuration =
+        std::min(maximumSleepDuration, sleepDuration + sleepDuration);
+  }
+}
+
 void Subprocess::sendSignal(int signal) {
   returnCode_.enforce(ProcessReturnCode::RUNNING);
   int r = ::kill(pid_, signal);
   checkUnixError(r, "kill");
+}
+
+ProcessReturnCode Subprocess::waitOrTerminateOrKill(
+    TimeoutDuration waitTimeout,
+    TimeoutDuration sigtermTimeout) {
+  returnCode_.enforce(ProcessReturnCode::RUNNING);
+  DCHECK_GT(pid_, 0) << "The subprocess has been waited already";
+
+  this->waitTimeout(waitTimeout);
+
+  if (returnCode_.running()) {
+    return terminateOrKill(sigtermTimeout);
+  }
+  return returnCode_;
+}
+
+ProcessReturnCode Subprocess::terminateOrKill(TimeoutDuration sigtermTimeout) {
+  returnCode_.enforce(ProcessReturnCode::RUNNING);
+  DCHECK_GT(pid_, 0) << "The subprocess has been waited already";
+  // 1. Send SIGTERM to kill the process
+  terminate();
+  // 2. check whether subprocess has terminated using non-blocking waitpid
+  waitTimeout(sigtermTimeout);
+  if (!returnCode_.running()) {
+    return returnCode_;
+  }
+  // 3. If we are at this point, we have waited enough time after
+  // sending SIGTERM, we have to use nuclear option SIGKILL to kill
+  // the subprocess.
+  LOG(INFO) << "Send SIGKILL to " << pid_;
+  kill();
+  // 4. SIGKILL should kill the process otherwise there must be
+  // something seriously wrong, just use blocking wait to wait for the
+  // subprocess to finish.
+  return wait();
 }
 
 pid_t Subprocess::pid() const {
@@ -651,7 +775,7 @@ bool handleWrite(int fd, IOBufQueue& queue) {
   for (;;) {
     auto b = queueFront(queue);
     if (b.empty()) {
-      return true;  // EOF
+      return true; // EOF
     }
 
     ssize_t n = writeNoInt(fd, b.data(), b.size());
@@ -698,24 +822,25 @@ bool discardRead(int fd) {
 
 } // namespace
 
-std::pair<std::string, std::string> Subprocess::communicate(
-    StringPiece input) {
+std::pair<std::string, std::string> Subprocess::communicate(StringPiece input) {
   IOBufQueue inputQueue;
   inputQueue.wrapBuffer(input.data(), input.size());
 
   auto outQueues = communicateIOBuf(std::move(inputQueue));
-  auto outBufs = std::make_pair(outQueues.first.move(),
-                                outQueues.second.move());
+  auto outBufs =
+      std::make_pair(outQueues.first.move(), outQueues.second.move());
   std::pair<std::string, std::string> out;
   if (outBufs.first) {
     outBufs.first->coalesce();
-    out.first.assign(reinterpret_cast<const char*>(outBufs.first->data()),
-                     outBufs.first->length());
+    out.first.assign(
+        reinterpret_cast<const char*>(outBufs.first->data()),
+        outBufs.first->length());
   }
   if (outBufs.second) {
     outBufs.second->coalesce();
-    out.second.assign(reinterpret_cast<const char*>(outBufs.second->data()),
-                     outBufs.second->length());
+    out.second.assign(
+        reinterpret_cast<const char*>(outBufs.second->data()),
+        outBufs.second->length());
   }
   return out;
 }
@@ -732,7 +857,7 @@ std::pair<IOBufQueue, IOBufQueue> Subprocess::communicateIOBuf(
 
   std::pair<IOBufQueue, IOBufQueue> out;
 
-  auto readCallback = [&] (int pfd, int cfd) -> bool {
+  auto readCallback = [&](int pfd, int cfd) -> bool {
     if (cfd == STDOUT_FILENO) {
       return handleRead(pfd, out.first);
     } else if (cfd == STDERR_FILENO) {
@@ -744,7 +869,7 @@ std::pair<IOBufQueue, IOBufQueue> Subprocess::communicateIOBuf(
     }
   };
 
-  auto writeCallback = [&] (int pfd, int cfd) -> bool {
+  auto writeCallback = [&](int pfd, int cfd) -> bool {
     if (cfd == STDIN_FILENO) {
       return handleWrite(pfd, input);
     } else {
@@ -758,8 +883,9 @@ std::pair<IOBufQueue, IOBufQueue> Subprocess::communicateIOBuf(
   return out;
 }
 
-void Subprocess::communicate(FdCallback readCallback,
-                             FdCallback writeCallback) {
+void Subprocess::communicate(
+    FdCallback readCallback,
+    FdCallback writeCallback) {
   // This serves to prevent wait() followed by communicate(), but if you
   // legitimately need that, send a patch to delete this line.
   returnCode_.enforce(ProcessReturnCode::RUNNING);
@@ -767,7 +893,7 @@ void Subprocess::communicate(FdCallback readCallback,
 
   std::vector<pollfd> fds;
   fds.reserve(pipes_.size());
-  std::vector<size_t> toClose;  // indexes into pipes_
+  std::vector<size_t> toClose; // indexes into pipes_
   toClose.reserve(pipes_.size());
 
   while (!pipes_.empty()) {
@@ -831,7 +957,7 @@ void Subprocess::communicate(FdCallback readCallback,
     // Close the fds in reverse order so the indexes hold after erase()
     for (int idx : boost::adaptors::reverse(toClose)) {
       auto pos = pipes_.begin() + idx;
-      pos->pipe.close();  // Throws on error
+      pos->pipe.close(); // Throws on error
       pipes_.erase(pos);
     }
   }
@@ -847,18 +973,19 @@ bool Subprocess::notificationsEnabled(int childFd) const {
 
 size_t Subprocess::findByChildFd(int childFd) const {
   auto pos = std::lower_bound(
-      pipes_.begin(), pipes_.end(), childFd,
-      [] (const Pipe& pipe, int fd) { return pipe.childFd < fd; });
+      pipes_.begin(), pipes_.end(), childFd, [](const Pipe& pipe, int fd) {
+        return pipe.childFd < fd;
+      });
   if (pos == pipes_.end() || pos->childFd != childFd) {
-    throw std::invalid_argument(folly::to<std::string>(
-        "child fd not found ", childFd));
+    throw std::invalid_argument(
+        folly::to<std::string>("child fd not found ", childFd));
   }
   return pos - pipes_.begin();
 }
 
 void Subprocess::closeParentFd(int childFd) {
   int idx = findByChildFd(childFd);
-  pipes_[idx].pipe.close();  // May throw
+  pipes_[idx].pipe.close(); // May throw
   pipes_.erase(pipes_.begin() + idx);
 }
 

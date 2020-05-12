@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include "ConnectionTracker.h"
 
 namespace facebook {
@@ -17,7 +17,8 @@ McServerSession& ConnectionTracker::add(
     std::shared_ptr<McServerOnRequest> cb,
     const AsyncMcServerWorkerOptions& options,
     void* userCtxt,
-    const CompressionCodecMap* compressionCodecMap) {
+    const CompressionCodecMap* compressionCodecMap,
+    McServerSession::KeepAlive keepAlive) {
   if (maxConns_ != 0 && sessions_.size() >= maxConns_) {
     evict();
   }
@@ -28,9 +29,9 @@ McServerSession& ConnectionTracker::add(
       *this,
       options,
       userCtxt,
-      compressionCodecMap);
-
-  sessions_.push_front(session);
+      &sessions_,
+      compressionCodecMap,
+      std::move(keepAlive));
 
   return session;
 }
@@ -74,6 +75,12 @@ void ConnectionTracker::evict() {
   session.close();
 }
 
+void ConnectionTracker::onAccepted(McServerSession& session) {
+  if (onAccepted_) {
+    onAccepted_(session);
+  }
+}
+
 void ConnectionTracker::onWriteQuiescence(McServerSession& session) {
   touch(session);
   if (onWriteQuiescence_) {
@@ -87,9 +94,11 @@ void ConnectionTracker::onCloseStart(McServerSession& session) {
   }
 }
 
-void ConnectionTracker::onCloseFinish(McServerSession& session) {
+void ConnectionTracker::onCloseFinish(
+    McServerSession& session,
+    bool onAcceptedCalled) {
   if (onCloseFinish_) {
-    onCloseFinish_(session);
+    onCloseFinish_(session, onAcceptedCalled);
   }
   if (session.isLinked()) {
     sessions_.erase(sessions_.iterator_to(session));

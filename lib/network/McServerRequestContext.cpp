@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include "McServerRequestContext.h"
 
 #include "mcrouter/lib/network/McServerSession.h"
@@ -70,7 +70,7 @@ McServerRequestContext::~McServerRequestContext() {
 // Note: defined in .cpp in order to avoid circular dependency between
 // McServerRequestContext.h and MultiOpParent.h.
 bool McServerRequestContext::moveReplyToParent(
-    mc_res_t result,
+    carbon::Result result,
     uint32_t errorCode,
     std::string&& errorMessage) const {
   return hasParent() &&
@@ -82,25 +82,6 @@ bool McServerRequestContext::isParentError() const {
   return parent().error();
 }
 
-double McServerRequestContext::getDropProbability() const {
-  if (session_ == nullptr) {
-    return 0.0;
-  }
-
-  double dropProbability = 0.0;
-
-  if (session_->getCpuController()) {
-    dropProbability = session_->getCpuController()->getDropProbability();
-  }
-
-  if (session_->getMemController()) {
-    dropProbability = std::max(
-        dropProbability, session_->getMemController()->getDropProbability());
-  }
-
-  return dropProbability;
-}
-
 ServerLoad McServerRequestContext::getServerLoad() const noexcept {
   if (session_) {
     if (const auto& cpuController = session_->getCpuController()) {
@@ -110,5 +91,27 @@ ServerLoad McServerRequestContext::getServerLoad() const noexcept {
   return ServerLoad::zero();
 }
 
-} // memcache
-} // facebook
+folly::Optional<struct sockaddr_storage>
+McServerRequestContext::getPeerSocketAddress() {
+  folly::Optional<struct sockaddr_storage> peerAddress;
+  if (session_) {
+    peerAddress.emplace();
+    session_->getSocketAddress().getAddress(peerAddress.get_pointer());
+  }
+  return peerAddress;
+}
+
+folly::EventBase& McServerRequestContext::getSessionEventBase() const noexcept {
+  return session_->getEventBase();
+}
+
+void McServerRequestContext::markAsTraced() {
+  isTraced_ = true;
+}
+
+void markContextAsTraced(McServerRequestContext& ctx) {
+  ctx.markAsTraced();
+}
+
+} // namespace memcache
+} // namespace facebook

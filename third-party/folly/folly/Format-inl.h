@@ -1,11 +1,11 @@
 /*
- * Copyright 2012-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -29,11 +29,13 @@
 #include <folly/FormatTraits.h>
 #include <folly/MapUtil.h>
 #include <folly/Traits.h>
+#include <folly/lang/Exception.h>
 #include <folly/portability/Windows.h>
 
-// Ignore -Wformat-nonliteral warnings within this file
+// Ignore -Wformat-nonliteral and -Wconversion warnings within this file
 FOLLY_PUSH_WARNING
-FOLLY_GCC_DISABLE_WARNING("-Wformat-nonliteral")
+FOLLY_GNU_DISABLE_WARNING("-Wformat-nonliteral")
+FOLLY_GNU_DISABLE_WARNING("-Wconversion")
 
 namespace folly {
 
@@ -184,7 +186,8 @@ void BaseFormatter<Derived, containerMode, Args...>::operator()(
       p = q;
 
       if (p == end || *p != '}') {
-        throwBadFormatArg("folly::format: single '}' in format string");
+        throw_exception<BadFormatArg>(
+            "folly::format: single '}' in format string");
       }
       ++p;
     }
@@ -206,7 +209,8 @@ void BaseFormatter<Derived, containerMode, Args...>::operator()(
     p = q + 1;
 
     if (p == end) {
-      throwBadFormatArg("folly::format: '}' at end of format string");
+      throw_exception<BadFormatArg>(
+          "folly::format: '}' at end of format string");
     }
 
     // "{{" -> "{"
@@ -219,7 +223,7 @@ void BaseFormatter<Derived, containerMode, Args...>::operator()(
     // Format string
     q = static_cast<const char*>(memchr(p, '}', size_t(end - p)));
     if (q == nullptr) {
-      throwBadFormatArg("folly::format: missing ending '}'");
+      throw_exception<BadFormatArg>("folly::format: missing ending '}'");
     }
     FormatArg arg(StringPiece(p, q));
     p = q + 1;
@@ -257,18 +261,16 @@ void BaseFormatter<Derived, containerMode, Args...>::operator()(
           arg.width = asDerived().getSizeArg(size_t(arg.widthIndex), arg);
         }
 
-        try {
-          argIndex = to<int>(piece);
-        } catch (const std::out_of_range&) {
-          arg.error("argument index must be integer");
-        }
+        auto result = tryTo<int>(piece);
+        arg.enforce(result, "argument index must be integer");
+        argIndex = *result;
         arg.enforce(argIndex >= 0, "argument index must be non-negative");
         hasExplicitArgIndex = true;
       }
     }
 
     if (hasDefaultArgIndex && hasExplicitArgIndex) {
-      throwBadFormatArg(
+      throw_exception<BadFormatArg>(
           "folly::format: may not have both default and explicit arg indexes");
     }
 
@@ -294,10 +296,10 @@ namespace format_value {
 template <class FormatCallback>
 void formatString(StringPiece val, FormatArg& arg, FormatCallback& cb) {
   if (arg.width != FormatArg::kDefaultWidth && arg.width < 0) {
-    throwBadFormatArg("folly::format: invalid width");
+    throw_exception<BadFormatArg>("folly::format: invalid width");
   }
   if (arg.precision != FormatArg::kDefaultPrecision && arg.precision < 0) {
-    throwBadFormatArg("folly::format: invalid precision");
+    throw_exception<BadFormatArg>("folly::format: invalid precision");
   }
 
   if (arg.precision != FormatArg::kDefaultPrecision &&
@@ -337,6 +339,7 @@ void formatString(StringPiece val, FormatArg& arg, FormatCallback& cb) {
       case FormatArg::Align::PAD_AFTER_SIGN:
         pad(padChars);
         break;
+      case FormatArg::Align::INVALID:
       default:
         abort();
         break;
@@ -448,7 +451,9 @@ class FormatValue<
     char sign;
     if (std::is_signed<T>::value) {
       if (folly::is_negative(val_)) {
-        uval = UT(-static_cast<UT>(val_));
+        // avoid unary negation of unsigned types, which may be warned against
+        // avoid ub signed integer overflow, which ubsan checks against
+        uval = UT(0 - static_cast<UT>(val_));
         sign = '-';
       } else {
         uval = static_cast<UT>(val_);
@@ -459,6 +464,9 @@ class FormatValue<
           case FormatArg::Sign::SPACE_OR_MINUS:
             sign = ' ';
             break;
+          case FormatArg::Sign::DEFAULT:
+          case FormatArg::Sign::MINUS:
+          case FormatArg::Sign::INVALID:
           default:
             sign = '\0';
             break;
@@ -473,14 +481,18 @@ class FormatValue<
           "sign specifications not allowed for unsigned values");
     }
 
-    // max of:
-    // #x: 0x prefix + 16 bytes = 18 bytes
-    // #o: 0 prefix + 22 bytes = 23 bytes
-    // #b: 0b prefix + 64 bytes = 65 bytes
+    // 1 byte for sign, plus max of:
+    // #x: two byte "0x" prefix + kMaxHexLength
+    // #o: one byte "0" prefix + kMaxOctalLength
+    // #b: two byte "0b" prefix + kMaxBinaryLength
+    // n: 19 bytes + 1 NUL
     // ,d: 26 bytes (including thousands separators!)
-    // + nul terminator
-    // + 3 for sign and prefix shenanigans (see below)
-    constexpr size_t valBufSize = 69;
+    //
+    // Binary format must take the most space, so we use that.
+    //
+    // Note that we produce a StringPiece rather than NUL-terminating,
+    // so we don't need an extra byte for a NUL.
+    constexpr size_t valBufSize = 1 + 2 + detail::kMaxBinaryLength;
     char valBuf[valBufSize];
     char* valBufBegin = nullptr;
     char* valBufEnd = nullptr;
@@ -500,7 +512,7 @@ class FormatValue<
             presentation,
             "' specifier");
 
-        valBufBegin = valBuf + 3; // room for sign and base prefix
+        valBufBegin = valBuf + 1; // room for sign
 #if defined(__ANDROID__)
         int len = snprintf(
             valBufBegin,
@@ -526,7 +538,7 @@ class FormatValue<
             "base prefix not allowed with '",
             presentation,
             "' specifier");
-        valBufBegin = valBuf + 3; // room for sign and base prefix
+        valBufBegin = valBuf + 1; // room for sign
 
         // Use uintToBuffer, faster than sprintf
         valBufEnd = valBufBegin + uint64ToBufferUnsafe(uval, valBufBegin);
@@ -545,7 +557,7 @@ class FormatValue<
             "thousands separator (',') not allowed with '",
             presentation,
             "' specifier");
-        valBufBegin = valBuf + 3;
+        valBufBegin = valBuf + 1; // room for sign
         *valBufBegin = static_cast<char>(uval);
         valBufEnd = valBufBegin + 1;
         break;
@@ -556,9 +568,8 @@ class FormatValue<
             "thousands separator (',') not allowed with '",
             presentation,
             "' specifier");
-        valBufEnd = valBuf + valBufSize - 1;
-        valBufBegin =
-            valBuf + detail::uintToOctal(valBuf, valBufSize - 1, uval);
+        valBufEnd = valBuf + valBufSize;
+        valBufBegin = &valBuf[detail::uintToOctal(valBuf, valBufSize, uval)];
         if (arg.basePrefix) {
           *--valBufBegin = '0';
           prefixLen = 1;
@@ -570,9 +581,8 @@ class FormatValue<
             "thousands separator (',') not allowed with '",
             presentation,
             "' specifier");
-        valBufEnd = valBuf + valBufSize - 1;
-        valBufBegin =
-            valBuf + detail::uintToHexLower(valBuf, valBufSize - 1, uval);
+        valBufEnd = valBuf + valBufSize;
+        valBufBegin = &valBuf[detail::uintToHexLower(valBuf, valBufSize, uval)];
         if (arg.basePrefix) {
           *--valBufBegin = 'x';
           *--valBufBegin = '0';
@@ -585,9 +595,8 @@ class FormatValue<
             "thousands separator (',') not allowed with '",
             presentation,
             "' specifier");
-        valBufEnd = valBuf + valBufSize - 1;
-        valBufBegin =
-            valBuf + detail::uintToHexUpper(valBuf, valBufSize - 1, uval);
+        valBufEnd = valBuf + valBufSize;
+        valBufBegin = &valBuf[detail::uintToHexUpper(valBuf, valBufSize, uval)];
         if (arg.basePrefix) {
           *--valBufBegin = 'X';
           *--valBufBegin = '0';
@@ -601,9 +610,8 @@ class FormatValue<
             "thousands separator (',') not allowed with '",
             presentation,
             "' specifier");
-        valBufEnd = valBuf + valBufSize - 1;
-        valBufBegin =
-            valBuf + detail::uintToBinary(valBuf, valBufSize - 1, uval);
+        valBufEnd = valBuf + valBufSize;
+        valBufBegin = &valBuf[detail::uintToBinary(valBuf, valBufSize, uval)];
         if (arg.basePrefix) {
           *--valBufBegin = presentation; // 0b or 0B
           *--valBufBegin = '0';
@@ -957,7 +965,7 @@ struct KeyableTraitsAssoc : public FormatTraitsBase {
     if (auto ptr = get_ptr(map, KeyFromStringPiece<key_type>::convert(key))) {
       return *ptr;
     }
-    detail::throwFormatKeyNotFoundException(key);
+    throw_exception<FormatKeyNotFoundException>(key);
   }
   static const value_type&
   at(const T& map, StringPiece key, const value_type& dflt) {
@@ -1072,7 +1080,7 @@ class FormatValue<std::tuple<Args...>> {
   template <size_t K, class Callback>
   typename std::enable_if<K == valueCount>::type
   doFormatFrom(size_t i, FormatArg& arg, Callback& /* cb */) const {
-    arg.enforce("tuple index out of range, max=", i);
+    arg.error("tuple index out of range, max=", i);
   }
 
   template <size_t K, class Callback>

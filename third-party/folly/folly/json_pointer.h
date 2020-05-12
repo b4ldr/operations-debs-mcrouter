@@ -1,11 +1,11 @@
 /*
- * Copyright 2011-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -35,8 +35,8 @@ namespace folly {
 class json_pointer {
  public:
   enum class parse_error {
-    INVALID_FIRST_CHARACTER,
-    INVALID_ESCAPE_SEQUENCE,
+    invalid_first_character,
+    invalid_escape_sequence,
   };
 
   class parse_exception : public std::runtime_error {
@@ -55,10 +55,23 @@ class json_pointer {
   static json_pointer parse(StringPiece const str);
 
   /*
+   * Return true if this pointer is proper to prefix to another pointer
+   */
+  bool is_prefix_of(json_pointer const& other) const noexcept;
+
+  /*
    * Get access to the parsed tokens for applications that want to traverse
    * the pointer.
    */
   std::vector<std::string> const& tokens() const;
+
+  friend bool operator==(json_pointer const& lhs, json_pointer const& rhs) {
+    return lhs.tokens_ == rhs.tokens_;
+  }
+
+  friend bool operator!=(json_pointer const& lhs, json_pointer const& rhs) {
+    return lhs.tokens_ != rhs.tokens_;
+  }
 
  private:
   explicit json_pointer(std::vector<std::string>) noexcept;

@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2017-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include <gtest/gtest.h>
 #include <vector>
 
@@ -20,9 +20,13 @@
 #include "mcrouter/lib/network/gen/MemcacheConnection.h"
 #include "mcrouter/lib/network/test/TestClientServerUtil.h"
 
+using facebook::memcache::test::TestServer;
+
 TEST(MemcacheExternalConnectionTest, simpleExternalConnection) {
-  auto server = facebook::memcache::test::TestServer::create(
-      false /* outOfOrder */, false /* useSsl */);
+  TestServer::Config config;
+  config.outOfOrder = false;
+  config.useSsl = false;
+  auto server = TestServer::create(std::move(config));
   auto conn = std::make_unique<facebook::memcache::MemcacheExternalConnection>(
       facebook::memcache::ConnectionOptions(
           "localhost", server->getListenPort(), mc_caret_protocol));
@@ -34,7 +38,7 @@ TEST(MemcacheExternalConnectionTest, simpleExternalConnection) {
       [&baton](
           const facebook::memcache::McSetRequest& /* req */,
           facebook::memcache::McSetReply&& reply) {
-        EXPECT_EQ(mc_res_stored, reply.result());
+        EXPECT_EQ(carbon::Result::STORED, reply.result());
         baton.post();
       });
   baton.wait();
@@ -45,7 +49,7 @@ TEST(MemcacheExternalConnectionTest, simpleExternalConnection) {
       [&baton](
           const facebook::memcache::McGetRequest& /* req */,
           facebook::memcache::McGetReply&& reply) {
-        EXPECT_EQ(mc_res_found, reply.result());
+        EXPECT_EQ(carbon::Result::FOUND, reply.result());
         EXPECT_EQ("hello", folly::StringPiece(reply.value()->coalesce()));
         baton.post();
       });
@@ -56,8 +60,10 @@ TEST(MemcacheExternalConnectionTest, simpleExternalConnection) {
 }
 
 TEST(MemcachePooledConnectionTest, PooledExternalConnection) {
-  auto server = facebook::memcache::test::TestServer::create(
-      false /* outOfOrder */, false /* useSsl */);
+  TestServer::Config config;
+  config.outOfOrder = false;
+  config.useSsl = false;
+  auto server = TestServer::create(std::move(config));
   std::vector<std::unique_ptr<facebook::memcache::MemcacheConnection>> conns;
   for (int i = 0; i < 4; i++) {
     conns.push_back(
@@ -76,7 +82,7 @@ TEST(MemcachePooledConnectionTest, PooledExternalConnection) {
       [&baton](
           const facebook::memcache::McSetRequest& /* req */,
           facebook::memcache::McSetReply&& reply) {
-        EXPECT_EQ(mc_res_stored, reply.result());
+        EXPECT_EQ(carbon::Result::STORED, reply.result());
         baton.post();
       });
   baton.wait();
@@ -87,7 +93,7 @@ TEST(MemcachePooledConnectionTest, PooledExternalConnection) {
       [&baton](
           const facebook::memcache::McGetRequest& /* req */,
           facebook::memcache::McGetReply&& reply) {
-        EXPECT_EQ(mc_res_found, reply.result());
+        EXPECT_EQ(carbon::Result::FOUND, reply.result());
         EXPECT_EQ("pooled", folly::StringPiece(reply.value()->coalesce()));
         baton.post();
       });
@@ -101,8 +107,10 @@ TEST(MemcacheInternalConnectionTest, simpleInternalConnection) {
   folly::SingletonVault::singleton()->destroyInstances();
   folly::SingletonVault::singleton()->reenableInstances();
 
-  auto server = facebook::memcache::test::TestServer::create(
-      false /* outOfOrder */, false /* useSsl */);
+  TestServer::Config config;
+  config.outOfOrder = false;
+  config.useSsl = false;
+  auto server = TestServer::create(std::move(config));
   facebook::memcache::McrouterOptions mcrouterOptions;
   mcrouterOptions.num_proxies = 1;
   mcrouterOptions.default_route = "/oregon/*/";
@@ -130,7 +138,7 @@ TEST(MemcacheInternalConnectionTest, simpleInternalConnection) {
       [&baton](
           const facebook::memcache::McSetRequest& /* req */,
           facebook::memcache::McSetReply&& reply) {
-        EXPECT_EQ(mc_res_stored, reply.result());
+        EXPECT_EQ(carbon::Result::STORED, reply.result());
         baton.post();
       });
   baton.wait();
@@ -141,7 +149,7 @@ TEST(MemcacheInternalConnectionTest, simpleInternalConnection) {
       [&baton](
           const facebook::memcache::McGetRequest& /* req */,
           facebook::memcache::McGetReply&& reply) {
-        EXPECT_EQ(mc_res_found, reply.result());
+        EXPECT_EQ(carbon::Result::FOUND, reply.result());
         EXPECT_EQ("internal", folly::StringPiece(reply.value()->coalesce()));
         baton.post();
       });
@@ -155,8 +163,10 @@ TEST(MemcachePooledConnectionTest, PooledInternalConnection) {
   folly::SingletonVault::singleton()->destroyInstances();
   folly::SingletonVault::singleton()->reenableInstances();
 
-  auto server = facebook::memcache::test::TestServer::create(
-      false /* outOfOrder */, false /* useSsl */);
+  TestServer::Config config;
+  config.outOfOrder = false;
+  config.useSsl = false;
+  auto server = TestServer::create(std::move(config));
   facebook::memcache::McrouterOptions mcrouterOptions;
   mcrouterOptions.num_proxies = 1;
   mcrouterOptions.default_route = "/oregon/*/";
@@ -191,7 +201,7 @@ TEST(MemcachePooledConnectionTest, PooledInternalConnection) {
       [&baton](
           const facebook::memcache::McSetRequest& /* req */,
           facebook::memcache::McSetReply&& reply) {
-        EXPECT_EQ(mc_res_stored, reply.result());
+        EXPECT_EQ(carbon::Result::STORED, reply.result());
         baton.post();
       });
   baton.wait();
@@ -202,7 +212,7 @@ TEST(MemcachePooledConnectionTest, PooledInternalConnection) {
       [&baton](
           const facebook::memcache::McGetRequest& /* req */,
           facebook::memcache::McGetReply&& reply) {
-        EXPECT_EQ(mc_res_found, reply.result());
+        EXPECT_EQ(carbon::Result::FOUND, reply.result());
         EXPECT_EQ("pooled", folly::StringPiece(reply.value()->coalesce()));
         baton.post();
       });

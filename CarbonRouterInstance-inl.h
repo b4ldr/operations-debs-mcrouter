@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2016-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include <vector>
 
 #include <boost/filesystem/operations.hpp>
@@ -19,6 +19,7 @@
 #include "mcrouter/CarbonRouterInstanceBase.h"
 #include "mcrouter/McrouterLogFailure.h"
 #include "mcrouter/McrouterLogger.h"
+#include "mcrouter/McrouterManager.h"
 #include "mcrouter/Proxy.h"
 #include "mcrouter/ProxyConfig.h"
 #include "mcrouter/ProxyConfigBuilder.h"
@@ -36,75 +37,16 @@ namespace detail {
 
 bool isValidRouterName(folly::StringPiece name);
 
-class McrouterManager {
- public:
-  McrouterManager();
-
-  ~McrouterManager();
-
-  void freeAllMcrouters();
-
-  template <class RouterInfo>
-  CarbonRouterInstance<RouterInfo>* mcrouterGetCreate(
-      folly::StringPiece persistence_id,
-      const McrouterOptions& options,
-      const std::vector<folly::EventBase*>& evbs) {
-    std::shared_ptr<CarbonRouterInstanceBase> mcrouterBase;
-
-    {
-      std::lock_guard<std::mutex> lg(mutex_);
-      mcrouterBase = folly::get_default(mcrouters_, persistence_id.str());
-    }
-    if (!mcrouterBase) {
-      std::lock_guard<std::mutex> ilg(initMutex_);
-      {
-        std::lock_guard<std::mutex> lg(mutex_);
-        mcrouterBase = folly::get_default(mcrouters_, persistence_id.str());
-      }
-      if (!mcrouterBase) {
-        std::shared_ptr<CarbonRouterInstance<RouterInfo>> mcrouter =
-            CarbonRouterInstance<RouterInfo>::create(options.clone(), evbs);
-        if (mcrouter) {
-          std::lock_guard<std::mutex> lg(mutex_);
-          mcrouters_[persistence_id.str()] = mcrouter;
-          return mcrouter.get();
-        }
-      }
-    }
-    return dynamic_cast<CarbonRouterInstance<RouterInfo>*>(mcrouterBase.get());
-  }
-
-  template <class RouterInfo>
-  CarbonRouterInstance<RouterInfo>* mcrouterGet(
-      folly::StringPiece persistence_id) {
-    std::lock_guard<std::mutex> lg(mutex_);
-    auto mcrouterBase =
-        folly::get_default(mcrouters_, persistence_id.str(), nullptr).get();
-    return dynamic_cast<CarbonRouterInstance<RouterInfo>*>(mcrouterBase);
-  }
-
- private:
-  std::unordered_map<std::string, std::shared_ptr<CarbonRouterInstanceBase>>
-      mcrouters_;
-  // protects mcrouters_
-  std::mutex mutex_;
-  // initMutex_ must not be taken under mutex_, otherwise deadlock is possible
-  std::mutex initMutex_;
-};
-
-extern folly::Singleton<McrouterManager> gMcrouterManager;
-
-} // detail
+} // namespace detail
 
 template <class RouterInfo>
 /* static  */ CarbonRouterInstance<RouterInfo>*
 CarbonRouterInstance<RouterInfo>::init(
-    folly::StringPiece persistence_id,
+    folly::StringPiece persistenceId,
     const McrouterOptions& options,
     const std::vector<folly::EventBase*>& evbs) {
-  if (auto manager = detail::gMcrouterManager.try_get()) {
-    return manager->mcrouterGetCreate<RouterInfo>(
-        persistence_id, options, evbs);
+  if (auto manager = detail::McrouterManager::getSingletonInstance()) {
+    return manager->mcrouterGetCreate<RouterInfo>(persistenceId, options, evbs);
   }
 
   return nullptr;
@@ -112,12 +54,18 @@ CarbonRouterInstance<RouterInfo>::init(
 
 template <class RouterInfo>
 CarbonRouterInstance<RouterInfo>* CarbonRouterInstance<RouterInfo>::get(
-    folly::StringPiece persistence_id) {
-  if (auto manager = detail::gMcrouterManager.try_get()) {
-    return manager->mcrouterGet<RouterInfo>(persistence_id);
+    folly::StringPiece persistenceId) {
+  if (auto manager = detail::McrouterManager::getSingletonInstance()) {
+    return manager->mcrouterGet<RouterInfo>(persistenceId);
   }
 
   return nullptr;
+}
+
+template <class RouterInfo>
+bool CarbonRouterInstance<RouterInfo>::hasInstance(
+    folly::StringPiece persistenceId) {
+  return get(persistenceId) != nullptr;
 }
 
 template <class RouterInfo>
@@ -218,7 +166,9 @@ CarbonRouterInstance<RouterInfo>::createClient(
       this->shared_from_this(),
       max_outstanding,
       max_outstanding_error,
-      /* sameThread= */ false);
+      opts().thread_affinity
+          ? CarbonRouterClient<RouterInfo>::ThreadMode::AffinitizedRemoteThread
+          : CarbonRouterClient<RouterInfo>::ThreadMode::FixedRemoteThread);
 }
 
 template <class RouterInfo>
@@ -229,7 +179,7 @@ CarbonRouterInstance<RouterInfo>::createSameThreadClient(
       this->shared_from_this(),
       max_outstanding,
       /* maxOutstandingError= */ true,
-      /* sameThread= */ true);
+      CarbonRouterClient<RouterInfo>::ThreadMode::SameThread);
 }
 
 template <class RouterInfo>
@@ -263,6 +213,7 @@ CarbonRouterInstance<RouterInfo>::spinUp(
       }
     }
 
+    VLOG(2) << "spinning up proxy threads";
     for (size_t i = 0; i < opts_.num_proxies; i++) {
       if (evbs.empty()) {
         try {
@@ -330,6 +281,12 @@ template <class RouterInfo>
 Proxy<RouterInfo>* CarbonRouterInstance<RouterInfo>::getProxy(
     size_t index) const {
   return index < proxies_.size() ? proxies_[index] : nullptr;
+}
+
+template <class RouterInfo>
+const std::vector<Proxy<RouterInfo>*>&
+CarbonRouterInstance<RouterInfo>::getProxies() const {
+  return proxies_;
 }
 
 template <class RouterInfo>
@@ -507,6 +464,7 @@ CarbonRouterInstance<RouterInfo>::configure(const ProxyConfigBuilder& builder) {
 template <class RouterInfo>
 folly::Expected<ProxyConfigBuilder, std::string>
 CarbonRouterInstance<RouterInfo>::createConfigBuilder() {
+  VLOG_IF(0, !opts_.constantly_reload_configs) << "creating config builder";
   /* mark config attempt before, so that
      successful config is always >= last config attempt. */
   lastConfigAttempt_ = time(nullptr);
@@ -540,20 +498,22 @@ CarbonRouterInstance<RouterInfo>::createConfigBuilder() {
 
 template <class RouterInfo>
 void CarbonRouterInstance<RouterInfo>::registerOnUpdateCallbackForRxmits() {
-  rxmitHandle_ = rtVarsData().subscribeAndCall([this](
-      std::shared_ptr<const RuntimeVarsData> /* oldVars */,
-      std::shared_ptr<const RuntimeVarsData> newVars) {
-    if (!newVars) {
-      return;
-    }
-    const auto val = newVars->getVariableByName("disable_rxmit_reconnection");
-    if (val != nullptr) {
-      checkLogic(
-          val.isBool(),
-          "runtime vars 'disable_rxmit_reconnection' is not a boolean");
-      disableRxmitReconnection_ = val.asBool();
-    }
-  });
+  rxmitHandle_ = rtVarsData().subscribeAndCall(
+      [this](
+          std::shared_ptr<const RuntimeVarsData> /* oldVars */,
+          std::shared_ptr<const RuntimeVarsData> newVars) {
+        if (!newVars) {
+          return;
+        }
+        const auto val =
+            newVars->getVariableByName("disable_rxmit_reconnection");
+        if (val != nullptr) {
+          checkLogic(
+              val.isBool(),
+              "runtime vars 'disable_rxmit_reconnection' is not a boolean");
+          disableRxmitReconnection_ = val.asBool();
+        }
+      });
 }
 
 template <class RouterInfo>
@@ -561,6 +521,6 @@ template <class RouterInfo>
   freeAllRouters();
 }
 
-} // mcrouter
-} // memcache
-} // facebook
+} // namespace mcrouter
+} // namespace memcache
+} // namespace facebook

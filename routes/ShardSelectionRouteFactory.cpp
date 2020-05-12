@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2017-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include "ShardSelectionRouteFactory.h"
 
 #include <algorithm>
@@ -89,50 +89,15 @@ std::vector<std::vector<size_t>> parseAllShardsJson(
   return allShards;
 }
 
-size_t getMaxShardId(const std::vector<std::vector<size_t>>& allShards) {
-  size_t maxShardId = 0;
-  for (const auto& shards : allShards) {
-    for (auto shardId : shards) {
-      maxShardId = std::max(maxShardId, shardId);
-    }
-  }
-  return maxShardId;
-}
-
-const folly::dynamic& getPoolJson(const folly::dynamic& json) {
-  assert(json.isObject());
-
-  auto poolJson = json.get_ptr("pool");
-  checkLogic(poolJson, "ShardSelectionRoute: 'pool' not found");
-  return *poolJson;
-}
-
-const folly::dynamic& getShardsJson(const folly::dynamic& json) {
-  assert(json.isObject());
-
-  auto shardsJson = json.get_ptr("shards");
-  checkLogic(
-      shardsJson && shardsJson->isArray(),
-      "ShardSelectionRoute: 'shards' not found or not an array");
-  return *shardsJson;
-}
-
-void parseShardsPerServerJson(
-    const folly::dynamic& jShards,
-    std::function<void(uint32_t)>&& handleShardFunc) {
-  std::vector<size_t> shards;
+std::vector<size_t> parseShardsPerServerJson(const folly::dynamic& jShards) {
   if (jShards.isArray()) {
-    shards = parseShardsJsonArray(jShards);
+    return parseShardsJsonArray(jShards);
   } else if (jShards.isString()) {
-    shards = parseShardsJsonString(jShards);
+    return parseShardsJsonString(jShards);
   } else {
     throwLogic(
-        "EagerShardSelectionRoute: 'shards[{}]' must be an array of "
-        "integers or a string of comma-separated shard ids.",
-        shards);
-  }
-  for (auto shard : shards) {
-    handleShardFunc(shard);
+        "EagerShardSelectionRoute: 'shards[...]' must be an array of "
+        "integers or a string of comma-separated shard ids.");
   }
 }
 

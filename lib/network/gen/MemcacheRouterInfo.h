@@ -14,6 +14,7 @@
  */
 #pragma once
 
+#include <chrono>
 #include <functional>
 #include <unordered_map>
 
@@ -28,6 +29,7 @@
 // Forward declarations
 namespace folly {
 struct dynamic;
+class VirtualEventBase;
 } // namespace folly
 
 namespace facebook {
@@ -62,6 +64,8 @@ using MemcacheRoutableRequests = carbon::List<
     McDeleteRequest,
     McFlushAllRequest,
     McFlushReRequest,
+    McGatRequest,
+    McGatsRequest,
     McGetRequest,
     McGetsRequest,
     McIncrRequest,
@@ -72,7 +76,6 @@ using MemcacheRoutableRequests = carbon::List<
     McReplaceRequest,
     McSetRequest,
     McTouchRequest>;
-
 } // namespace detail
 
 struct MemcacheRouterInfo {
@@ -84,8 +87,7 @@ struct MemcacheRouterInfo {
   template <class Route>
   using RouteHandle = MemcacheRouteHandle<Route>;
   using RoutableRequests = detail::MemcacheRoutableRequests;
-  using AdditionalLogger =
-      facebook::memcache::mcrouter::AdditionalProxyRequestLogger;
+  using AdditionalLogger = facebook::memcache::mcrouter::AdditionalProxyRequestLogger;
   using RouterStats = carbon::Stats<MemcacheRouterStatsConfig>;
 
   using RouteHandleFactoryMap = std::unordered_map<
@@ -101,6 +103,7 @@ struct MemcacheRouterInfo {
                              ExtraRouteHandleProviderIf<MemcacheRouterInfo>>
   buildExtraProvider();
 };
-
 } // namespace memcache
 } // namespace facebook
+
+#include "mcrouter/lib/network/gen/MemcacheThriftTransport.h"

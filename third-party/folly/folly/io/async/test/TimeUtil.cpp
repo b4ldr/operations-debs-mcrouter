@@ -1,11 +1,11 @@
 /*
- * Copyright 2014-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,16 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
 #endif
 
 #include <folly/io/async/test/TimeUtil.h>
 
-#include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <cerrno>
 #ifdef __linux__
 #include <sys/utsname.h>
 #endif
@@ -32,7 +33,9 @@
 #include <stdexcept>
 
 #include <folly/Conv.h>
+#include <folly/Portability.h>
 #include <folly/ScopeGuard.h>
+#include <folly/String.h>
 #include <folly/portability/Unistd.h>
 #include <folly/system/ThreadId.h>
 
@@ -73,7 +76,7 @@ static int64_t determineSchedstatUnits() {
   struct utsname unameInfo;
   if (uname(&unameInfo) != 0) {
     LOG(ERROR) << "unable to determine jiffies/second: uname failed: %s"
-               << strerror(errno);
+               << errnoStr(errno);
     return -1;
   }
 
@@ -107,13 +110,14 @@ static int64_t determineSchedstatUnits() {
   //
   // Look in /boot/config-<kernel_release>
   char configPath[256];
-  snprintf(configPath, sizeof(configPath), "/boot/config-%s",
-           unameInfo.release);
+  snprintf(
+      configPath, sizeof(configPath), "/boot/config-%s", unameInfo.release);
 
   FILE* f = fopen(configPath, "r");
   if (f == nullptr) {
     LOG(ERROR) << "unable to determine jiffies/second: "
-      "cannot open kernel config file %s" << configPath;
+                  "cannot open kernel config file %s"
+               << configPath;
     return -1;
   }
   SCOPE_EXIT {
@@ -139,7 +143,8 @@ static int64_t determineSchedstatUnits() {
 
   if (hz == -1) {
     LOG(ERROR) << "unable to determine jiffies/second: no CONFIG_HZ setting "
-      "found in %s" << configPath;
+                  "found in %s"
+               << configPath;
     return -1;
   }
 
@@ -169,21 +174,20 @@ static nanoseconds getSchedTimeWaiting(pid_t tid) {
   int fd = -1;
   try {
     char schedstatFile[256];
-    snprintf(schedstatFile, sizeof(schedstatFile),
-             "/proc/%d/schedstat", tid);
+    snprintf(schedstatFile, sizeof(schedstatFile), "/proc/%d/schedstat", tid);
     fd = open(schedstatFile, O_RDONLY);
     if (fd < 0) {
       throw std::runtime_error(
-        folly::to<string>("failed to open process schedstat file", errno));
+          folly::to<string>("failed to open process schedstat file", errno));
     }
 
     char buf[512];
     ssize_t bytesReadRet = read(fd, buf, sizeof(buf) - 1);
     if (bytesReadRet <= 0) {
       throw std::runtime_error(
-        folly::to<string>("failed to read process schedstat file", errno));
+          folly::to<string>("failed to read process schedstat file", errno));
     }
-    size_t bytesRead = size_t(bytesReadRet);
+    auto bytesRead = size_t(bytesReadRet);
 
     if (buf[bytesRead - 1] != '\n') {
       throw std::runtime_error("expected newline at end of schedstat data");
@@ -194,8 +198,12 @@ static nanoseconds getSchedTimeWaiting(pid_t tid) {
     uint64_t activeJiffies = 0;
     uint64_t waitingJiffies = 0;
     uint64_t numTasks = 0;
-    int rc = sscanf(buf, "%" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
-                    &activeJiffies, &waitingJiffies, &numTasks);
+    int rc = sscanf(
+        buf,
+        "%" PRIu64 " %" PRIu64 " %" PRIu64 "\n",
+        &activeJiffies,
+        &waitingJiffies,
+        &numTasks);
     if (rc != 3) {
       throw std::runtime_error("failed to parse schedstat data");
     }
@@ -270,14 +278,17 @@ bool checkTimeout(
     effectiveElapsedTime = elapsedTime - timeExcluded;
   }
 
+  if (!kIsLinux) {
+    // We can only compute timeExcluded accurately on Linux.
+    // On other platforms, just increase the amount of tolerance allowed to
+    // account for time possibly spent waiting to be scheduled.
+    tolerance += 20ms;
+  }
+
   // On x86 Linux, sleep calls generally have precision only to the nearest
   // millisecond.  The tolerance parameter lets users allow a few ms of slop.
   auto overrun = effectiveElapsedTime - expected;
-  if (overrun > tolerance) {
-    return false;
-  }
-
-  return true;
+  return overrun <= tolerance;
 }
 
 } // namespace folly

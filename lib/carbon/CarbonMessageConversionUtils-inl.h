@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2016-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include <string>
 
 #include <folly/json.h>
@@ -12,6 +12,7 @@
 #include "mcrouter/lib/carbon/CommonSerializationTraits.h"
 #include "mcrouter/lib/carbon/Fields.h"
 #include "mcrouter/lib/carbon/Keys.h"
+#include "mcrouter/lib/carbon/Result.h"
 
 namespace carbon {
 
@@ -79,6 +80,10 @@ class ToDynamicVisitor {
       return false;
     }
     return true;
+  }
+
+  folly::dynamic toDynamic(carbon::Result res) const {
+    return folly::dynamic(carbon::resultToString(res));
   }
 
   folly::dynamic toDynamic(char c) const {

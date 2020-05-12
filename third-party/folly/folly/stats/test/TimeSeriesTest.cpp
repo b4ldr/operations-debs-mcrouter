@@ -1,11 +1,11 @@
 /*
- * Copyright 2012-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-#include <folly/stats/BucketedTimeSeries-defs.h>
 #include <folly/stats/BucketedTimeSeries.h>
-#include <folly/stats/MultiLevelTimeSeries-defs.h>
 #include <folly/stats/MultiLevelTimeSeries.h>
 #include <folly/stats/detail/Bucket.h>
 
@@ -27,10 +25,10 @@
 #include <folly/container/Foreach.h>
 #include <folly/portability/GTest.h>
 
-using std::chrono::seconds;
+using folly::BucketedTimeSeries;
 using std::string;
 using std::vector;
-using folly::BucketedTimeSeries;
+using std::chrono::seconds;
 
 using Bucket = folly::detail::Bucket<int64_t>;
 using StatsClock = folly::LegacyStatsClock<std::chrono::seconds>;
@@ -1071,7 +1069,18 @@ TEST(MinuteHourTimeSeries, QueryByInterval) {
   };
 
   int expectedCounts[12] = {
-      60, 3600, 7200, 3540, 7140, 3600, 30, 3000, 7180, 2000, 6200, 3600,
+      60,
+      3600,
+      7200,
+      3540,
+      7140,
+      3600,
+      30,
+      3000,
+      7180,
+      2000,
+      6200,
+      3600,
   };
 
   for (int i = 0; i < 12; ++i) {

@@ -1,11 +1,11 @@
 /*
- * Copyright 2011-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -29,7 +29,7 @@ namespace folly {
  * An auto-unlink intrusive list hook.
  */
 using IntrusiveListHook = boost::intrusive::list_member_hook<
-      boost::intrusive::link_mode<boost::intrusive::auto_unlink>>;
+    boost::intrusive::link_mode<boost::intrusive::auto_unlink>>;
 
 /**
  * An intrusive list.
@@ -71,7 +71,7 @@ using IntrusiveList = boost::intrusive::list<
  * A safe-link intrusive list hook.
  */
 using SafeIntrusiveListHook = boost::intrusive::list_member_hook<
-      boost::intrusive::link_mode<boost::intrusive::safe_link>>;
+    boost::intrusive::link_mode<boost::intrusive::safe_link>>;
 
 /**
  * An intrusive list with const-time size() method.

@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2017-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <cctype>
@@ -15,6 +15,7 @@
 #include <folly/Conv.h>
 #include <folly/Optional.h>
 #include <folly/Range.h>
+#include <thrift/lib/cpp2/FieldRef.h>
 
 #include "mcrouter/lib/carbon/CommonSerializationTraits.h"
 #include "mcrouter/lib/carbon/Fields.h"
@@ -126,6 +127,16 @@ class McPiperVisitor {
   template <class T>
   facebook::memcache::StyledString serialize(const folly::Optional<T>& opt) {
     if (opt.hasValue()) {
+      return serialize(opt.value());
+    }
+    return facebook::memcache::StyledString{};
+  }
+
+  // optional_field_ref
+  template <class T>
+  facebook::memcache::StyledString serialize(
+      apache::thrift::optional_field_ref<T&> opt) {
+    if (opt.has_value()) {
       return serialize(opt.value());
     }
     return facebook::memcache::StyledString{};

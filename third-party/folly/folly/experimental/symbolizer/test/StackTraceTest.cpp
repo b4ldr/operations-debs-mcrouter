@@ -1,11 +1,11 @@
 /*
- * Copyright 2013-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -38,7 +38,11 @@ void verifyStackTraces() {
   FrameArray<kMaxAddresses> faSafe;
   CHECK(getStackTraceSafe(faSafe));
 
+  FrameArray<kMaxAddresses> faHeap;
+  CHECK(getStackTraceHeap(faHeap));
+
   CHECK_EQ(fa.frameCount, faSafe.frameCount);
+  CHECK_EQ(fa.frameCount, faHeap.frameCount);
 
   if (VLOG_IS_ON(1)) {
     Symbolizer symbolizer;
@@ -51,14 +55,19 @@ void verifyStackTraces() {
     symbolizer.symbolize(faSafe);
     VLOG(1) << "getStackTraceSafe\n";
     printer.println(faSafe);
+
+    symbolizer.symbolize(faHeap);
+    VLOG(1) << "getStackTraceHeap\n";
+    printer.println(faHeap);
   }
 
   // Other than the top 2 frames (this one and getStackTrace /
   // getStackTraceSafe), the stack traces should be identical
   for (size_t i = 2; i < fa.frameCount; ++i) {
     LOG(INFO) << "i=" << i << " " << std::hex << "0x" << fa.addresses[i]
-              << " 0x" << faSafe.addresses[i];
+              << " 0x" << faSafe.addresses[i] << " 0x" << faHeap.addresses[i];
     EXPECT_EQ(fa.addresses[i], faSafe.addresses[i]);
+    EXPECT_EQ(fa.addresses[i], faHeap.addresses[i]);
   }
 }
 
@@ -114,11 +123,11 @@ ssize_t read_all(int fd, uint8_t* buffer, size_t size) {
 // Returns the position in the file after done reading.
 off_t get_stack_trace(int fd, size_t file_pos, uint8_t* buffer, size_t count) {
   off_t rv = lseek(fd, file_pos, SEEK_SET);
-  assert(rv == (off_t)file_pos);
+  CHECK_EQ(rv, (off_t)file_pos);
 
   // Subtract 1 from size of buffer to hold nullptr.
   ssize_t bytes_read = read_all(fd, buffer, count - 1);
-  assert(bytes_read > 0);
+  CHECK_GT(bytes_read, 0);
   buffer[bytes_read] = '\0';
   return lseek(fd, 0, SEEK_CUR);
 }
@@ -150,7 +159,7 @@ void testStackTracePrinter(StackTracePrinter& printer, int fd) {
 TEST(StackTraceTest, SafeStackTracePrinter) {
   test::TemporaryFile file;
 
-  SafeStackTracePrinter printer{10, file.fd()};
+  SafeStackTracePrinter printer{file.fd()};
 
   testStackTracePrinter<SafeStackTracePrinter>(printer, file.fd());
 }

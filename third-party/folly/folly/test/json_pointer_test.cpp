@@ -1,11 +1,11 @@
 /*
- * Copyright 2011-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -38,12 +38,21 @@ TEST_F(JsonPointerTest, ValidPointers) {
 
 TEST_F(JsonPointerTest, InvalidPointers) {
   EXPECT_EQ(
-      json_pointer::parse_error::INVALID_FIRST_CHARACTER,
+      json_pointer::parse_error::invalid_first_character,
       json_pointer::try_parse("a").error());
   EXPECT_EQ(
-      json_pointer::parse_error::INVALID_ESCAPE_SEQUENCE,
+      json_pointer::parse_error::invalid_escape_sequence,
       json_pointer::try_parse("/~").error());
   EXPECT_EQ(
-      json_pointer::parse_error::INVALID_ESCAPE_SEQUENCE,
+      json_pointer::parse_error::invalid_escape_sequence,
       json_pointer::try_parse("/~x").error());
+}
+
+TEST_F(JsonPointerTest, IsPrefixTo) {
+  EXPECT_TRUE(
+      json_pointer::parse("/a/b").is_prefix_of(json_pointer::parse("/a/b/c")));
+  EXPECT_FALSE(
+      json_pointer::parse("/a/b").is_prefix_of(json_pointer::parse("/a/d/e")));
+  EXPECT_FALSE(
+      json_pointer::parse("/a/b/c").is_prefix_of(json_pointer::parse("/a/b")));
 }

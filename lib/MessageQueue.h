@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <chrono>
@@ -42,7 +42,7 @@ class Notifier {
    * @param nowFunc  Function that returns current time in us.
    *
    * @param postDrainCallback  Callback to be called after drainig a queue.
-   *   As an argument it will be passed false if we're still draining and false
+   *   As an argument it will be passed false if we're still draining and true
    *   if we're out of drain loop. It should return true if it can guarantee
    *   that the current event_base_loop won't block, false otherwise. The return
    *   value is used as a hint for avoiding unnecessary notifications.
@@ -92,7 +92,9 @@ class Notifier {
     if (postDrainCallback_) {
       postDrainCallback_(true);
     }
-    waitStart_ = nowFunc_();
+    if (waitThreshold_ > 0) {
+      waitStart_ = nowFunc_();
+    }
   }
 
   void maybeUpdatePeriod() noexcept;
@@ -176,7 +178,8 @@ class MessageQueue {
    * Must be called from the event base thread.
    */
   void attachEventBase(folly::VirtualEventBase& evb) {
-    handler_.initHandler(&evb.getEventBase(), efd_);
+    handler_.initHandler(
+        &evb.getEventBase(), folly::NetworkSocket::fromFd(efd_));
     handler_.registerHandler(
         folly::EventHandler::READ | folly::EventHandler::PERSIST);
 
@@ -208,13 +211,12 @@ class MessageQueue {
       MessageQueue& queue_;
     };
 
-    queueDrainCallback_ = std::make_unique<MessageQueueDrainCallback>(
-        evb.getEventBase(), *this);
+    queueDrainCallback_ =
+        std::make_unique<MessageQueueDrainCallback>(evb.getEventBase(), *this);
 
-    evb.runOnDestruction(new folly::EventBase::FunctionLoopCallback(
-        [queueDrainCallback = queueDrainCallback_]() {
-          queueDrainCallback->cancelLoopCallback();
-        }));
+    evb.runOnDestruction([queueDrainCallback = queueDrainCallback_]() {
+      queueDrainCallback->cancelLoopCallback();
+    });
   }
 
   size_t currentNotifyPeriod() const noexcept {
@@ -244,8 +246,6 @@ class MessageQueue {
    * Put a new element into the queue. Can be called from any thread.
    * Allows inplace construction of the message.
    * Will block if queue is full until the reader catches up.
-   *
-   * @return true if the notify event was posted
    */
   template <class... Args>
   void blockingWrite(Args&&... args) noexcept {
@@ -255,9 +255,33 @@ class MessageQueue {
     }
   }
 
+  /**
+   * Similar to blockingWrite, except that it used the relaxed notification
+   * semantics. See Notifier class in this file for more details.
+   */
   template <class... Args>
   void blockingWriteRelaxed(Args&&... args) noexcept {
     queue_.blockingWrite(std::forward<Args>(args)...);
+    if (notifier_.shouldNotifyRelaxed()) {
+      doNotify();
+    }
+  }
+
+  /**
+   * Similar to blockingWrite, except that it won't notify the EventBase thread.
+   * The caller will then be responsible for calling notifyRelaxed().
+   */
+  template <class... Args>
+  void blockingWriteNoNotify(Args&&... args) noexcept {
+    queue_.blockingWrite(std::forward<Args>(args)...);
+  }
+
+  /**
+   * Notify the EventBase thread that there's work pending in the queue.
+   * Uses relaxed notification semantics. See Notifier class in this file for
+   * more details.
+   */
+  void notifyRelaxed() noexcept {
     if (notifier_.shouldNotifyRelaxed()) {
       doNotify();
     }

@@ -1,11 +1,11 @@
 /*
- * Copyright 2014-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,7 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "Fiber.h"
+
+#include <folly/fibers/Fiber.h>
 
 #include <glog/logging.h>
 #include <algorithm>
@@ -30,18 +31,18 @@ namespace folly {
 namespace fibers {
 
 namespace {
-static const uint64_t kMagic8Bytes = 0xfaceb00cfaceb00c;
+const uint64_t kMagic8Bytes = 0xfaceb00cfaceb00c;
 
 std::thread::id localThreadId() {
   return std::this_thread::get_id();
 }
 
 /* Size of the region from p + nBytes down to the last non-magic value */
-static size_t nonMagicInBytes(unsigned char* stackLimit, size_t stackSize) {
+size_t nonMagicInBytes(unsigned char* stackLimit, size_t stackSize) {
   CHECK_EQ(reinterpret_cast<intptr_t>(stackLimit) % sizeof(uint64_t), 0u);
   CHECK_EQ(stackSize % sizeof(uint64_t), 0u);
-  uint64_t* begin = reinterpret_cast<uint64_t*>(stackLimit);
-  uint64_t* end = reinterpret_cast<uint64_t*>(stackLimit + stackSize);
+  auto begin = reinterpret_cast<uint64_t*>(stackLimit);
+  auto end = reinterpret_cast<uint64_t*>(stackLimit + stackSize);
 
   auto firstNonMagic = std::find_if(
       begin, end, [](uint64_t val) { return val != kMagic8Bytes; });
@@ -112,6 +113,9 @@ Fiber::~Fiber() {
 }
 
 void Fiber::recordStackPosition() {
+  // For ASAN builds, functions may run on fake stack.
+  // So we cannot get meaningful stack position.
+#ifndef FOLLY_SANITIZE_ADDRESS
   int stackDummy;
   auto currentPosition = static_cast<size_t>(
       fiberStackLimit_ + fiberStackSize_ -
@@ -119,6 +123,7 @@ void Fiber::recordStackPosition() {
   fiberManager_.stackHighWatermark_ =
       std::max(fiberManager_.stackHighWatermark_, currentPosition);
   VLOG(4) << "Stack usage: " << currentPosition;
+#endif
 }
 
 [[noreturn]] void Fiber::fiberFunc() {
@@ -170,9 +175,10 @@ void Fiber::preempt(State state) {
     DCHECK_EQ(fiberManager_.activeFiber_, this);
     DCHECK_EQ(state_, RUNNING);
     DCHECK_NE(state, RUNNING);
-    DCHECK(!std::current_exception());
-    // std::uncaught_exception is broken in libstdc++ v4.9
-    DCHECK(kIsGlib49 || !std::uncaught_exception());
+    if (state != AWAITING_IMMEDIATE) {
+      CHECK(fiberManager_.currentException_ == std::current_exception());
+      CHECK_EQ(fiberManager_.numUncaughtExceptions_, uncaught_exceptions());
+    }
 
     state_ = state;
 

@@ -1,11 +1,11 @@
 /*
- * Copyright 2014-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #pragma once
 
 #include <boost/version.hpp>
@@ -35,6 +36,8 @@
  * Boost 1.61:
  * https://github.com/boostorg/context/blob/boost-1.61.0/include/boost/context/detail/fcontext.hpp
  */
+
+#include <folly/Function.h>
 
 namespace folly {
 namespace fibers {
@@ -68,6 +71,7 @@ class FiberImpl {
       : func_(std::move(func)) {
     auto stackBase = stackLimit + stackSize;
 #if BOOST_VERSION >= 106100
+    stackBase_ = stackBase;
     fiberContext_ =
         boost::context::detail::make_fcontext(stackBase, stackSize, &fiberFunc);
 #elif BOOST_VERSION >= 105200
@@ -100,6 +104,7 @@ class FiberImpl {
     auto transfer =
         boost::context::detail::jump_fcontext(mainContext_, nullptr);
     mainContext_ = transfer.fctx;
+    fixStackUnwinding();
     auto context = reinterpret_cast<intptr_t>(transfer.data);
 #elif BOOST_VERSION >= 105600
     auto context =
@@ -118,8 +123,22 @@ class FiberImpl {
   static void fiberFunc(boost::context::detail::transfer_t transfer) {
     auto fiberImpl = reinterpret_cast<FiberImpl*>(transfer.data);
     fiberImpl->mainContext_ = transfer.fctx;
+    fiberImpl->fixStackUnwinding();
     fiberImpl->func_();
   }
+
+  void fixStackUnwinding() {
+    if (kIsArchAmd64 && kIsLinux) {
+      // Extract RBP and RIP from main context to stitch main context stack and
+      // fiber stack.
+      auto stackBase = reinterpret_cast<void**>(stackBase_);
+      auto mainContext = reinterpret_cast<void**>(mainContext_);
+      stackBase[-2] = mainContext[6];
+      stackBase[-1] = mainContext[7];
+    }
+  }
+
+  unsigned char* stackBase_;
 #else
   static void fiberFunc(intptr_t arg) {
     auto fiberImpl = reinterpret_cast<FiberImpl*>(arg);

@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include "McRouteHandleProvider.h"
 
 #include "mcrouter/lib/network/gen/MemcacheRouterInfo.h"
@@ -14,14 +14,18 @@
 #include "mcrouter/routes/AllInitialRouteFactory.h"
 #include "mcrouter/routes/AllMajorityRouteFactory.h"
 #include "mcrouter/routes/AllSyncRouteFactory.h"
+#include "mcrouter/routes/BlackholeRoute.h"
+#include "mcrouter/routes/CarbonLookasideRoute.h"
 #include "mcrouter/routes/DevNullRoute.h"
 #include "mcrouter/routes/ErrorRoute.h"
 #include "mcrouter/routes/FailoverRoute.h"
 #include "mcrouter/routes/FailoverWithExptimeRouteFactory.h"
 #include "mcrouter/routes/HashRouteFactory.h"
 #include "mcrouter/routes/HostIdRouteFactory.h"
+#include "mcrouter/routes/KeySplitRoute.h"
 #include "mcrouter/routes/L1L2CacheRouteFactory.h"
 #include "mcrouter/routes/L1L2SizeSplitRoute.h"
+#include "mcrouter/routes/LatencyInjectionRoute.h"
 #include "mcrouter/routes/LatestRoute.h"
 #include "mcrouter/routes/LoadBalancerRoute.h"
 #include "mcrouter/routes/LoggingRoute.h"
@@ -34,12 +38,54 @@
 #include "mcrouter/routes/OutstandingLimitRoute.h"
 #include "mcrouter/routes/RandomRouteFactory.h"
 #include "mcrouter/routes/ShadowRoute.h"
+#include "mcrouter/routes/StagingRoute.h"
+
+namespace folly {
+struct dynamic;
+}
 
 namespace facebook {
 namespace memcache {
 namespace mcrouter {
 
 using McRouteHandleFactory = RouteHandleFactory<McrouterRouteHandleIf>;
+
+/**
+ * This implementation is only for test purposes. Typically the users of
+ * CarbonLookaside will be services other than memcache.
+ */
+class MemcacheCarbonLookasideHelper {
+ public:
+  MemcacheCarbonLookasideHelper(const folly::dynamic* /* jsonConfig */) {}
+
+  static std::string name() {
+    return "MemcacheCarbonLookasideHelper";
+  }
+
+  template <typename Request>
+  bool cacheCandidate(const Request& /* unused */) const {
+    if (Request::hasKey) {
+      return true;
+    }
+    return false;
+  }
+
+  template <typename Request>
+  std::string buildKey(const Request& req) const {
+    if (Request::hasKey) {
+      return req.key().fullKey().str();
+    }
+    return std::string();
+  }
+
+  template <typename Reply>
+  bool shouldCacheReply(const Reply& /* unused */) const {
+    return true;
+  }
+
+  template <typename Reply>
+  void postProcessCachedReply(Reply& /* reply */) const {}
+};
 
 McrouterRouteHandlePtr makeWarmUpRoute(
     McRouteHandleFactory& factory,
@@ -60,6 +106,11 @@ McRouteHandleProvider<MemcacheRouterInfo>::buildRouteMap() {
       {"AllInitialRoute", &makeAllInitialRoute<MemcacheRouterInfo>},
       {"AllMajorityRoute", &makeAllMajorityRoute<MemcacheRouterInfo>},
       {"AllSyncRoute", &makeAllSyncRoute<MemcacheRouterInfo>},
+      {"BlackholeRoute", &makeBlackholeRoute<MemcacheRouterInfo>},
+      {"CarbonLookasideRoute",
+       &createCarbonLookasideRoute<
+           MemcacheRouterInfo,
+           MemcacheCarbonLookasideHelper>},
       {"DevNullRoute", &makeDevNullRoute<MemcacheRouterInfo>},
       {"ErrorRoute", &makeErrorRoute<MemcacheRouterInfo>},
       {"FailoverWithExptimeRoute",
@@ -69,8 +120,10 @@ McRouteHandleProvider<MemcacheRouterInfo>::buildRouteMap() {
          return makeHashRoute<McrouterRouterInfo>(factory, json);
        }},
       {"HostIdRoute", &makeHostIdRoute<MemcacheRouterInfo>},
+      {"LatencyInjectionRoute", &makeLatencyInjectionRoute<MemcacheRouterInfo>},
       {"L1L2CacheRoute", &makeL1L2CacheRoute<MemcacheRouterInfo>},
       {"L1L2SizeSplitRoute", &makeL1L2SizeSplitRoute},
+      {"KeySplitRoute", &makeKeySplitRoute},
       {"LatestRoute", &makeLatestRoute<MemcacheRouterInfo>},
       {"LoadBalancerRoute", &makeLoadBalancerRoute<MemcacheRouterInfo>},
       {"LoggingRoute", &makeLoggingRoute<MemcacheRouterInfo>},
@@ -91,11 +144,12 @@ McRouteHandleProvider<MemcacheRouterInfo>::buildRouteMap() {
        [](McRouteHandleFactory& factory, const folly::dynamic& json) {
          return makeRateLimitRoute(factory, json);
        }},
+      {"StagingRoute", &makeStagingRoute},
       {"WarmUpRoute", &makeWarmUpRoute},
   };
   return map;
 }
 
-} // mcrouter
-} // memcache
-} // facebook
+} // namespace mcrouter
+} // namespace memcache
+} // namespace facebook

@@ -1,11 +1,11 @@
 /*
- * Copyright 2018-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,8 +26,6 @@ using namespace folly;
 namespace {
 
 struct Data {
-  using IsTriviallyCopyable = std::true_type;
-
   Data(unsigned char value) {
     setValue(value);
   }
@@ -54,6 +52,7 @@ struct Data {
   // sanitizers.
   unsigned char contents[99];
 };
+static_assert(is_trivially_copyable<Data>::value, "not trivially-copyable");
 
 TEST(TearableTest, BasicOperations) {
   Tearable<Data> tearable;

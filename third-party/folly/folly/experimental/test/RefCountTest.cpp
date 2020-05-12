@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,9 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include <thread>
 
-#include <folly/experimental/RCURefCount.h>
 #include <folly/experimental/TLRefCount.h>
 #include <folly/portability/GTest.h>
 #include <folly/synchronization/Baton.h>
@@ -72,7 +72,7 @@ void basicTest() {
     ++got0;
   }
 
-  for (auto& t: ts) {
+  for (auto& t : ts) {
     t.join();
   }
 
@@ -114,16 +114,8 @@ void stressTest(size_t itersCount) {
   }
 }
 
-TEST(RCURefCount, Basic) {
-  basicTest<RCURefCount>();
-}
-
 TEST(TLRefCount, Basic) {
   basicTest<TLRefCount>();
-}
-
-TEST(RCURefCount, Stress) {
-  stressTest<RCURefCount>(100000);
 }
 
 TEST(TLRefCount, Stress) {

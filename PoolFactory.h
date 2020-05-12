@@ -1,14 +1,15 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <folly/dynamic.h>
 #include <folly/experimental/StringKeyedUnorderedMap.h>
+#include <folly/json.h>
 
 namespace facebook {
 namespace memcache {
@@ -33,11 +34,27 @@ class PoolFactory {
    * @param config JSON object with clusters/pools properties (both optional).
    * @param configApi API to fetch pools from files. Should be
    *                  reference once we'll remove 'routerless' mode.
+   * @param configMetadataMap config metadata map containing linenumbers, etc
+   */
+  PoolFactory(
+      const folly::dynamic& config,
+      ConfigApiIf& configApi,
+      folly::json::metadata_map configMetadataMap);
+
+  /**
+   * For backward compatibility.
+   * @param config JSON object with clusters/pools properties (both optional).
+   * @param configApi API to fetch pools from files. Should be
+   *                  reference once we'll remove 'routerless' mode.
    */
   PoolFactory(const folly::dynamic& config, ConfigApiIf& configApi);
 
+  const folly::json::metadata_map& getConfigMetadataMap() {
+    return configMetadataMap_;
+  }
+
   /**
-   * Load pool from ConfigApi, expand `inherit`, etc.
+   * Loads a pool from ConfigApi, expand `inherit`, etc.
    *
    * @param json pool json
    *
@@ -49,9 +66,12 @@ class PoolFactory {
   enum class PoolState { NEW, PARSING, PARSED };
   folly::StringKeyedUnorderedMap<std::pair<folly::dynamic, PoolState>> pools_;
   ConfigApiIf& configApi_;
+  // Contains metadata of the parsed config
+  folly::json::metadata_map configMetadataMap_;
 
   PoolJson parseNamedPool(folly::StringPiece name);
 };
-}
-}
-} // facebook::memcache::mcrouter
+
+} // namespace mcrouter
+} // namespace memcache
+} // namespace facebook

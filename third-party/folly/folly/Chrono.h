@@ -1,11 +1,11 @@
 /*
- * Copyright 2017-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,6 +21,7 @@
 #include <type_traits>
 
 #include <folly/Portability.h>
+#include <folly/lang/Exception.h>
 #include <folly/portability/Time.h>
 
 /***
@@ -30,16 +31,17 @@
  *  * std::chrono::round
  */
 
-#if __cpp_lib_chrono >= 201510 || _MSC_VER
+#if __cpp_lib_chrono >= 201510 || _LIBCPP_STD_VER > 14 || _MSC_VER
 
 namespace folly {
 namespace chrono {
 
+/* using override */ using std::chrono::abs;
 /* using override */ using std::chrono::ceil;
 /* using override */ using std::chrono::floor;
 /* using override */ using std::chrono::round;
-}
-}
+} // namespace chrono
+} // namespace folly
 
 #else
 
@@ -79,6 +81,18 @@ constexpr To round_impl(Duration const& d, To const& t0) {
   return round_impl(d, t0, t0 + To{1});
 }
 } // namespace detail
+
+//  mimic: std::chrono::abs, C++17
+template <
+    typename Rep,
+    typename Period,
+    typename = typename std::enable_if<
+        std::chrono::duration<Rep, Period>::min() <
+        std::chrono::duration<Rep, Period>::zero()>::type>
+constexpr std::chrono::duration<Rep, Period> abs(
+    std::chrono::duration<Rep, Period> const& d) {
+  return d < std::chrono::duration<Rep, Period>::zero() ? -d : d;
+}
 
 //  mimic: std::chrono::ceil, C++17
 //  from: http://en.cppreference.com/w/cpp/chrono/duration/ceil, CC-BY-SA
@@ -159,11 +173,6 @@ constexpr std::chrono::time_point<Clock, To> round(
 
 namespace folly {
 namespace chrono {
-namespace detail {
-[[noreturn]] FOLLY_NOINLINE inline void throw_coarse_steady_clock_now_exn() {
-  throw std::runtime_error("Error using CLOCK_MONOTONIC_COARSE.");
-}
-} // namespace detail
 
 struct coarse_steady_clock {
   using rep = std::chrono::milliseconds::rep;
@@ -172,21 +181,24 @@ struct coarse_steady_clock {
   using time_point = std::chrono::time_point<coarse_steady_clock, duration>;
   constexpr static bool is_steady = true;
 
-  static time_point now() {
+  static time_point now() noexcept {
 #ifndef CLOCK_MONOTONIC_COARSE
     return time_point(std::chrono::duration_cast<duration>(
         std::chrono::steady_clock::now().time_since_epoch()));
 #else
     timespec ts;
     auto ret = clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
-    if (ret != 0) {
-      detail::throw_coarse_steady_clock_now_exn();
+    if (kIsDebug && (ret != 0)) {
+      throw_exception<std::runtime_error>(
+          "Error using CLOCK_MONOTONIC_COARSE.");
     }
+
     return time_point(std::chrono::duration_cast<duration>(
         std::chrono::seconds(ts.tv_sec) +
         std::chrono::nanoseconds(ts.tv_nsec)));
 #endif
   }
 };
+
 } // namespace chrono
 } // namespace folly

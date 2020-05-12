@@ -1,11 +1,11 @@
 /*
- * Copyright 2017-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include <folly/synchronization/Rcu.h>
 
 #include <thread>
@@ -112,7 +113,7 @@ TEST(RcuTest, Stress) {
   std::vector<std::thread> threads;
   constexpr uint32_t sz = 1000;
   std::atomic<int*> ints[sz];
-  for (uint i = 0; i < sz; i++) {
+  for (uint32_t i = 0; i < sz; i++) {
     ints[i].store(new int(0));
   }
   for (unsigned th = 0; th < FLAGS_threads; th++) {
@@ -121,10 +122,10 @@ TEST(RcuTest, Stress) {
         rcu_reader g;
         int sum = 0;
         int* ptrs[sz];
-        for (uint j = 0; j < sz; j++) {
+        for (uint32_t j = 0; j < sz; j++) {
           ptrs[j] = ints[j].load(std::memory_order_acquire);
         }
-        for (uint j = 0; j < sz; j++) {
+        for (uint32_t j = 0; j < sz; j++) {
           sum += *ptrs[j];
         }
         EXPECT_EQ(sum, 0);
@@ -149,7 +150,7 @@ TEST(RcuTest, Stress) {
   updater.join();
   // Cleanup for asan
   synchronize_rcu();
-  for (uint i = 0; i < sz; i++) {
+  for (uint32_t i = 0; i < sz; i++) {
     delete ints[i].exchange(nullptr);
   }
 }
@@ -171,7 +172,7 @@ TEST(RcuTest, Synchronize) {
 TEST(RcuTest, NewDomainTest) {
   struct UniqueTag;
   rcu_domain<UniqueTag> newdomain(nullptr);
-  synchronize_rcu();
+  synchronize_rcu(&newdomain);
 }
 
 TEST(RcuTest, NewDomainGuardTest) {
@@ -212,18 +213,16 @@ TEST(RcuTest, MoveReaderBetweenThreads) {
 }
 
 TEST(RcuTest, ForkTest) {
-  rcu_token epoch;
-  std::thread t([&]() {
-    epoch = rcu_default_domain()->lock_shared();
-  });
+  rcu_token<RcuTag> epoch;
+  std::thread t([&]() { epoch = rcu_default_domain()->lock_shared(); });
   t.join();
   auto pid = fork();
   if (pid) {
     // parent
     rcu_default_domain()->unlock_shared(std::move(epoch));
     synchronize_rcu();
-    int status;
-    auto pid2 = wait(&status);
+    int status = -1;
+    auto pid2 = waitpid(pid, &status, 0);
     EXPECT_EQ(status, 0);
     EXPECT_EQ(pid, pid2);
   } else {

@@ -1,11 +1,11 @@
 /*
- * Copyright 2017-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,15 +16,30 @@
 
 #pragma once
 
+#include <memory>
+#include <type_traits>
+#include <utility>
+
+#include <folly/Memory.h>
+#include <folly/Portability.h>
+#include <folly/Traits.h>
+#include <folly/Unit.h>
+#include <folly/container/HeterogeneousAccess.h>
 #include <folly/container/detail/F14Table.h>
 #include <folly/hash/Hash.h>
+#include <folly/lang/Align.h>
 #include <folly/lang/SafeAssert.h>
+#include <folly/memory/Malloc.h>
 
 #if FOLLY_F14_VECTOR_INTRINSICS_AVAILABLE
 
 namespace folly {
 namespace f14 {
 namespace detail {
+
+template <typename Ptr>
+using NonConstPtr = typename std::pointer_traits<Ptr>::template rebind<
+    std::remove_const_t<typename std::pointer_traits<Ptr>::element_type>>;
 
 template <typename KeyType, typename MappedType>
 using MapValueType = std::pair<KeyType const, MappedType>;
@@ -34,6 +49,44 @@ using SetOrMapValueType = std::conditional_t<
     std::is_same<MappedTypeOrVoid, void>::value,
     KeyType,
     MapValueType<KeyType, MappedTypeOrVoid>>;
+
+template <typename T>
+using IsNothrowMoveAndDestroy = Conjunction<
+    std::is_nothrow_move_constructible<T>,
+    std::is_nothrow_destructible<T>>;
+
+// Used to enable EBO for Hasher, KeyEqual, and Alloc.  std::tuple of
+// all empty objects is empty in libstdc++ but not libc++.
+template <
+    char Tag,
+    typename T,
+    bool Inherit = std::is_empty<T>::value && !std::is_final<T>::value>
+struct ObjectHolder {
+  T value_;
+
+  template <typename... Args>
+  ObjectHolder(Args&&... args) : value_{std::forward<Args>(args)...} {}
+
+  T& operator*() {
+    return value_;
+  }
+  T const& operator*() const {
+    return value_;
+  }
+};
+
+template <char Tag, typename T>
+struct ObjectHolder<Tag, T, true> : T {
+  template <typename... Args>
+  ObjectHolder(Args&&... args) : T{std::forward<Args>(args)...} {}
+
+  T& operator*() {
+    return *this;
+  }
+  T const& operator*() const {
+    return *this;
+  }
+};
 
 // Policy provides the functionality of hasher, key_equal, and
 // allocator_type.  In addition, it can add indirection to the values
@@ -63,12 +116,19 @@ template <
     typename AllocOrVoid,
     typename ItemType>
 struct BasePolicy
-    : std::tuple<
-          Defaulted<HasherOrVoid, DefaultHasher<KeyType>>,
-          Defaulted<KeyEqualOrVoid, DefaultKeyEqual<KeyType>>,
+    : private ObjectHolder<
+          'H',
+          Defaulted<HasherOrVoid, DefaultHasher<KeyType>>>,
+      private ObjectHolder<
+          'E',
+          Defaulted<KeyEqualOrVoid, DefaultKeyEqual<KeyType>>>,
+      private ObjectHolder<
+          'A',
           Defaulted<
               AllocOrVoid,
               DefaultAlloc<SetOrMapValueType<KeyType, MappedTypeOrVoid>>>> {
+  //////// user-supplied types
+
   using Key = KeyType;
   using Mapped = MappedTypeOrVoid;
   using Value = SetOrMapValueType<Key, Mapped>;
@@ -78,18 +138,53 @@ struct BasePolicy
   using Alloc = Defaulted<AllocOrVoid, DefaultAlloc<Value>>;
   using AllocTraits = std::allocator_traits<Alloc>;
 
-  using InternalSizeType = std::size_t;
+  using ByteAlloc = typename AllocTraits::template rebind_alloc<uint8_t>;
+  using ByteAllocTraits = typename std::allocator_traits<ByteAlloc>;
+  using BytePtr = typename ByteAllocTraits::pointer;
 
-  using Super = std::tuple<Hasher, KeyEqual, Alloc>;
+  //////// info about user-supplied types
 
-  // if false, F14Table will be smaller but F14Table::begin() won't work
-  static constexpr bool kEnableItemIteration = true;
+  static_assert(
+      std::is_same<typename AllocTraits::value_type, Value>::value,
+      "wrong allocator value_type");
+
+ private:
+  using HasherHolder = ObjectHolder<'H', Hasher>;
+  using KeyEqualHolder = ObjectHolder<'E', KeyEqual>;
+  using AllocHolder = ObjectHolder<'A', Alloc>;
+
+  // emulate c++17's std::allocator_traits<A>::is_always_equal
+
+  template <typename A, typename = void>
+  struct AllocIsAlwaysEqual : std::is_empty<A> {};
+
+  template <typename A>
+  struct AllocIsAlwaysEqual<A, typename A::is_always_equal>
+      : A::is_always_equal {};
+
+ public:
+  static constexpr bool kAllocIsAlwaysEqual = AllocIsAlwaysEqual<Alloc>::value;
+
+  static constexpr bool kDefaultConstructIsNoexcept =
+      std::is_nothrow_default_constructible<Hasher>::value &&
+      std::is_nothrow_default_constructible<KeyEqual>::value &&
+      std::is_nothrow_default_constructible<Alloc>::value;
+
+  static constexpr bool kSwapIsNoexcept = kAllocIsAlwaysEqual &&
+      IsNothrowSwappable<Hasher>{} && IsNothrowSwappable<KeyEqual>{};
 
   static constexpr bool isAvalanchingHasher() {
     return IsAvalanchingHasher<Hasher, Key>::value;
   }
 
-  using Chunk = SSE2Chunk<Item>;
+  //////// internal types and constants
+
+  using InternalSizeType = std::size_t;
+
+  // if false, F14Table will be smaller but F14Table::begin() won't work
+  static constexpr bool kEnableItemIteration = true;
+
+  using Chunk = F14Chunk<Item>;
   using ChunkPtr = typename std::pointer_traits<
       typename AllocTraits::pointer>::template rebind<Chunk>;
   using ItemIter = F14ItemIter<ChunkPtr>;
@@ -99,45 +194,72 @@ struct BasePolicy
       kIsMap == !std::is_void<MappedTypeOrVoid>::value,
       "Assumption for the kIsMap check violated.");
 
-  static_assert(
-      std::is_same<typename AllocTraits::value_type, Value>::value,
-      "wrong allocator value_type");
+  using MappedOrBool = std::conditional_t<kIsMap, Mapped, bool>;
+
+  // if true, bucket_count() after reserve(n) will be as close as possible
+  // to n for multi-chunk tables
+  static constexpr bool kContinuousCapacity = false;
+
+  //////// methods
 
   BasePolicy(Hasher const& hasher, KeyEqual const& keyEqual, Alloc const& alloc)
-      : Super{hasher, keyEqual, alloc} {}
+      : HasherHolder{hasher}, KeyEqualHolder{keyEqual}, AllocHolder{alloc} {}
 
   BasePolicy(BasePolicy const& rhs)
-      : Super{rhs.hasher(),
-              rhs.keyEqual(),
-              AllocTraits::select_on_container_copy_construction(rhs.alloc())} {
-  }
+      : HasherHolder{rhs.hasher()},
+        KeyEqualHolder{rhs.keyEqual()},
+        AllocHolder{
+            AllocTraits::select_on_container_copy_construction(rhs.alloc())} {}
 
   BasePolicy(BasePolicy const& rhs, Alloc const& alloc)
-      : Super{rhs.hasher(), rhs.keyEqual(), alloc} {}
+      : HasherHolder{rhs.hasher()},
+        KeyEqualHolder{rhs.keyEqual()},
+        AllocHolder{alloc} {}
 
   BasePolicy(BasePolicy&& rhs) noexcept
-      : Super{std::move(rhs.hasher()),
-              std::move(rhs.keyEqual()),
-              std::move(rhs.alloc())} {}
+      : HasherHolder{std::move(rhs.hasher())},
+        KeyEqualHolder{std::move(rhs.keyEqual())},
+        AllocHolder{std::move(rhs.alloc())} {}
 
   BasePolicy(BasePolicy&& rhs, Alloc const& alloc) noexcept
-      : Super{std::move(rhs.hasher()), std::move(rhs.keyEqual()), alloc} {}
+      : HasherHolder{std::move(rhs.hasher())},
+        KeyEqualHolder{std::move(rhs.keyEqual())},
+        AllocHolder{alloc} {}
 
+ private:
+  template <typename Src>
+  void maybeAssignAlloc(std::true_type, Src&& src) {
+    alloc() = std::forward<Src>(src);
+  }
+
+  template <typename Src>
+  void maybeAssignAlloc(std::false_type, Src&&) {}
+
+  template <typename A>
+  void maybeSwapAlloc(std::true_type, A& rhs) {
+    using std::swap;
+    swap(alloc(), rhs);
+  }
+
+  template <typename A>
+  void maybeSwapAlloc(std::false_type, A&) {}
+
+ public:
   BasePolicy& operator=(BasePolicy const& rhs) {
     hasher() = rhs.hasher();
     keyEqual() = rhs.keyEqual();
-    if (AllocTraits::propagate_on_container_copy_assignment::value) {
-      alloc() = rhs.alloc();
-    }
+    maybeAssignAlloc(
+        typename AllocTraits::propagate_on_container_copy_assignment{},
+        rhs.alloc());
     return *this;
   }
 
   BasePolicy& operator=(BasePolicy&& rhs) noexcept {
     hasher() = std::move(rhs.hasher());
     keyEqual() = std::move(rhs.keyEqual());
-    if (AllocTraits::propagate_on_container_move_assignment::value) {
-      alloc() = std::move(rhs.alloc());
-    }
+    maybeAssignAlloc(
+        typename AllocTraits::propagate_on_container_move_assignment{},
+        std::move(rhs.alloc()));
     return *this;
   }
 
@@ -145,64 +267,101 @@ struct BasePolicy
     using std::swap;
     swap(hasher(), rhs.hasher());
     swap(keyEqual(), rhs.keyEqual());
-    if (AllocTraits::propagate_on_container_swap::value) {
-      swap(alloc(), rhs.alloc());
-    }
+    maybeSwapAlloc(
+        typename AllocTraits::propagate_on_container_swap{}, rhs.alloc());
   }
 
   Hasher& hasher() {
-    return std::get<0>(*this);
+    return *static_cast<HasherHolder&>(*this);
   }
   Hasher const& hasher() const {
-    return std::get<0>(*this);
+    return *static_cast<HasherHolder const&>(*this);
   }
   KeyEqual& keyEqual() {
-    return std::get<1>(*this);
+    return *static_cast<KeyEqualHolder&>(*this);
   }
   KeyEqual const& keyEqual() const {
-    return std::get<1>(*this);
+    return *static_cast<KeyEqualHolder const&>(*this);
   }
   Alloc& alloc() {
-    return std::get<2>(*this);
+    return *static_cast<AllocHolder&>(*this);
   }
   Alloc const& alloc() const {
-    return std::get<2>(*this);
+    return *static_cast<AllocHolder const&>(*this);
   }
 
   template <typename K>
   std::size_t computeKeyHash(K const& key) const {
     static_assert(
         isAvalanchingHasher() == IsAvalanchingHasher<Hasher, K>::value, "");
+    static_assert(
+        !isAvalanchingHasher() ||
+            sizeof(decltype(hasher()(key))) >= sizeof(std::size_t),
+        "hasher is not avalanching if it doesn't return enough bits");
     return hasher()(key);
   }
 
   Key const& keyForValue(Key const& v) const {
     return v;
   }
-  Key const& keyForValue(
-      std::pair<Key const, std::conditional_t<kIsMap, Mapped, bool>> const& p)
-      const {
+  Key const& keyForValue(std::pair<Key const, MappedOrBool> const& p) const {
     return p.first;
+  }
+  Key const& keyForValue(std::pair<Key&&, MappedOrBool&&> const& p) const {
+    return p.first;
+  }
+
+  // map's choice of pair<K const, T> as value_type is unfortunate,
+  // because it means we either need a proxy iterator, a pointless key
+  // copy when moving items during rehash, or some sort of UB hack.
+  //
+  // This code implements the hack.  Use moveValue(v) instead of
+  // std::move(v) as the source of a move construction.  enable_if_t is
+  // used so that this works for maps while being a no-op for sets.
+  template <typename Dummy = int>
+  static std::pair<Key&&, MappedOrBool&&> moveValue(
+      std::pair<Key const, MappedOrBool>& value,
+      std::enable_if_t<kIsMap, Dummy> = 0) {
+    return {std::move(const_cast<Key&>(value.first)), std::move(value.second)};
+  }
+
+  template <typename Dummy = int>
+  static Value&& moveValue(Value& value, std::enable_if_t<!kIsMap, Dummy> = 0) {
+    return std::move(value);
   }
 
   template <typename P>
   bool
-  beforeCopy(std::size_t /*size*/, std::size_t /*capacity*/, P const& /*rhs*/) {
+  beforeBuild(std::size_t /*size*/, std::size_t /*capacity*/, P&& /*rhs*/) {
     return false;
   }
 
   template <typename P>
-  void afterCopy(
+  void afterBuild(
       bool /*undoState*/,
       bool /*success*/,
       std::size_t /*size*/,
       std::size_t /*capacity*/,
-      P const& /*rhs*/) {}
+      P&& /*rhs*/) {}
+
+  std::size_t alignedAllocSize(std::size_t n) const {
+    if (kRequiredVectorAlignment <= alignof(max_align_t) ||
+        std::is_same<ByteAlloc, std::allocator<uint8_t>>::value) {
+      return n;
+    } else {
+      return n + kRequiredVectorAlignment;
+    }
+  }
 
   bool beforeRehash(
       std::size_t /*size*/,
       std::size_t /*oldCapacity*/,
-      std::size_t /*newCapacity*/) {
+      std::size_t /*newCapacity*/,
+      std::size_t chunkAllocSize,
+      BytePtr& outChunkAllocation) {
+    outChunkAllocation =
+        allocateOverAligned<ByteAlloc, kRequiredVectorAlignment>(
+            ByteAlloc{alloc()}, chunkAllocSize);
     return false;
   }
 
@@ -211,22 +370,43 @@ struct BasePolicy
       bool /*success*/,
       std::size_t /*size*/,
       std::size_t /*oldCapacity*/,
-      std::size_t /*newCapacity*/) {}
+      std::size_t /*newCapacity*/,
+      BytePtr chunkAllocation,
+      std::size_t chunkAllocSize) {
+    // on success, this will be the old allocation, on failure the new one
+    if (chunkAllocation != nullptr) {
+      deallocateOverAligned<ByteAlloc, kRequiredVectorAlignment>(
+          ByteAlloc{alloc()}, chunkAllocation, chunkAllocSize);
+    }
+  }
 
-  void beforeClear(std::size_t /*size*/, std::size_t) {}
+  void beforeClear(std::size_t /*size*/, std::size_t /*capacity*/) {}
 
-  void afterClear(std::size_t /*capacity*/) {}
+  void afterClear(std::size_t /*size*/, std::size_t /*capacity*/) {}
 
-  void beforeReset(std::size_t /*size*/, std::size_t) {}
+  void beforeReset(std::size_t /*size*/, std::size_t /*capacity*/) {}
 
-  void afterReset() {}
+  void afterReset(
+      std::size_t /*size*/,
+      std::size_t /*capacity*/,
+      BytePtr chunkAllocation,
+      std::size_t chunkAllocSize) {
+    deallocateOverAligned<ByteAlloc, kRequiredVectorAlignment>(
+        ByteAlloc{alloc()}, chunkAllocation, chunkAllocSize);
+  }
 
-  void prefetchValue(Item const&) {
+  void prefetchValue(Item const&) const {
     // Subclass should disable with prefetchBeforeRehash(),
     // prefetchBeforeCopy(), and prefetchBeforeDestroy().  if they don't
     // override this method, because neither gcc nor clang can figure
     // out that DenseMaskIter with an empty body can be elided.
     FOLLY_SAFE_DCHECK(false, "should be disabled");
+  }
+
+  void afterDestroyWithoutDeallocate(Value* addr, std::size_t n) {
+    if (kIsLibrarySanitizeAddress) {
+      memset(static_cast<void*>(addr), 0x66, sizeof(Value) * n);
+    }
   }
 };
 
@@ -240,7 +420,7 @@ class BaseIter : public std::iterator<
                      ValuePtr,
                      decltype(*std::declval<ValuePtr>())> {
  protected:
-  using Chunk = SSE2Chunk<Item>;
+  using Chunk = F14Chunk<Item>;
   using ChunkPtr =
       typename std::pointer_traits<ValuePtr>::template rebind<Chunk>;
   using ItemIter = F14ItemIter<ChunkPtr>;
@@ -267,13 +447,13 @@ using ValueContainerIteratorBase = BaseIter<
 template <typename ValuePtr>
 class ValueContainerIterator : public ValueContainerIteratorBase<ValuePtr> {
   using Super = ValueContainerIteratorBase<ValuePtr>;
-  using typename Super::ItemIter;
-  using typename Super::ValueConstPtr;
+  using ItemIter = typename Super::ItemIter;
+  using ValueConstPtr = typename Super::ValueConstPtr;
 
  public:
-  using typename Super::pointer;
-  using typename Super::reference;
-  using typename Super::value_type;
+  using pointer = typename Super::pointer;
+  using reference = typename Super::reference;
+  using value_type = typename Super::value_type;
 
   ValueContainerIterator() = default;
   ValueContainerIterator(ValueContainerIterator const&) = default;
@@ -346,14 +526,16 @@ class ValueContainerPolicy : public BasePolicy<
       KeyEqualOrVoid,
       AllocOrVoid,
       SetOrMapValueType<Key, MappedTypeOrVoid>>;
-  using typename Super::Alloc;
-  using typename Super::Item;
-  using typename Super::ItemIter;
-  using typename Super::Value;
+  using Alloc = typename Super::Alloc;
+  using AllocTraits = typename Super::AllocTraits;
+  using Item = typename Super::Item;
+  using ItemIter = typename Super::ItemIter;
+  using Value = typename Super::Value;
 
  private:
+  using ByteAlloc = typename Super::ByteAlloc;
+
   using Super::kIsMap;
-  using typename Super::AllocTraits;
 
  public:
   using ConstIter = ValueContainerIterator<typename AllocTraits::const_pointer>;
@@ -378,7 +560,7 @@ class ValueContainerPolicy : public BasePolicy<
 
   static constexpr bool destroyItemOnClear() {
     return !std::is_trivially_destructible<Item>::value ||
-        !std::is_same<Alloc, std::allocator<Value>>::value;
+        !AllocatorHasDefaultObjectDestroy<Alloc, Item>::value;
   }
 
   // inherit constructors
@@ -402,84 +584,91 @@ class ValueContainerPolicy : public BasePolicy<
     return this->keyEqual()(key, keyForValue(item));
   }
 
-  Value const& valueAtItemForCopy(Item const& item) const {
+  Value const& buildArgForItem(Item const& item) const& {
     return item;
   }
 
-  template <typename... Args>
-  void
-  constructValueAtItem(std::size_t /*size*/, Item* itemAddr, Args&&... args) {
+  // buildArgForItem(Item&)&& is used when moving between unequal allocators
+  decltype(auto) buildArgForItem(Item& item) && {
+    return Super::moveValue(item);
+  }
+
+  Value const& valueAtItem(Item const& item) const {
+    return item;
+  }
+
+  Value&& valueAtItemForExtract(Item& item) {
+    return std::move(item);
+  }
+
+  template <typename Table, typename... Args>
+  void constructValueAtItem(Table&&, Item* itemAddr, Args&&... args) {
     Alloc& a = this->alloc();
-    folly::assume(itemAddr != nullptr);
+    // GCC < 6 doesn't use the fact that itemAddr came from a reference
+    // to avoid a null-check in the placement new.  folly::assume-ing it
+    // here gets rid of that branch.  The branch is very predictable,
+    // but spoils some further optimizations.  All clang versions that
+    // compile folly seem to be okay.
+    //
+    // TODO(T31574848): clean up assume-s used to optimize placement new
+    assume(itemAddr != nullptr);
     AllocTraits::construct(a, itemAddr, std::forward<Args>(args)...);
   }
 
   template <typename T>
-  std::enable_if_t<std::is_nothrow_move_constructible<T>::value>
-  complainUnlessNothrowMove() {}
+  std::enable_if_t<IsNothrowMoveAndDestroy<T>::value>
+  complainUnlessNothrowMoveAndDestroy() {}
 
   template <typename T>
-  FOLLY_DEPRECATED(
-      "use F14NodeMap/Set or mark key and mapped type move constructor nothrow")
-  std::enable_if_t<!std::is_nothrow_move_constructible<
-      T>::value> complainUnlessNothrowMove() {}
+  [[deprecated(
+      "mark {key_type,mapped_type} {move constructor,destructor} noexcept, or use F14Node* if they aren't")]] std::
+      enable_if_t<!IsNothrowMoveAndDestroy<T>::value>
+      complainUnlessNothrowMoveAndDestroy() {}
 
-  template <typename Dummy = int>
-  void moveItemDuringRehash(
-      Item* itemAddr,
-      Item& src,
-      typename std::enable_if_t<kIsMap, Dummy> = 0) {
-    complainUnlessNothrowMove<Key>();
-    complainUnlessNothrowMove<MappedTypeOrVoid>();
+  void moveItemDuringRehash(Item* itemAddr, Item& src) {
+    complainUnlessNothrowMoveAndDestroy<Key>();
+    complainUnlessNothrowMoveAndDestroy<lift_unit_t<MappedTypeOrVoid>>();
 
-    // map's choice of pair<K const,T> as value_type is unfortunate,
-    // because it means we either need a proxy iterator, a pointless key
-    // copy when moving items during rehash, or some sort of UB hack.
-    // See https://fb.quip.com/kKieAEtg0Pao for much more discussion of
-    // the possibilities.
-    //
-    // This code implements the hack.
-    // Laundering in the standard is only described as a solution for
-    // changes to const fields due to the creation of a new object
-    // lifetime (destroy and then placement new in the same location),
-    // but it seems highly likely that it will also cause the compiler
-    // to drop such assumptions that are violated due to our UB const_cast.
-    constructValueAtItem(
-        0,
-        itemAddr,
-        std::move(const_cast<Key&>(src.first)),
-        std::move(src.second));
+    constructValueAtItem(0, itemAddr, Super::moveValue(src));
     if (destroyItemOnClear()) {
-      destroyItem(*folly::launder(std::addressof(src)));
+      if (kIsMap) {
+        // Laundering in the standard is only described as a solution
+        // for changes to const fields due to the creation of a new
+        // object lifetime (destroy and then placement new in the same
+        // location), but it seems highly likely that it will also cause
+        // the compiler to drop such assumptions that are violated due
+        // to our UB const_cast in moveValue.
+        destroyItem(*launder(std::addressof(src)));
+      } else {
+        destroyItem(src);
+      }
     }
   }
 
-  template <typename Dummy = int>
-  void moveItemDuringRehash(
-      Item* itemAddr,
-      Item& src,
-      typename std::enable_if_t<!kIsMap, Dummy> = 0) {
-    complainUnlessNothrowMove<Item>();
-
-    constructValueAtItem(0, itemAddr, std::move(src));
-    if (destroyItemOnClear()) {
-      destroyItem(src);
-    }
-  }
-
-  void destroyItem(Item& item) {
+  void destroyItem(Item& item) noexcept {
     Alloc& a = this->alloc();
-    AllocTraits::destroy(a, std::addressof(item));
+    auto ptr = std::addressof(item);
+    AllocTraits::destroy(a, ptr);
+    this->afterDestroyWithoutDeallocate(ptr, 1);
   }
 
-  std::size_t indirectBytesUsed(std::size_t /*size*/, std::size_t /*capacity*/)
-      const {
-    return 0;
+  template <typename V>
+  void visitPolicyAllocationClasses(
+      std::size_t chunkAllocSize,
+      std::size_t /*size*/,
+      std::size_t /*capacity*/,
+      V&& visitor) const {
+    if (chunkAllocSize > 0) {
+      visitor(
+          allocationBytesForOverAligned<ByteAlloc, kRequiredVectorAlignment>(
+              chunkAllocSize),
+          1);
+    }
   }
 
   //////// F14BasicMap/Set policy
 
-  Iter makeIter(ItemIter const& underlying) const {
+  FOLLY_ALWAYS_INLINE Iter makeIter(ItemIter const& underlying) const {
     return Iter{underlying};
   }
   ConstIter makeConstIter(ItemIter const& underlying) const {
@@ -503,13 +692,13 @@ class NodeContainerPolicy;
 template <typename ValuePtr>
 class NodeContainerIterator : public BaseIter<ValuePtr, NonConstPtr<ValuePtr>> {
   using Super = BaseIter<ValuePtr, NonConstPtr<ValuePtr>>;
-  using typename Super::ItemIter;
-  using typename Super::ValueConstPtr;
+  using ItemIter = typename Super::ItemIter;
+  using ValueConstPtr = typename Super::ValueConstPtr;
 
  public:
-  using typename Super::pointer;
-  using typename Super::reference;
-  using typename Super::value_type;
+  using pointer = typename Super::pointer;
+  using reference = typename Super::reference;
+  using value_type = typename Super::value_type;
 
   NodeContainerIterator() = default;
   NodeContainerIterator(NodeContainerIterator const&) = default;
@@ -593,14 +782,16 @@ class NodeContainerPolicy
               std::is_void<MappedTypeOrVoid>::value,
               Key,
               MapValueType<Key, MappedTypeOrVoid>>>>>::pointer>;
-  using typename Super::Alloc;
-  using typename Super::Item;
-  using typename Super::ItemIter;
-  using typename Super::Value;
+  using Alloc = typename Super::Alloc;
+  using AllocTraits = typename Super::AllocTraits;
+  using Item = typename Super::Item;
+  using ItemIter = typename Super::ItemIter;
+  using Value = typename Super::Value;
 
  private:
+  using ByteAlloc = typename Super::ByteAlloc;
+
   using Super::kIsMap;
-  using typename Super::AllocTraits;
 
  public:
   using ConstIter = NodeContainerIterator<typename AllocTraits::const_pointer>;
@@ -645,35 +836,63 @@ class NodeContainerPolicy
     return this->keyEqual()(key, keyForValue(*item));
   }
 
-  Value const& valueAtItemForCopy(Item const& item) const {
+  Value const& buildArgForItem(Item const& item) const& {
     return *item;
   }
 
-  template <typename... Args>
-  void
-  constructValueAtItem(std::size_t /*size*/, Item* itemAddr, Args&&... args) {
+  // buildArgForItem(Item&)&& is used when moving between unequal allocators
+  decltype(auto) buildArgForItem(Item& item) && {
+    return Super::moveValue(*item);
+  }
+
+  Value const& valueAtItem(Item const& item) const {
+    return *item;
+  }
+
+  Value&& valueAtItemForExtract(Item& item) {
+    return std::move(*item);
+  }
+
+  template <typename Table, typename... Args>
+  void constructValueAtItem(Table&&, Item* itemAddr, Args&&... args) {
     Alloc& a = this->alloc();
-    folly::assume(itemAddr != nullptr);
+    // TODO(T31574848): clean up assume-s used to optimize placement new
+    assume(itemAddr != nullptr);
     new (itemAddr) Item{AllocTraits::allocate(a, 1)};
     auto p = std::addressof(**itemAddr);
-    folly::assume(p != nullptr);
+    // TODO(T31574848): clean up assume-s used to optimize placement new
+    assume(p != nullptr);
+    auto rollback = makeGuard([&] { AllocTraits::deallocate(a, p, 1); });
     AllocTraits::construct(a, p, std::forward<Args>(args)...);
+    rollback.dismiss();
   }
 
   void moveItemDuringRehash(Item* itemAddr, Item& src) {
     // This is basically *itemAddr = src; src = nullptr, but allowing
     // for fancy pointers.
-    folly::assume(itemAddr != nullptr);
+    // TODO(T31574848): clean up assume-s used to optimize placement new
+    assume(itemAddr != nullptr);
     new (itemAddr) Item{std::move(src)};
     src = nullptr;
     src.~Item();
   }
 
-  void prefetchValue(Item const& item) {
+  void prefetchValue(Item const& item) const {
     prefetchAddr(std::addressof(*item));
   }
 
-  void destroyItem(Item& item) {
+  template <typename T>
+  std::enable_if_t<std::is_nothrow_destructible<T>::value>
+  complainUnlessNothrowDestroy() {}
+
+  template <typename T>
+  [[deprecated("Mark key and mapped type destructor nothrow")]] std::
+      enable_if_t<!std::is_nothrow_destructible<T>::value>
+      complainUnlessNothrowDestroy() {}
+
+  void destroyItem(Item& item) noexcept {
+    complainUnlessNothrowDestroy<Key>();
+    complainUnlessNothrowDestroy<lift_unit_t<MappedTypeOrVoid>>();
     if (item != nullptr) {
       Alloc& a = this->alloc();
       AllocTraits::destroy(a, std::addressof(*item));
@@ -682,14 +901,26 @@ class NodeContainerPolicy
     item.~Item();
   }
 
-  std::size_t indirectBytesUsed(std::size_t size, std::size_t /*capacity*/)
-      const {
-    return size * sizeof(Value);
+  template <typename V>
+  void visitPolicyAllocationClasses(
+      std::size_t chunkAllocSize,
+      std::size_t size,
+      std::size_t /*capacity*/,
+      V&& visitor) const {
+    if (chunkAllocSize > 0) {
+      visitor(
+          allocationBytesForOverAligned<ByteAlloc, kRequiredVectorAlignment>(
+              chunkAllocSize),
+          1);
+    }
+    if (size > 0) {
+      visitor(sizeof(Value), size);
+    }
   }
 
   //////// F14BasicMap/Set policy
 
-  Iter makeIter(ItemIter const& underlying) const {
+  FOLLY_ALWAYS_INLINE Iter makeIter(ItemIter const& underlying) const {
     return Iter{underlying};
   }
   ConstIter makeConstIter(ItemIter const& underlying) const {
@@ -707,18 +938,19 @@ template <
     typename MappedTypeOrVoid,
     typename HasherOrVoid,
     typename KeyEqualOrVoid,
-    typename AllocOrVoid>
+    typename AllocOrVoid,
+    typename EligibleForPerturbedInsertionOrder>
 class VectorContainerPolicy;
 
 template <typename ValuePtr>
 class VectorContainerIterator : public BaseIter<ValuePtr, uint32_t> {
   using Super = BaseIter<ValuePtr, uint32_t>;
-  using typename Super::ValueConstPtr;
+  using ValueConstPtr = typename Super::ValueConstPtr;
 
  public:
-  using typename Super::pointer;
-  using typename Super::reference;
-  using typename Super::value_type;
+  using pointer = typename Super::pointer;
+  using reference = typename Super::reference;
+  using value_type = typename Super::value_type;
 
   VectorContainerIterator() = default;
   VectorContainerIterator(VectorContainerIterator const&) = default;
@@ -728,8 +960,6 @@ class VectorContainerIterator : public BaseIter<ValuePtr, uint32_t> {
   ~VectorContainerIterator() = default;
 
   /*implicit*/ operator VectorContainerIterator<ValueConstPtr>() const {
-    // can we trust that fancy pointers are implicitly convertible to
-    // fancy const pointers?
     return VectorContainerIterator<ValueConstPtr>{current_, lowest_};
   }
 
@@ -774,7 +1004,13 @@ class VectorContainerIterator : public BaseIter<ValuePtr, uint32_t> {
     return current_ - lowest_;
   }
 
-  template <typename K, typename M, typename H, typename E, typename A>
+  template <
+      typename K,
+      typename M,
+      typename H,
+      typename E,
+      typename A,
+      typename P>
   friend class VectorContainerPolicy;
 
   template <typename P>
@@ -790,7 +1026,8 @@ template <
     typename MappedTypeOrVoid,
     typename HasherOrVoid,
     typename KeyEqualOrVoid,
-    typename AllocOrVoid>
+    typename AllocOrVoid,
+    typename EligibleForPerturbedInsertionOrder>
 class VectorContainerPolicy : public BasePolicy<
                                   Key,
                                   MappedTypeOrVoid,
@@ -806,17 +1043,26 @@ class VectorContainerPolicy : public BasePolicy<
       KeyEqualOrVoid,
       AllocOrVoid,
       uint32_t>;
-  using typename Super::Alloc;
-  using typename Super::Item;
-  using typename Super::ItemIter;
-  using typename Super::Value;
+  using Value = typename Super::Value;
+  using Alloc = typename Super::Alloc;
+  using AllocTraits = typename Super::AllocTraits;
+  using ByteAlloc = typename Super::ByteAlloc;
+  using ByteAllocTraits = typename Super::ByteAllocTraits;
+  using BytePtr = typename Super::BytePtr;
+  using Hasher = typename Super::Hasher;
+  using Item = typename Super::Item;
+  using ItemIter = typename Super::ItemIter;
+  using KeyEqual = typename Super::KeyEqual;
+
+  using Super::kAllocIsAlwaysEqual;
 
  private:
   using Super::kIsMap;
-  using typename Super::AllocTraits;
 
  public:
   static constexpr bool kEnableItemIteration = false;
+
+  static constexpr bool kContinuousCapacity = true;
 
   using InternalSizeType = Item;
 
@@ -826,6 +1072,9 @@ class VectorContainerPolicy : public BasePolicy<
       kIsMap,
       VectorContainerIterator<typename AllocTraits::pointer>,
       ConstIter>;
+  using ConstReverseIter = typename AllocTraits::const_pointer;
+  using ReverseIter = std::
+      conditional_t<kIsMap, typename AllocTraits::pointer, ConstReverseIter>;
 
   using ValuePtr = typename AllocTraits::pointer;
 
@@ -847,15 +1096,46 @@ class VectorContainerPolicy : public BasePolicy<
     return false;
   }
 
-  // inherit constructors
-  using Super::Super;
+ private:
+  static constexpr bool valueIsTriviallyCopyable() {
+    return AllocatorHasDefaultObjectConstruct<Alloc, Value, Value>::value &&
+        AllocatorHasDefaultObjectDestroy<Alloc, Value>::value &&
+        is_trivially_copyable<Value>::value;
+  }
 
-  VectorContainerPolicy(VectorContainerPolicy const& rhs)
-      : Super{rhs}, values_{nullptr} {}
+ public:
+  VectorContainerPolicy(
+      Hasher const& hasher,
+      KeyEqual const& keyEqual,
+      Alloc const& alloc)
+      : Super{hasher, keyEqual, alloc} {}
+
+  VectorContainerPolicy(VectorContainerPolicy const& rhs) : Super{rhs} {
+    // values_ will get allocated later to do the copy
+  }
+
+  VectorContainerPolicy(VectorContainerPolicy const& rhs, Alloc const& alloc)
+      : Super{rhs, alloc} {
+    // values_ will get allocated later to do the copy
+  }
 
   VectorContainerPolicy(VectorContainerPolicy&& rhs) noexcept
       : Super{std::move(rhs)}, values_{rhs.values_} {
     rhs.values_ = nullptr;
+  }
+
+  VectorContainerPolicy(
+      VectorContainerPolicy&& rhs,
+      Alloc const& alloc) noexcept
+      : Super{std::move(rhs), alloc} {
+    if (kAllocIsAlwaysEqual || this->alloc() == rhs.alloc()) {
+      // common case
+      values_ = rhs.values_;
+      rhs.values_ = nullptr;
+    } else {
+      // table must be constructed in new memory
+      values_ = nullptr;
+    }
   }
 
   VectorContainerPolicy& operator=(VectorContainerPolicy const& rhs) {
@@ -868,9 +1148,15 @@ class VectorContainerPolicy : public BasePolicy<
 
   VectorContainerPolicy& operator=(VectorContainerPolicy&& rhs) noexcept {
     if (this != &rhs) {
+      FOLLY_SAFE_DCHECK(values_ == nullptr, "");
+      bool transfer =
+          AllocTraits::propagate_on_container_move_assignment::value ||
+          kAllocIsAlwaysEqual || this->alloc() == rhs.alloc();
       Super::operator=(std::move(rhs));
-      values_ = rhs.values_;
-      rhs.values_ = nullptr;
+      if (transfer) {
+        values_ = rhs.values_;
+        rhs.values_ = nullptr;
+      }
     }
     return *this;
   }
@@ -884,8 +1170,7 @@ class VectorContainerPolicy : public BasePolicy<
   template <typename K>
   std::size_t computeKeyHash(K const& key) const {
     static_assert(
-        Super::isAvalanchingHasher() ==
-            IsAvalanchingHasher<typename Super::Hasher, K>::value,
+        Super::isAvalanchingHasher() == IsAvalanchingHasher<Hasher, K>::value,
         "");
     return this->hasher()(key);
   }
@@ -914,113 +1199,132 @@ class VectorContainerPolicy : public BasePolicy<
     return keyForValue(values_[arg.index_]);
   }
 
-  VectorContainerIndexSearch valueAtItemForCopy(Item const& item) const {
+  VectorContainerIndexSearch buildArgForItem(Item const& item) const {
     return {item};
   }
 
+  Value const& valueAtItem(Item const& item) const {
+    return values_[item];
+  }
+
+  Value&& valueAtItemForExtract(Item& item) {
+    return std::move(values_[item]);
+  }
+
+  template <typename Table>
   void constructValueAtItem(
-      std::size_t /*size*/,
+      Table&&,
       Item* itemAddr,
       VectorContainerIndexSearch arg) {
     *itemAddr = arg.index_;
   }
 
-  template <typename... Args>
-  void constructValueAtItem(std::size_t size, Item* itemAddr, Args&&... args) {
+  template <typename Table, typename... Args>
+  void constructValueAtItem(Table&& table, Item* itemAddr, Args&&... args) {
     Alloc& a = this->alloc();
+    auto size = static_cast<InternalSizeType>(table.size());
+    FOLLY_SAFE_DCHECK(
+        table.size() < std::numeric_limits<InternalSizeType>::max(), "");
     *itemAddr = size;
-    AllocTraits::construct(
-        a, std::addressof(values_[size]), std::forward<Args>(args)...);
+    auto dst = std::addressof(values_[size]);
+    // TODO(T31574848): clean up assume-s used to optimize placement new
+    assume(dst != nullptr);
+    AllocTraits::construct(a, dst, std::forward<Args>(args)...);
+
+    constexpr bool perturb = FOLLY_F14_PERTURB_INSERTION_ORDER;
+    if (EligibleForPerturbedInsertionOrder::value && perturb &&
+        !tlsPendingSafeInserts()) {
+      // Pick a random victim. We have to do this post-construction
+      // because the item and tag are already set in the table before
+      // calling constructValueAtItem, so if there is a tag collision
+      // find may evaluate values_[size] during the search.
+      auto i = static_cast<InternalSizeType>(tlsMinstdRand(size + 1));
+      if (i != size) {
+        auto& lhsItem = *itemAddr;
+        auto rhsIter = table.find(
+            VectorContainerIndexSearch{static_cast<InternalSizeType>(i)});
+        FOLLY_SAFE_DCHECK(!rhsIter.atEnd(), "");
+        auto& rhsItem = rhsIter.item();
+        FOLLY_SAFE_DCHECK(lhsItem == size, "");
+        FOLLY_SAFE_DCHECK(rhsItem == i, "");
+
+        aligned_storage_for_t<Value> tmp;
+        Value* tmpValue = static_cast<Value*>(static_cast<void*>(&tmp));
+        transfer(a, std::addressof(values_[i]), tmpValue, 1);
+        transfer(
+            a, std::addressof(values_[size]), std::addressof(values_[i]), 1);
+        transfer(a, tmpValue, std::addressof(values_[size]), 1);
+        lhsItem = i;
+        rhsItem = size;
+      }
+    }
   }
 
   void moveItemDuringRehash(Item* itemAddr, Item& src) {
     *itemAddr = src;
   }
 
-  void prefetchValue(Item const& item) {
+  void prefetchValue(Item const& item) const {
     prefetchAddr(std::addressof(values_[item]));
   }
 
-  void destroyItem(Item&) {}
+  void destroyItem(Item&) noexcept {}
 
   template <typename T>
-  std::enable_if_t<std::is_nothrow_move_constructible<T>::value>
-  complainUnlessNothrowMove() {}
+  std::enable_if_t<IsNothrowMoveAndDestroy<T>::value>
+  complainUnlessNothrowMoveAndDestroy() {}
 
   template <typename T>
-  FOLLY_DEPRECATED(
-      "use F14NodeMap/Set or mark key and mapped type move constructor nothrow")
-  std::enable_if_t<!std::is_nothrow_move_constructible<
-      T>::value> complainUnlessNothrowMove() {}
+  [[deprecated(
+      "mark {key_type,mapped_type} {move constructor,destructor} noexcept, or use F14Node* if they aren't")]] std::
+      enable_if_t<!IsNothrowMoveAndDestroy<T>::value>
+      complainUnlessNothrowMoveAndDestroy() {}
 
-  template <typename Dummy = int>
-  void transfer(
-      Alloc& a,
-      Value* src,
-      Value* dst,
-      std::size_t n,
-      typename std::enable_if_t<kIsMap, Dummy> = 0) {
-    complainUnlessNothrowMove<Key>();
-    complainUnlessNothrowMove<MappedTypeOrVoid>();
+  void transfer(Alloc& a, Value* src, Value* dst, std::size_t n) {
+    complainUnlessNothrowMoveAndDestroy<Key>();
+    complainUnlessNothrowMoveAndDestroy<lift_unit_t<MappedTypeOrVoid>>();
 
-    if (std::is_same<Alloc, std::allocator<Value>>::value &&
-        FOLLY_IS_TRIVIALLY_COPYABLE(Value)) {
-      std::memcpy(dst, src, n * sizeof(Value));
+    auto origSrc = src;
+    if (valueIsTriviallyCopyable()) {
+      std::memcpy(
+          static_cast<void*>(dst),
+          static_cast<void const*>(src),
+          n * sizeof(Value));
     } else {
       for (std::size_t i = 0; i < n; ++i, ++src, ++dst) {
-        // See ValueContainerPolicy::moveItemDuringRehash for an explanation
-        //  of // the strange const_cast and launder below
-        folly::assume(dst != nullptr);
-        AllocTraits::construct(
-            a,
-            dst,
-            std::move(const_cast<Key&>(src->first)),
-            std::move(src->second));
-        AllocTraits::destroy(a, folly::launder(src));
+        // TODO(T31574848): clean up assume-s used to optimize placement new
+        assume(dst != nullptr);
+        AllocTraits::construct(a, dst, Super::moveValue(*src));
+        if (kIsMap) {
+          AllocTraits::destroy(a, launder(src));
+        } else {
+          AllocTraits::destroy(a, src);
+        }
       }
     }
+    this->afterDestroyWithoutDeallocate(origSrc, n);
   }
 
-  template <typename Dummy = int>
-  void transfer(
-      Alloc& a,
-      Value* src,
-      Value* dst,
-      std::size_t n,
-      typename std::enable_if_t<!kIsMap, Dummy> = 0) {
-    complainUnlessNothrowMove<Value>();
-
-    if (std::is_same<Alloc, std::allocator<Value>>::value &&
-        FOLLY_IS_TRIVIALLY_COPYABLE(Value)) {
-      std::memcpy(dst, src, n * sizeof(Value));
-    } else {
-      for (std::size_t i = 0; i < n; ++i, ++src, ++dst) {
-        folly::assume(dst != nullptr);
-        AllocTraits::construct(a, dst, std::move(*src));
-        AllocTraits::destroy(a, src);
-      }
-    }
-  }
-
-  bool beforeCopy(
-      std::size_t size,
-      std::size_t /*capacity*/,
-      VectorContainerPolicy const& rhs) {
+  template <typename P, typename V>
+  bool beforeBuildImpl(std::size_t size, P&& rhs, V const& constructorArgFor) {
     Alloc& a = this->alloc();
 
     FOLLY_SAFE_DCHECK(values_ != nullptr, "");
 
-    Value const* src = std::addressof(rhs.values_[0]);
+    auto src = std::addressof(rhs.values_[0]);
     Value* dst = std::addressof(values_[0]);
 
-    if (std::is_same<Alloc, std::allocator<Value>>::value &&
-        FOLLY_IS_TRIVIALLY_COPYABLE(Value)) {
-      std::memcpy(dst, src, size * sizeof(Value));
+    if (valueIsTriviallyCopyable()) {
+      std::memcpy(
+          static_cast<void*>(dst),
+          static_cast<void const*>(src),
+          size * sizeof(Value));
     } else {
       for (std::size_t i = 0; i < size; ++i, ++src, ++dst) {
         try {
-          folly::assume(dst != nullptr);
-          AllocTraits::construct(a, dst, *src);
+          // TODO(T31574848): clean up assume-s used to optimize placement new
+          assume(dst != nullptr);
+          AllocTraits::construct(a, dst, constructorArgFor(*src));
         } catch (...) {
           for (Value* cleanup = std::addressof(values_[0]); cleanup != dst;
                ++cleanup) {
@@ -1033,31 +1337,79 @@ class VectorContainerPolicy : public BasePolicy<
     return true;
   }
 
-  void afterCopy(
+  bool beforeBuild(
+      std::size_t size,
+      std::size_t /*capacity*/,
+      VectorContainerPolicy const& rhs) {
+    return beforeBuildImpl(size, rhs, [](Value const& v) { return v; });
+  }
+
+  bool beforeBuild(
+      std::size_t size,
+      std::size_t /*capacity*/,
+      VectorContainerPolicy&& rhs) {
+    return beforeBuildImpl(
+        size, rhs, [](Value& v) { return Super::moveValue(v); });
+  }
+
+  template <typename P>
+  void afterBuild(
       bool /*undoState*/,
       bool success,
       std::size_t /*size*/,
       std::size_t /*capacity*/,
-      VectorContainerPolicy const& /*rhs*/) {
-    // valueAtItemForCopy can be copied trivially, no failure should occur
+      P&& /*rhs*/) {
+    // buildArgForItem can be used to construct a new item trivially,
+    // so no failure between beforeBuild and afterBuild should be possible
     FOLLY_SAFE_DCHECK(success, "");
   }
 
+ private:
+  // Returns the byte offset of the first Value in a unified allocation
+  // that first holds prefixBytes of data, where prefixBytes comes from
+  // Chunk storage and may be only 4-byte aligned due to sub-chunk
+  // allocation.
+  static std::size_t valuesOffset(std::size_t prefixBytes) {
+    FOLLY_SAFE_DCHECK((prefixBytes % alignof(Item)) == 0, "");
+    if (alignof(Value) > alignof(Item)) {
+      prefixBytes = -(-prefixBytes & ~(alignof(Value) - 1));
+    }
+    FOLLY_SAFE_DCHECK((prefixBytes % alignof(Value)) == 0, "");
+    return prefixBytes;
+  }
+
+  // Returns the total number of bytes that should be allocated to store
+  // prefixBytes of Chunks and valueCapacity values.
+  static std::size_t allocSize(
+      std::size_t prefixBytes,
+      std::size_t valueCapacity) {
+    return valuesOffset(prefixBytes) + sizeof(Value) * valueCapacity;
+  }
+
+ public:
   ValuePtr beforeRehash(
       std::size_t size,
       std::size_t oldCapacity,
-      std::size_t newCapacity) {
+      std::size_t newCapacity,
+      std::size_t chunkAllocSize,
+      BytePtr& outChunkAllocation) {
     FOLLY_SAFE_DCHECK(
         size <= oldCapacity && ((values_ == nullptr) == (oldCapacity == 0)) &&
             newCapacity > 0 &&
             newCapacity <= (std::numeric_limits<Item>::max)(),
         "");
 
-    Alloc& a = this->alloc();
+    outChunkAllocation =
+        allocateOverAligned<ByteAlloc, kRequiredVectorAlignment>(
+            ByteAlloc{Super::alloc()}, allocSize(chunkAllocSize, newCapacity));
+
     ValuePtr before = values_;
-    ValuePtr after = AllocTraits::allocate(a, newCapacity);
+    ValuePtr after = std::pointer_traits<ValuePtr>::pointer_to(
+        *static_cast<Value*>(static_cast<void*>(
+            &*outChunkAllocation + valuesOffset(chunkAllocSize))));
 
     if (size > 0) {
+      Alloc& a = this->alloc();
       transfer(a, std::addressof(before[0]), std::addressof(after[0]), size);
     }
 
@@ -1065,14 +1417,12 @@ class VectorContainerPolicy : public BasePolicy<
     return before;
   }
 
-  FOLLY_NOINLINE void
-  afterFailedRehash(ValuePtr state, std::size_t size, std::size_t newCapacity) {
+  FOLLY_NOINLINE void afterFailedRehash(ValuePtr state, std::size_t size) {
     // state holds the old storage
     Alloc& a = this->alloc();
     if (size > 0) {
       transfer(a, std::addressof(values_[0]), std::addressof(state[0]), size);
     }
-    AllocTraits::deallocate(a, values_, newCapacity);
     values_ = state;
   }
 
@@ -1081,12 +1431,20 @@ class VectorContainerPolicy : public BasePolicy<
       bool success,
       std::size_t size,
       std::size_t oldCapacity,
-      std::size_t newCapacity) {
+      std::size_t newCapacity,
+      BytePtr chunkAllocation,
+      std::size_t chunkAllocSize) {
     if (!success) {
-      afterFailedRehash(state, size, newCapacity);
-    } else if (state != nullptr) {
-      Alloc& a = this->alloc();
-      AllocTraits::deallocate(a, state, oldCapacity);
+      afterFailedRehash(state, size);
+    }
+
+    // on success, chunkAllocation is the old allocation, on failure it is the
+    // new one
+    if (chunkAllocation != nullptr) {
+      deallocateOverAligned<ByteAlloc, kRequiredVectorAlignment>(
+          ByteAlloc{Super::alloc()},
+          chunkAllocation,
+          allocSize(chunkAllocSize, (success ? oldCapacity : newCapacity)));
     }
   }
 
@@ -1100,19 +1458,36 @@ class VectorContainerPolicy : public BasePolicy<
   }
 
   void beforeReset(std::size_t size, std::size_t capacity) {
-    FOLLY_SAFE_DCHECK(
-        size <= capacity && ((values_ == nullptr) == (capacity == 0)), "");
-    if (capacity > 0) {
-      beforeClear(size, capacity);
-      Alloc& a = this->alloc();
-      AllocTraits::deallocate(a, values_, capacity);
+    beforeClear(size, capacity);
+  }
+
+  void afterReset(
+      std::size_t /*size*/,
+      std::size_t capacity,
+      BytePtr chunkAllocation,
+      std::size_t chunkAllocSize) {
+    if (chunkAllocation != nullptr) {
+      deallocateOverAligned<ByteAlloc, kRequiredVectorAlignment>(
+          ByteAlloc{Super::alloc()},
+          chunkAllocation,
+          allocSize(chunkAllocSize, capacity));
       values_ = nullptr;
     }
   }
 
-  std::size_t indirectBytesUsed(std::size_t /*size*/, std::size_t capacity)
-      const {
-    return sizeof(Value) * capacity;
+  template <typename V>
+  void visitPolicyAllocationClasses(
+      std::size_t chunkAllocSize,
+      std::size_t /*size*/,
+      std::size_t capacity,
+      V&& visitor) const {
+    FOLLY_SAFE_DCHECK((chunkAllocSize == 0) == (capacity == 0), "");
+    if (chunkAllocSize > 0) {
+      visitor(
+          allocationBytesForOverAligned<ByteAlloc, kRequiredVectorAlignment>(
+              allocSize(chunkAllocSize, capacity)),
+          1);
+    }
   }
 
   // Iterator stuff
@@ -1131,8 +1506,8 @@ class VectorContainerPolicy : public BasePolicy<
     if (underlying.atEnd()) {
       return linearEnd();
     } else {
-      folly::assume(values_ + underlying.item() != nullptr);
-      folly::assume(values_ != nullptr);
+      assume(values_ + underlying.item() != nullptr);
+      assume(values_ != nullptr);
       return Iter{values_ + underlying.item(), values_};
     }
   }
@@ -1143,7 +1518,7 @@ class VectorContainerPolicy : public BasePolicy<
 
   Item iterToIndex(ConstIter const& iter) const {
     auto n = iter.index();
-    folly::assume(n <= std::numeric_limits<Item>::max());
+    assume(n <= std::numeric_limits<Item>::max());
     return static_cast<Item>(n);
   }
 
@@ -1151,35 +1526,57 @@ class VectorContainerPolicy : public BasePolicy<
     return Iter{values_ + index, values_};
   }
 
+  Iter iter(ReverseIter it) {
+    return Iter{it, values_};
+  }
+
+  ConstIter iter(ConstReverseIter it) const {
+    return ConstIter{it, values_};
+  }
+
+  ReverseIter riter(Iter it) {
+    return it.current_;
+  }
+
+  ConstReverseIter riter(ConstIter it) const {
+    return it.current_;
+  }
+
   ValuePtr values_{nullptr};
 };
 
 template <
-    template <typename, typename, typename, typename, typename> class Policy,
+    template <typename, typename, typename, typename, typename, typename...>
+    class Policy,
     typename Key,
     typename Mapped,
     typename Hasher,
     typename KeyEqual,
-    typename Alloc>
+    typename Alloc,
+    typename... Args>
 using MapPolicyWithDefaults = Policy<
     Key,
     Mapped,
     VoidDefault<Hasher, DefaultHasher<Key>>,
     VoidDefault<KeyEqual, DefaultKeyEqual<Key>>,
-    VoidDefault<Alloc, DefaultAlloc<std::pair<Key const, Mapped>>>>;
+    VoidDefault<Alloc, DefaultAlloc<std::pair<Key const, Mapped>>>,
+    Args...>;
 
 template <
-    template <typename, typename, typename, typename, typename> class Policy,
+    template <typename, typename, typename, typename, typename, typename...>
+    class Policy,
     typename Key,
     typename Hasher,
     typename KeyEqual,
-    typename Alloc>
+    typename Alloc,
+    typename... Args>
 using SetPolicyWithDefaults = Policy<
     Key,
     void,
     VoidDefault<Hasher, DefaultHasher<Key>>,
     VoidDefault<KeyEqual, DefaultKeyEqual<Key>>,
-    VoidDefault<Alloc, DefaultAlloc<Key>>>;
+    VoidDefault<Alloc, DefaultAlloc<Key>>,
+    Args...>;
 
 } // namespace detail
 } // namespace f14

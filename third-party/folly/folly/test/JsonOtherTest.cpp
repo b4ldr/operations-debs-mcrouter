@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,7 +18,6 @@
 
 #include <folly/Benchmark.h>
 #include <folly/Conv.h>
-#include <folly/FileUtil.h>
 #include <folly/Range.h>
 #include <folly/portability/GFlags.h>
 #include <folly/portability/GTest.h>
@@ -52,21 +51,40 @@ constexpr folly::StringPiece kLargeNonAsciiString =
     "qwerty \xc2\x80 \xef\xbf\xbf poiuy"
     "qwerty \xc2\x80 \xef\xbf\xbf poiuy";
 
-TEST(Json, StripComments) {
-  const std::string kTestDir = "folly/test/";
-  const std::string kTestFile = "json_test_data/commented.json";
-  const std::string kTestExpected = "json_test_data/commented.json.exp";
+constexpr folly::StringPiece kLargeAsciiStringWithSpecialChars =
+    "<script>foo%@bar.com</script>"
+    "<script>foo%@bar.com</script>"
+    "<script>foo%@bar.com</script>"
+    "<script>foo%@bar.com</script>"
+    "<script>foo%@bar.com</script>"
+    "<script>foo%@bar.com</script>"
+    "<script>foo%@bar.com</script>";
 
-  std::string testStr;
-  std::string expectedStr;
-  if (!folly::readFile(kTestFile.data(), testStr) &&
-      !folly::readFile((kTestDir + kTestFile).data(), testStr)) {
-    FAIL() << "can not read test file " << kTestFile;
-  }
-  if (!folly::readFile(kTestExpected.data(), expectedStr) &&
-      !folly::readFile((kTestDir + kTestExpected).data(), expectedStr)) {
-    FAIL() << "can not read test file " << kTestExpected;
-  }
+TEST(Json, StripComments) {
+  auto testStr = folly::stripLeftMargin(R"JSON(
+    {
+      // comment
+      "test": "foo", // comment
+      "test2": "foo // bar", // more comments
+      /*
+      "test3": "baz"
+      */
+      "test4": "foo /* bar", /* comment */
+      "te//": "foo",
+      "te/*": "bar",
+      "\\\"": "\\" /* comment */
+    }
+  )JSON");
+  auto expectedStr = folly::stripLeftMargin(R"JSON(
+    {
+        "test": "foo",   "test2": "foo // bar",   
+      "test4": "foo /* bar", 
+      "te//": "foo",
+      "te/*": "bar",
+      "\\\"": "\\" 
+    }
+  )JSON");
+
   EXPECT_EQ(expectedStr, folly::json::stripComments(testStr));
 }
 
@@ -112,6 +130,18 @@ BENCHMARK(jsonSerializeAsciiWithUtf8Validation, iters) {
   }
 }
 
+BENCHMARK(jsonSerializeWithExtraUnicodeEscapes, iters) {
+  const dynamic obj = kLargeAsciiStringWithSpecialChars;
+
+  folly::json::serialization_opts opts;
+  opts.extra_ascii_to_escape_bitmap =
+      folly::json::buildExtraAsciiToEscapeBitmap("<%@");
+
+  for (size_t i = 0; i < iters; ++i) {
+    folly::json::serialize(obj, opts);
+  }
+}
+
 BENCHMARK(parseSmallStringWithUtf, iters) {
   for (size_t i = 0; i < iters << 4; ++i) {
     parseJson("\"I \\u2665 UTF-8 thjasdhkjh blah blah blah\"");
@@ -134,8 +164,7 @@ BENCHMARK(parseBigString, iters) {
 
 BENCHMARK(toJson, iters) {
   dynamic something = parseJson(
-    "{\"old_value\":40,\"changed\":true,\"opened\":false,\"foo\":[1,2,3,4,5,6]}"
-  );
+      "{\"old_value\":40,\"changed\":true,\"opened\":false,\"foo\":[1,2,3,4,5,6]}");
 
   for (size_t i = 0; i < iters; i++) {
     toJson(something);

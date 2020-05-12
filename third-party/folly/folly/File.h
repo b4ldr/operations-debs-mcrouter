@@ -1,11 +1,11 @@
 /*
- * Copyright 2013-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -53,7 +53,9 @@ class File {
    */
   explicit File(const char* name, int flags = O_RDONLY, mode_t mode = 0666);
   explicit File(
-      const std::string& name, int flags = O_RDONLY, mode_t mode = 0666);
+      const std::string& name,
+      int flags = O_RDONLY,
+      mode_t mode = 0666);
   explicit File(StringPiece name, int flags = O_RDONLY, mode_t mode = 0666);
 
   /**
@@ -80,7 +82,9 @@ class File {
   /**
    * Return the file descriptor, or -1 if the file was closed.
    */
-  int fd() const { return fd_; }
+  int fd() const {
+    return fd_;
+  }
 
   /**
    * Returns 'true' iff the file was successfully opened.
@@ -115,7 +119,7 @@ class File {
   /**
    * Swap this File with another.
    */
-  void swap(File& other);
+  void swap(File& other) noexcept;
 
   // movable
   File(File&&) noexcept;
@@ -149,6 +153,6 @@ class File {
   bool ownsFd_;
 };
 
-void swap(File& a, File& b);
+void swap(File& a, File& b) noexcept;
 
 } // namespace folly

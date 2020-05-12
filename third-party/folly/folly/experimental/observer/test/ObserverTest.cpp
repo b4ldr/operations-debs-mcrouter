@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,6 +16,7 @@
 
 #include <thread>
 
+#include <folly/Singleton.h>
 #include <folly/experimental/observer/SimpleObservable.h>
 #include <folly/portability/GTest.h>
 #include <folly/synchronization/Baton.h>
@@ -46,9 +47,8 @@ TEST(Observer, Observable) {
 TEST(Observer, MakeObserver) {
   SimpleObservable<int> observable(42);
 
-  auto observer = makeObserver([child = observable.getObserver()]() {
-    return **child + 1;
-  });
+  auto observer = makeObserver(
+      [child = observable.getObserver()]() { return **child + 1; });
 
   EXPECT_EQ(43, **observer);
 
@@ -70,9 +70,8 @@ TEST(Observer, MakeObserver) {
 TEST(Observer, MakeObserverDiamond) {
   SimpleObservable<int> observable(42);
 
-  auto observer1 = makeObserver([child = observable.getObserver()]() {
-    return **child + 1;
-  });
+  auto observer1 = makeObserver(
+      [child = observable.getObserver()]() { return **child + 1; });
 
   auto observer2 = makeObserver([child = observable.getObserver()]() {
     return std::make_shared<int>(**child + 2);
@@ -211,7 +210,7 @@ TEST(Observer, Stress) {
 
   auto values = std::make_shared<folly::Synchronized<std::vector<int>>>();
 
-  auto observer = makeObserver([ child = observable.getObserver(), values ]() {
+  auto observer = makeObserver([child = observable.getObserver(), values]() {
     auto value = **child * 10;
     values->withWLock([&](std::vector<int>& vals) { vals.push_back(value); });
     return value;
@@ -248,6 +247,27 @@ TEST(Observer, Stress) {
       EXPECT_LE(vals[i], vals[i + 1]);
     }
   });
+}
+
+TEST(Observer, StressMultipleUpdates) {
+  SimpleObservable<int> observable1(0);
+  SimpleObservable<int> observable2(0);
+
+  auto observer = makeObserver(
+      [o1 = observable1.getObserver(), o2 = observable2.getObserver()]() {
+        return (**o1) * (**o2);
+      });
+
+  EXPECT_EQ(0, **observer);
+
+  constexpr size_t numIters = 10000;
+
+  for (size_t i = 1; i <= numIters; ++i) {
+    observable1.setValue(i);
+    observable2.setValue(i);
+    folly::observer_detail::ObserverManager::waitForAllUpdates();
+    EXPECT_EQ(i * i, **observer);
+  }
 }
 
 TEST(Observer, TLObserver) {
@@ -306,6 +326,8 @@ TEST(Observer, SubscribeCallback) {
     EXPECT_EQ(3, getCallsStart);
     EXPECT_EQ(3, getCallsFinish);
 
+    folly::observer_detail::ObserverManager::waitForAllUpdates();
+
     slowGet = true;
     cobThread = std::thread([] { updatesCob(); });
     /* sleep override */ std::this_thread::sleep_for(std::chrono::seconds{1});
@@ -351,4 +373,166 @@ TEST(Observer, SetCallback) {
   EXPECT_FALSE(baton.timed_wait(std::chrono::milliseconds{100}));
   EXPECT_EQ(43, callbackValue);
   EXPECT_EQ(2, callbackCallsCount);
+}
+
+TEST(Observer, CallbackMemoryLeak) {
+  folly::observer::SimpleObservable<int> observable(42);
+  auto observer = observable.getObserver();
+  auto callbackHandle = observer.addCallback([](auto) {});
+  // should not leak
+  callbackHandle = observer.addCallback([](auto) {});
+}
+
+int makeObserverRecursion(int n) {
+  if (n == 0) {
+    return 0;
+  }
+  return **makeObserver([=] { return makeObserverRecursion(n - 1) + 1; });
+}
+
+TEST(Observer, NestedMakeObserver) {
+  EXPECT_EQ(32, makeObserverRecursion(32));
+}
+
+TEST(Observer, WaitForAllUpdates) {
+  folly::observer::SimpleObservable<int> observable{42};
+
+  auto observer = makeObserver([o = observable.getObserver()] {
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});
+
+    return **o;
+  });
+
+  EXPECT_EQ(42, **observer);
+
+  observable.setValue(43);
+  folly::observer_detail::ObserverManager::waitForAllUpdates();
+
+  EXPECT_EQ(43, **observer);
+
+  folly::observer_detail::ObserverManager::waitForAllUpdates();
+}
+
+TEST(Observer, IgnoreUpdates) {
+  int callbackCalled = 0;
+  folly::observer::SimpleObservable<int> observable(42);
+  auto observer =
+      folly::observer::makeObserver([even = std::make_shared<bool>(true),
+                                     odd = std::make_shared<bool>(false),
+                                     observer = observable.getObserver()] {
+        if (**observer % 2 == 0) {
+          return even;
+        }
+        return odd;
+      });
+  auto callbackHandle = observer.addCallback([&](auto) { ++callbackCalled; });
+  EXPECT_EQ(1, callbackCalled);
+
+  observable.setValue(43);
+  folly::observer_detail::ObserverManager::waitForAllUpdates();
+  EXPECT_EQ(2, callbackCalled);
+
+  observable.setValue(45);
+  folly::observer_detail::ObserverManager::waitForAllUpdates();
+  EXPECT_EQ(2, callbackCalled);
+
+  observable.setValue(46);
+  folly::observer_detail::ObserverManager::waitForAllUpdates();
+  EXPECT_EQ(3, callbackCalled);
+}
+
+TEST(Observer, GetSnapshotOnManagerThread) {
+  auto observer42 = folly::observer::makeObserver([] { return 42; });
+
+  folly::observer::SimpleObservable<int> observable(1);
+
+  folly::Baton<> startBaton;
+  folly::Baton<> finishBaton;
+  folly::Baton<> destructorBaton;
+
+  {
+    finishBaton.post();
+    auto slowObserver = folly::observer::makeObserver(
+        [guard = folly::makeGuard([observer42, &destructorBaton]() {
+           // We expect this to be called on a ObserverManager thread, but
+           // outside of processing an observer updates.
+           observer42.getSnapshot();
+           destructorBaton.post();
+         }),
+         observer = observable.getObserver(),
+         &startBaton,
+         &finishBaton] {
+          startBaton.post();
+          finishBaton.wait();
+          finishBaton.reset();
+          return **observer;
+        });
+
+    EXPECT_EQ(1, **slowObserver);
+
+    startBaton.reset();
+    finishBaton.post();
+    observable.setValue(2);
+    folly::observer_detail::ObserverManager::waitForAllUpdates();
+    EXPECT_EQ(2, **slowObserver);
+
+    startBaton.reset();
+    observable.setValue(3);
+    startBaton.wait();
+  }
+  finishBaton.post();
+  destructorBaton.wait();
+}
+
+TEST(Observer, Shutdown) {
+  folly::SingletonVault::singleton()->destroyInstances();
+  auto observer = folly::observer::makeObserver([] { return 42; });
+  EXPECT_EQ(42, **observer);
+}
+
+TEST(Observer, MakeValueObserver) {
+  struct ValueStruct {
+    ValueStruct(int value, int id) : value_(value), id_(id) {}
+    bool operator==(const ValueStruct& other) const {
+      return value_ == other.value_;
+    }
+
+    const int value_;
+    const int id_;
+  };
+
+  SimpleObservable<ValueStruct> observable(ValueStruct(1, 1));
+
+  std::vector<int> observedIds;
+  std::vector<int> observedValues;
+  std::vector<int> observedValues2;
+
+  auto ch1 = observable.getObserver().addCallback(
+      [&](auto snapshot) { observedIds.push_back(snapshot->id_); });
+  auto ch2 = makeValueObserver(observable.getObserver())
+                 .addCallback([&](auto snapshot) {
+                   observedValues.push_back(snapshot->value_);
+                 });
+  auto ch3 = makeValueObserver(
+                 [observer = observable.getObserver()] { return **observer; })
+                 .addCallback([&](auto snapshot) {
+                   observedValues2.push_back(snapshot->value_);
+                 });
+  folly::observer_detail::ObserverManager::waitForAllUpdates();
+
+  observable.setValue(ValueStruct(1, 2));
+  folly::observer_detail::ObserverManager::waitForAllUpdates();
+
+  observable.setValue(ValueStruct(2, 3));
+  folly::observer_detail::ObserverManager::waitForAllUpdates();
+
+  observable.setValue(ValueStruct(2, 4));
+  folly::observer_detail::ObserverManager::waitForAllUpdates();
+
+  observable.setValue(ValueStruct(3, 5));
+  folly::observer_detail::ObserverManager::waitForAllUpdates();
+
+  EXPECT_EQ(observedIds, std::vector<int>({1, 2, 3, 4, 5}));
+  EXPECT_EQ(observedValues, std::vector<int>({1, 2, 3}));
+  EXPECT_EQ(observedValues2, std::vector<int>({1, 2, 3}));
 }

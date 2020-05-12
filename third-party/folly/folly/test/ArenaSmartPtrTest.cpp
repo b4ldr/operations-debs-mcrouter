@@ -1,11 +1,11 @@
 /*
- * Copyright 2013-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,24 +25,26 @@
 using namespace folly;
 
 struct global_counter {
-  global_counter(): count_(0) {}
+  global_counter() : count_(0) {}
 
-  void increase() { ++count_; }
+  void increase() {
+    ++count_;
+  }
   void decrease() {
     EXPECT_GT(count_, 0);
     --count_;
   }
 
-  unsigned count() const { return count_; }
+  unsigned count() const {
+    return count_;
+  }
 
  private:
   unsigned count_;
 };
 
 struct Foo {
-  explicit Foo(global_counter& counter):
-    counter_(counter)
-  {
+  explicit Foo(global_counter& counter) : counter_(counter) {
     counter_.increase();
   }
 
@@ -82,7 +84,7 @@ void unique_ptr_test(Allocator& allocator) {
     auto p = folly::allocate_unique<Foo>(allocator, counter);
     EXPECT_EQ(counter.count(), 2);
 
-    [&](ptr_type g) {
+    [&counter](ptr_type g) {
       EXPECT_EQ(counter.count(), 2);
       g.reset();
       EXPECT_EQ(counter.count(), 1);
@@ -135,7 +137,7 @@ void shared_ptr_test(Allocator& allocator) {
     EXPECT_EQ(counter.count(), 1);
     EXPECT_EQ(p.use_count(), 2);
 
-    [&](ptr_type g) {
+    [&counter, &p](ptr_type g) {
       EXPECT_EQ(counter.count(), 1);
       EXPECT_EQ(p.use_count(), 3);
       EXPECT_EQ(g.use_count(), 3);
@@ -161,7 +163,7 @@ TEST(ArenaSmartPtr, shared_ptr_SysArena) {
   shared_ptr_test(alloc);
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

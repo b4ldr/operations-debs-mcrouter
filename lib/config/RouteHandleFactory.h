@@ -1,13 +1,14 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <memory>
+#include <stack>
 #include <vector>
 
 #include <folly/Range.h>
@@ -62,9 +63,38 @@ class RouteHandleFactory {
    */
   std::vector<RouteHandlePtr> createList(const folly::dynamic& json);
 
+  /**
+   * Loads a pool from ConfigApi, expand `inherit`, etc.
+   *
+   * @param json  Json with the pool information.
+   *
+   * @return      The folly::dynamic object with pool name and final json blob.
+   */
+  const folly::dynamic& parsePool(const folly::dynamic& json);
+
   size_t getThreadId() const noexcept {
     return threadId_;
   }
+
+  /**
+   * Pushes a list of route_handles that will be used the next time this class
+   * sees $children_list$ in the config. The list of route handles are kept in
+   * a stack - so the last list pushed will be the first one to be used.
+   *
+   * NOTE: Callers must explicitly call popChildrenList() when the children
+   *       list is no longer necessary (e.g. when we are done processing the
+   *       piece of config that might use the children_list).
+   *
+   * @param children  The list of route_handles to be used to replace
+   *                  $children_list$ in the config.
+   */
+  void pushChildrenList(std::vector<RouteHandlePtr> children);
+
+  /**
+   * Pops the last children_list object pushed using the pushChildrenList()
+   * method.
+   */
+  void popChildrenList();
 
  private:
   RouteHandleProviderIf<RouteHandleIf>& provider_;
@@ -76,11 +106,15 @@ class RouteHandleFactory {
   /// Thread where route handles created by this factory will be used
   size_t threadId_;
 
+  // list of servers that should be used to replace "$children_list$" in config.
+  std::stack<std::vector<RouteHandlePtr>> childrenLists_;
+
   const std::vector<RouteHandlePtr>& createNamed(
       folly::StringPiece name,
       const folly::dynamic& json);
 };
-}
-} // facebook::memcache
+
+} // namespace memcache
+} // namespace facebook
 
 #include "RouteHandleFactory-inl.h"

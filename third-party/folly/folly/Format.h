@@ -1,11 +1,11 @@
 /*
- * Copyright 2012-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,6 +18,7 @@
 #define FOLLY_FORMAT_H_
 
 #include <cstdio>
+#include <ios>
 #include <stdexcept>
 #include <tuple>
 #include <type_traits>
@@ -31,7 +32,7 @@
 
 // Ignore shadowing warnings within this file, so includers can use -Wshadow.
 FOLLY_PUSH_WARNING
-FOLLY_GCC_DISABLE_WARNING("-Wshadow")
+FOLLY_GNU_DISABLE_WARNING("-Wshadow")
 
 namespace folly {
 
@@ -241,9 +242,9 @@ class Formatter : public BaseFormatter<
 /**
  * Formatter objects can be written to streams.
  */
-template <bool containerMode, class... Args>
+template <class C, bool containerMode, class... Args>
 std::ostream& operator<<(
-    std::ostream& out,
+    std::basic_ostream<C>& out,
     const Formatter<containerMode, Args...>& formatter) {
   auto writer = [&out](StringPiece sp) {
     out.write(sp.data(), std::streamsize(sp.size()));
@@ -330,10 +331,6 @@ class FOLLY_EXPORT FormatKeyNotFoundException : public std::out_of_range {
  private:
   static constexpr StringPiece const kMessagePrefix = "format key not found: ";
 };
-
-namespace detail {
-[[noreturn]] void throwFormatKeyNotFoundException(StringPiece key);
-} // namespace detail
 
 /**
  * Wrap a sequence or associative container so that out-of-range lookups

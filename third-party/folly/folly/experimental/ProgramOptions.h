@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,7 +25,7 @@ namespace folly {
 
 enum class ProgramOptionsStyle {
   GFLAGS,
-  GNU
+  GNU,
 };
 
 // Add all GFlags to the given options_description.
@@ -66,16 +66,17 @@ boost::program_options::options_description getGFlags(
 //
 // You may pass "rest" to parseNestedCommandLine again, etc.
 struct NestedCommandLineParseResult {
-  NestedCommandLineParseResult() { }
+  NestedCommandLineParseResult() {}
 
-  boost::program_options::parsed_options options {nullptr};
+  boost::program_options::parsed_options options{nullptr};
 
   Optional<std::string> command;
   std::vector<std::string> rest;
 };
 
 NestedCommandLineParseResult parseNestedCommandLine(
-    int argc, const char* const argv[],
+    int argc,
+    const char* const argv[],
     const boost::program_options::options_description& desc);
 
 NestedCommandLineParseResult parseNestedCommandLine(

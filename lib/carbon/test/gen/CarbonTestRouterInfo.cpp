@@ -28,11 +28,13 @@
 #include <mcrouter/routes/AllInitialRouteFactory.h>
 #include <mcrouter/routes/AllMajorityRouteFactory.h>
 #include <mcrouter/routes/AllSyncRouteFactory.h>
+#include <mcrouter/routes/BlackholeRoute.h>
 #include <mcrouter/routes/DevNullRoute.h>
 #include <mcrouter/routes/ErrorRoute.h>
 #include <mcrouter/routes/FailoverRoute.h>
 #include <mcrouter/routes/HashRouteFactory.h>
 #include <mcrouter/routes/HostIdRouteFactory.h>
+#include <mcrouter/routes/LatencyInjectionRoute.h>
 #include <mcrouter/routes/LatestRoute.h>
 #include <mcrouter/routes/LoadBalancerRoute.h>
 #include <mcrouter/routes/LoggingRoute.h>
@@ -51,6 +53,8 @@ using namespace facebook::memcache::mcrouter;
 namespace carbon {
 namespace test {
 
+constexpr const char* CarbonTestRouterInfo::name;
+
 /* static */ CarbonTestRouterInfo::RouteHandleFactoryMap
 CarbonTestRouterInfo::buildRouteMap() {
   RouteHandleFactoryMap map{
@@ -59,6 +63,7 @@ CarbonTestRouterInfo::buildRouteMap() {
       {"AllInitialRoute", &makeAllInitialRoute<CarbonTestRouterInfo>},
       {"AllMajorityRoute", &makeAllMajorityRoute<CarbonTestRouterInfo>},
       {"AllSyncRoute", &makeAllSyncRoute<CarbonTestRouterInfo>},
+      {"BlackholeRoute", &makeBlackholeRoute<CarbonTestRouterInfo>},
       {"DevNullRoute", &makeDevNullRoute<CarbonTestRouterInfo>},
       {"ErrorRoute", &makeErrorRoute<CarbonTestRouterInfo>},
       {"HashRoute",
@@ -67,6 +72,8 @@ CarbonTestRouterInfo::buildRouteMap() {
          return makeHashRoute<CarbonTestRouterInfo>(factory, json);
        }},
       {"HostIdRoute", &makeHostIdRoute<CarbonTestRouterInfo>},
+      {"LatencyInjectionRoute",
+       &makeLatencyInjectionRoute<CarbonTestRouterInfo>},
       {"LatestRoute", &makeLatestRoute<CarbonTestRouterInfo>},
       {"LoadBalancerRoute", &makeLoadBalancerRoute<CarbonTestRouterInfo>},
       {"LoggingRoute", &makeLoggingRoute<CarbonTestRouterInfo>},
@@ -86,6 +93,5 @@ std::unique_ptr<ExtraRouteHandleProviderIf<CarbonTestRouterInfo>>
 CarbonTestRouterInfo::buildExtraProvider() {
   return std::make_unique<McExtraRouteHandleProvider<CarbonTestRouterInfo>>();
 }
-
 } // namespace test
 } // namespace carbon

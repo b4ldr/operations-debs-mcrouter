@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,22 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include <thread>
 
 #include <folly/Benchmark.h>
-#include <folly/experimental/RCURefCount.h>
 #include <folly/experimental/TLRefCount.h>
 
 namespace folly {
 
 template <typename Counter>
-void shutdown(Counter&) {
-}
-
-void shutdown(RCURefCount& c) {
-  c.useGlobal();
-  --c;
-}
+void shutdown(Counter&) {}
 
 void shutdown(TLRefCount& c) {
   c.useGlobal();
@@ -43,36 +37,20 @@ void benchmark(size_t n) {
 
   for (size_t t = 0; t < threadCount; ++t) {
     ts.emplace_back([&]() {
-        for (size_t i = 0; i < n; ++i) {
-          ++x;
-        }
-        for (size_t i = 0; i < n; ++i) {
-          --x;
-        }
-      });
+      for (size_t i = 0; i < n; ++i) {
+        ++x;
+      }
+      for (size_t i = 0; i < n; ++i) {
+        --x;
+      }
+    });
   }
 
-  for (auto& t: ts) {
+  for (auto& t : ts) {
     t.join();
   }
 
   shutdown(x);
-}
-
-BENCHMARK(atomicOneThread, n) {
-  benchmark<std::atomic<RCURefCount::Int>, 1>(n);
-}
-
-BENCHMARK(atomicFourThreads, n) {
-  benchmark<std::atomic<RCURefCount::Int>, 4>(n);
-}
-
-BENCHMARK(RCURefCountOneThread, n) {
-  benchmark<RCURefCount, 1>(n);
-}
-
-BENCHMARK(RCURefCountFourThreads, n) {
-  benchmark<RCURefCount, 4>(n);
 }
 
 BENCHMARK(TLRefCountOneThread, n) {
@@ -83,13 +61,28 @@ BENCHMARK(TLRefCountFourThreads, n) {
   benchmark<TLRefCount, 4>(n);
 }
 
+BENCHMARK(TLRefCountTwentyFourThreads, n) {
+  benchmark<TLRefCount, 24>(n);
+}
+
+BENCHMARK(AtomicOneThread, n) {
+  benchmark<std::atomic<size_t>, 1>(n);
+}
+
+BENCHMARK(AtomicFourThreads, n) {
+  benchmark<std::atomic<size_t>, 4>(n);
+}
+
+BENCHMARK(AtomicTwentyFourThreads, n) {
+  benchmark<std::atomic<size_t>, 24>(n);
+}
+
 } // namespace folly
 
 int main(int argc, char** argv) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   gflags::SetCommandLineOptionWithMode(
-    "bm_min_usec", "100000", gflags::SET_FLAG_IF_DEFAULT
-  );
+      "bm_min_usec", "100000", gflags::SET_FLAG_IF_DEFAULT);
 
   folly::runBenchmarks();
 

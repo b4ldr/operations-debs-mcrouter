@@ -1,11 +1,11 @@
 /*
- * Copyright 2011-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,11 +19,15 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <string>
 #include <tuple>
 #include <type_traits>
 #include <utility>
 
+#include <folly/CPortability.h>
+#include <folly/Traits.h>
+#include <folly/Utility.h>
 #include <folly/functional/ApplyTuple.h>
 #include <folly/hash/SpookyHashV1.h>
 #include <folly/hash/SpookyHashV2.h>
@@ -36,16 +40,13 @@
 namespace folly {
 namespace hash {
 
-// This is a general-purpose way to create a single hash from multiple
-// hashable objects. hash_combine_generic takes a class Hasher implementing
-// hash<T>; hash_combine uses a default hasher StdHasher that uses std::hash.
-// hash_combine_generic hashes each argument and combines those hashes in
-// an order-dependent way to yield a new hash.
-
 // This is the Hash128to64 function from Google's cityhash (available
 // under the MIT License).  We use it to reduce multiple 64 bit hashes
 // into a single hash.
-inline uint64_t hash_128_to_64(const uint64_t upper, const uint64_t lower) {
+FOLLY_DISABLE_UNDEFINED_BEHAVIOR_SANITIZER("unsigned-integer-overflow")
+inline uint64_t hash_128_to_64(
+    const uint64_t upper,
+    const uint64_t lower) noexcept {
   // Murmur-inspired hashing.
   const uint64_t kMul = 0x9ddfea08eb382d69ULL;
   uint64_t a = (lower ^ upper) * kMul;
@@ -56,63 +57,14 @@ inline uint64_t hash_128_to_64(const uint64_t upper, const uint64_t lower) {
   return b;
 }
 
-// Never used, but gcc demands it.
-template <class Hasher>
-inline size_t hash_combine_generic() {
-  return 0;
-}
-
-template <
-    class Iter,
-    class Hash = std::hash<typename std::iterator_traits<Iter>::value_type>>
-uint64_t
-hash_range(Iter begin, Iter end, uint64_t hash = 0, Hash hasher = Hash()) {
-  for (; begin != end; ++begin) {
-    hash = hash_128_to_64(hash, hasher(*begin));
-  }
-  return hash;
-}
-
-inline uint32_t twang_32from64(uint64_t key);
-
-template <class Hasher, typename T, typename... Ts>
-size_t hash_combine_generic(const T& t, const Ts&... ts) {
-  size_t seed = Hasher::hash(t);
-  if (sizeof...(ts) == 0) {
-    return seed;
-  }
-  size_t remainder = hash_combine_generic<Hasher>(ts...);
-  /* static */ if (sizeof(size_t) == sizeof(uint32_t)) {
-    return twang_32from64((uint64_t(seed) << 32) | remainder);
-  } else {
-    return static_cast<size_t>(hash_128_to_64(seed, remainder));
-  }
-}
-
-// Simply uses std::hash to hash.  Note that std::hash is not guaranteed
-// to be a very good hash function; provided std::hash doesn't collide on
-// the individual inputs, you are fine, but that won't be true for, say,
-// strings or pairs
-class StdHasher {
- public:
-  template <typename T>
-  static size_t hash(const T& t) {
-    return std::hash<T>()(t);
-  }
-};
-
-template <typename T, typename... Ts>
-size_t hash_combine(const T& t, const Ts&... ts) {
-  return hash_combine_generic<StdHasher>(t, ts...);
-}
-
 //////////////////////////////////////////////////////////////////////
 
 /*
  * Thomas Wang 64 bit mix hash function
  */
 
-inline uint64_t twang_mix64(uint64_t key) {
+FOLLY_DISABLE_UNDEFINED_BEHAVIOR_SANITIZER("unsigned-integer-overflow")
+inline uint64_t twang_mix64(uint64_t key) noexcept {
   key = (~key) + (key << 21); // key *= (1 << 21) - 1; key -= 1;
   key = key ^ (key >> 24);
   key = key + (key << 3) + (key << 8); // key *= 1 + (1 << 3) + (1 << 8)
@@ -129,7 +81,7 @@ inline uint64_t twang_mix64(uint64_t key) {
  * Note that twang_unmix64 is significantly slower than twang_mix64.
  */
 
-inline uint64_t twang_unmix64(uint64_t key) {
+inline uint64_t twang_unmix64(uint64_t key) noexcept {
   // See the comments in jenkins_rev_unmix32 for an explanation as to how this
   // was generated
   key *= 4611686016279904257U;
@@ -146,7 +98,7 @@ inline uint64_t twang_unmix64(uint64_t key) {
  * Thomas Wang downscaling hash function
  */
 
-inline uint32_t twang_32from64(uint64_t key) {
+inline uint32_t twang_32from64(uint64_t key) noexcept {
   key = (~key) + (key << 18);
   key = key ^ (key >> 31);
   key = key * 21;
@@ -160,7 +112,7 @@ inline uint32_t twang_32from64(uint64_t key) {
  * Robert Jenkins' reversible 32 bit mix hash function
  */
 
-inline uint32_t jenkins_rev_mix32(uint32_t key) {
+inline uint32_t jenkins_rev_mix32(uint32_t key) noexcept {
   key += (key << 12); // key *= (1 + (1 << 12))
   key ^= (key >> 22);
   key += (key << 4); // key *= (1 + (1 << 4))
@@ -180,7 +132,7 @@ inline uint32_t jenkins_rev_mix32(uint32_t key) {
  * jenkins_rev_mix32.
  */
 
-inline uint32_t jenkins_rev_unmix32(uint32_t key) {
+inline uint32_t jenkins_rev_unmix32(uint32_t key) noexcept {
   // These are the modular multiplicative inverses (in Z_2^32) of the
   // multiplication factors in jenkins_rev_mix32, in reverse order.  They were
   // computed using the Extended Euclidean algorithm, see
@@ -212,7 +164,9 @@ const uint32_t FNV_32_HASH_START = 2166136261UL;
 const uint64_t FNV_64_HASH_START = 14695981039346656037ULL;
 const uint64_t FNVA_64_HASH_START = 14695981039346656037ULL;
 
-inline uint32_t fnv32(const char* buf, uint32_t hash = FNV_32_HASH_START) {
+inline uint32_t fnv32(
+    const char* buf,
+    uint32_t hash = FNV_32_HASH_START) noexcept {
   // forcing signed char, since other platforms can use unsigned
   const signed char* s = reinterpret_cast<const signed char*>(buf);
 
@@ -224,8 +178,10 @@ inline uint32_t fnv32(const char* buf, uint32_t hash = FNV_32_HASH_START) {
   return hash;
 }
 
-inline uint32_t
-fnv32_buf(const void* buf, size_t n, uint32_t hash = FNV_32_HASH_START) {
+inline uint32_t fnv32_buf(
+    const void* buf,
+    size_t n,
+    uint32_t hash = FNV_32_HASH_START) noexcept {
   // forcing signed char, since other platforms can use unsigned
   const signed char* char_buf = reinterpret_cast<const signed char*>(buf);
 
@@ -240,11 +196,13 @@ fnv32_buf(const void* buf, size_t n, uint32_t hash = FNV_32_HASH_START) {
 
 inline uint32_t fnv32(
     const std::string& str,
-    uint32_t hash = FNV_32_HASH_START) {
+    uint32_t hash = FNV_32_HASH_START) noexcept {
   return fnv32_buf(str.data(), str.size(), hash);
 }
 
-inline uint64_t fnv64(const char* buf, uint64_t hash = FNV_64_HASH_START) {
+inline uint64_t fnv64(
+    const char* buf,
+    uint64_t hash = FNV_64_HASH_START) noexcept {
   // forcing signed char, since other platforms can use unsigned
   const signed char* s = reinterpret_cast<const signed char*>(buf);
 
@@ -256,8 +214,10 @@ inline uint64_t fnv64(const char* buf, uint64_t hash = FNV_64_HASH_START) {
   return hash;
 }
 
-inline uint64_t
-fnv64_buf(const void* buf, size_t n, uint64_t hash = FNV_64_HASH_START) {
+inline uint64_t fnv64_buf(
+    const void* buf,
+    size_t n,
+    uint64_t hash = FNV_64_HASH_START) noexcept {
   // forcing signed char, since other platforms can use unsigned
   const signed char* char_buf = reinterpret_cast<const signed char*>(buf);
 
@@ -271,12 +231,14 @@ fnv64_buf(const void* buf, size_t n, uint64_t hash = FNV_64_HASH_START) {
 
 inline uint64_t fnv64(
     const std::string& str,
-    uint64_t hash = FNV_64_HASH_START) {
+    uint64_t hash = FNV_64_HASH_START) noexcept {
   return fnv64_buf(str.data(), str.size(), hash);
 }
 
-inline uint64_t
-fnva64_buf(const void* buf, size_t n, uint64_t hash = FNVA_64_HASH_START) {
+inline uint64_t fnva64_buf(
+    const void* buf,
+    size_t n,
+    uint64_t hash = FNVA_64_HASH_START) noexcept {
   const uint8_t* char_buf = reinterpret_cast<const uint8_t*>(buf);
 
   for (size_t i = 0; i < n; ++i) {
@@ -289,7 +251,7 @@ fnva64_buf(const void* buf, size_t n, uint64_t hash = FNVA_64_HASH_START) {
 
 inline uint64_t fnva64(
     const std::string& str,
-    uint64_t hash = FNVA_64_HASH_START) {
+    uint64_t hash = FNVA_64_HASH_START) noexcept {
   return fnva64_buf(str.data(), str.size(), hash);
 }
 
@@ -299,7 +261,7 @@ inline uint64_t fnva64(
 
 #define get16bits(d) folly::loadUnaligned<uint16_t>(d)
 
-inline uint32_t hsieh_hash32_buf(const void* buf, size_t len) {
+inline uint32_t hsieh_hash32_buf(const void* buf, size_t len) noexcept {
   // forcing signed char, since other platforms can use unsigned
   const unsigned char* s = reinterpret_cast<const unsigned char*>(buf);
   uint32_t hash = static_cast<uint32_t>(len);
@@ -350,15 +312,15 @@ inline uint32_t hsieh_hash32_buf(const void* buf, size_t len) {
   hash += hash >> 6;
 
   return hash;
-};
+}
 
 #undef get16bits
 
-inline uint32_t hsieh_hash32(const char* s) {
+inline uint32_t hsieh_hash32(const char* s) noexcept {
   return hsieh_hash32_buf(s, std::strlen(s));
 }
 
-inline uint32_t hsieh_hash32_str(const std::string& str) {
+inline uint32_t hsieh_hash32_str(const std::string& str) noexcept {
   return hsieh_hash32_buf(str.data(), str.size());
 }
 
@@ -370,7 +332,10 @@ namespace detail {
 
 template <typename I>
 struct integral_hasher {
-  size_t operator()(I const& i) const {
+  using folly_is_avalanching =
+      bool_constant<(sizeof(I) >= 8 || sizeof(size_t) == 4)>;
+
+  size_t operator()(I const& i) const noexcept {
     static_assert(sizeof(I) <= 16, "Input type is too wide");
     /* constexpr */ if (sizeof(I) <= 4) {
       auto const i32 = static_cast<int32_t>(i); // impl accident: sign-extends
@@ -388,13 +353,11 @@ struct integral_hasher {
   }
 };
 
-template <typename I>
-using integral_hasher_avalanches =
-    std::integral_constant<bool, sizeof(I) >= 8 || sizeof(size_t) == 4>;
-
 template <typename F>
 struct float_hasher {
-  size_t operator()(F const& f) const {
+  using folly_is_avalanching = std::true_type;
+
+  size_t operator()(F const& f) const noexcept {
     static_assert(sizeof(F) <= 8, "Input type is too wide");
 
     if (f == F{}) { // Ensure 0 and -0 get the same hash.
@@ -414,13 +377,17 @@ struct hasher;
 
 struct Hash {
   template <class T>
-  size_t operator()(const T& v) const {
+  size_t operator()(const T& v) const noexcept(noexcept(hasher<T>()(v))) {
     return hasher<T>()(v);
   }
 
   template <class T, class... Ts>
   size_t operator()(const T& t, const Ts&... ts) const {
     return hash::hash_128_to_64((*this)(t), (*this)(ts...));
+  }
+
+  size_t operator()() const noexcept {
+    return 0;
   }
 };
 
@@ -431,6 +398,16 @@ struct Hash {
 // of about 1/2^B.  (Input bits lost implicitly converting between K and
 // the argument of H::operator() are not considered here; K is separate
 // to handle the case of generic hashers like folly::Hash).
+//
+// If std::hash<T> or folly::hasher<T> is specialized for a new type T and
+// the implementation avalanches input entropy across all of the bits of a
+// std::size_t result, the specialization should be marked as avalanching.
+// This can be done either by adding a member type folly_is_avalanching
+// to the functor H that contains a constexpr bool value of true, or by
+// specializing IsAvalanchingHasher<H, K>.  The member type mechanism is
+// more convenient, but specializing IsAvalanchingHasher may be required
+// if a hasher is polymorphic on the key type or if its definition cannot
+// be modified.
 //
 // The standard's definition of hash quality is based on the chance hash
 // collisions using the entire hash value.  No requirement is made that
@@ -450,21 +427,36 @@ struct Hash {
 // is useful when mapping the hash value onto a smaller space efficiently
 // (such as when implementing a hash table).
 template <typename Hasher, typename Key>
-struct IsAvalanchingHasher : std::false_type {};
+struct IsAvalanchingHasher;
 
-template <typename T, typename E, typename K>
-struct IsAvalanchingHasher<hasher<T, E>, K>
-    : std::conditional<
-          std::is_enum<T>::value || std::is_integral<T>::value,
-          detail::integral_hasher_avalanches<T>,
-          std::is_floating_point<T>>::type {};
+namespace detail {
+template <typename Hasher, typename Void = void>
+struct IsAvalanchingHasherFromMemberType : std::false_type {};
+
+template <typename Hasher>
+struct IsAvalanchingHasherFromMemberType<
+    Hasher,
+    void_t<typename Hasher::folly_is_avalanching>>
+    : bool_constant<Hasher::folly_is_avalanching::value> {};
+} // namespace detail
+
+template <typename Hasher, typename Key>
+struct IsAvalanchingHasher : detail::IsAvalanchingHasherFromMemberType<Hasher> {
+};
+
+// It's ugly to put this here, but folly::transparent isn't hash specific
+// so it seems even more ugly to put this near its declaration
+template <typename H, typename K>
+struct IsAvalanchingHasher<transparent<H>, K> : IsAvalanchingHasher<H, K> {};
 
 template <typename K>
 struct IsAvalanchingHasher<Hash, K> : IsAvalanchingHasher<hasher<K>, K> {};
 
 template <>
 struct hasher<bool> {
-  size_t operator()(bool key) const {
+  using folly_is_avalanching = std::true_type;
+
+  size_t operator()(bool key) const noexcept {
     // Make sure that all the output bits depend on the input.
     return key ? std::numeric_limits<size_t>::max() : 0;
   }
@@ -523,6 +515,8 @@ struct hasher<double> : detail::float_hasher<double> {};
 
 template <>
 struct hasher<std::string> {
+  using folly_is_avalanching = std::true_type;
+
   size_t operator()(const std::string& key) const {
     return static_cast<size_t>(
         hash::SpookyHashV2::Hash64(key.data(), key.size(), 0));
@@ -532,25 +526,57 @@ template <typename K>
 struct IsAvalanchingHasher<hasher<std::string>, K> : std::true_type {};
 
 template <typename T>
-struct hasher<T, typename std::enable_if<std::is_enum<T>::value, void>::type> {
-  size_t operator()(T key) const {
-    return Hash()(static_cast<typename std::underlying_type<T>::type>(key));
+struct hasher<T, std::enable_if_t<std::is_enum<T>::value>> {
+  size_t operator()(T key) const noexcept {
+    return Hash()(to_underlying(key));
   }
 };
 
+template <typename T, typename K>
+struct IsAvalanchingHasher<
+    hasher<T, std::enable_if_t<std::is_enum<T>::value>>,
+    K> : IsAvalanchingHasher<hasher<std::underlying_type_t<T>>, K> {};
+
 template <typename T1, typename T2>
 struct hasher<std::pair<T1, T2>> {
+  using folly_is_avalanching = std::true_type;
+
   size_t operator()(const std::pair<T1, T2>& key) const {
     return Hash()(key.first, key.second);
   }
 };
-template <typename T1, typename T2, typename K>
-struct IsAvalanchingHasher<hasher<std::pair<T1, T2>>, K> : std::true_type {};
 
 template <typename... Ts>
 struct hasher<std::tuple<Ts...>> {
   size_t operator()(const std::tuple<Ts...>& key) const {
-    return applyTuple(Hash(), key);
+    return apply(Hash(), key);
+  }
+};
+
+template <typename T>
+struct hasher<T*> {
+  using folly_is_avalanching = hasher<std::uintptr_t>::folly_is_avalanching;
+
+  size_t operator()(T* key) const {
+    return Hash()(bit_cast<std::uintptr_t>(key));
+  }
+};
+
+template <typename T>
+struct hasher<std::unique_ptr<T>> {
+  using folly_is_avalanching = typename hasher<T*>::folly_is_avalanching;
+
+  size_t operator()(const std::unique_ptr<T>& key) const {
+    return Hash()(key.get());
+  }
+};
+
+template <typename T>
+struct hasher<std::shared_ptr<T>> {
+  using folly_is_avalanching = typename hasher<T*>::folly_is_avalanching;
+
+  size_t operator()(const std::shared_ptr<T>& key) const {
+    return Hash()(key.get());
   }
 };
 
@@ -561,6 +587,128 @@ struct IsAvalanchingHasher<hasher<std::tuple<T>>, K>
 template <typename T1, typename T2, typename... Ts, typename K>
 struct IsAvalanchingHasher<hasher<std::tuple<T1, T2, Ts...>>, K>
     : std::true_type {};
+
+namespace hash {
+// Simply uses std::hash to hash.  Note that std::hash is not guaranteed
+// to be a very good hash function; provided std::hash doesn't collide on
+// the individual inputs, you are fine, but that won't be true for, say,
+// strings or pairs
+class StdHasher {
+ public:
+  // The standard requires all explicit and partial specializations of std::hash
+  // supplied by either the standard library or by users to be default
+  // constructible.
+  template <typename T>
+  size_t operator()(const T& t) const noexcept(noexcept(std::hash<T>()(t))) {
+    return std::hash<T>()(t);
+  }
+};
+
+// This is a general-purpose way to create a single hash from multiple
+// hashable objects. hash_combine_generic takes a class Hasher implementing
+// hash<T>; hash_combine uses a default hasher StdHasher that uses std::hash.
+// hash_combine_generic hashes each argument and combines those hashes in
+// an order-dependent way to yield a new hash; hash_range does so (also in an
+// order-dependent way) for items in the range [first, last);
+// commutative_hash_combine_* hashes values but combines them in an
+// order-independent way to yield a new hash.
+
+template <class Hash, class Value>
+uint64_t commutative_hash_combine_value_generic(
+    uint64_t seed,
+    Hash const& hasher,
+    Value const& value) {
+  auto const x = hasher(value);
+  auto const y = IsAvalanchingHasher<Hash, Value>::value ? x : twang_mix64(x);
+  // Commutative accumulator taken from this paper:
+  // https://www.preprints.org/manuscript/201710.0192/v1/download
+  return 3860031 + (seed + y) * 2779 + (seed * y * 2);
+}
+
+// hash_range combines hashes of items in the range [first, last) in an
+// __order-dependent__ fashion. To hash an unordered container (e.g.,
+// folly::dynamic, hash tables like std::unordered_map), use
+// commutative_hash_combine_range instead, which combines hashes of items
+// independent of ordering.
+template <
+    class Iter,
+    class Hash = std::hash<typename std::iterator_traits<Iter>::value_type>>
+uint64_t
+hash_range(Iter begin, Iter end, uint64_t hash = 0, Hash hasher = Hash()) {
+  for (; begin != end; ++begin) {
+    hash = hash_128_to_64(hash, hasher(*begin));
+  }
+  return hash;
+}
+
+template <class Hash, class Iter>
+uint64_t commutative_hash_combine_range_generic(
+    uint64_t seed,
+    Hash const& hasher,
+    Iter first,
+    Iter last) {
+  while (first != last) {
+    seed = commutative_hash_combine_value_generic(seed, hasher, *first++);
+  }
+  return seed;
+}
+
+template <class Iter>
+uint64_t commutative_hash_combine_range(Iter first, Iter last) {
+  return commutative_hash_combine_range_generic(0, Hash{}, first, last);
+}
+
+namespace detail {
+using c_array_size_t = size_t[];
+} // namespace detail
+
+// Never used, but gcc demands it.
+template <class Hasher>
+inline size_t hash_combine_generic(const Hasher&) noexcept {
+  return 0;
+}
+
+template <class Hasher, typename T, typename... Ts>
+size_t hash_combine_generic(
+    const Hasher& h,
+    const T& t,
+    const Ts&... ts) noexcept(noexcept(detail::c_array_size_t{h(t),
+                                                              h(ts)...})) {
+  size_t seed = h(t);
+  if (sizeof...(ts) == 0) {
+    return seed;
+  }
+  size_t remainder = hash_combine_generic(h, ts...);
+  if /* constexpr */ (sizeof(size_t) == sizeof(uint32_t)) {
+    return twang_32from64((uint64_t(seed) << 32) | remainder);
+  } else {
+    return static_cast<size_t>(hash_128_to_64(seed, remainder));
+  }
+}
+
+template <typename Hash, typename... Value>
+uint64_t commutative_hash_combine_generic(
+    uint64_t seed,
+    Hash const& hasher,
+    Value const&... value) {
+  // variadic foreach:
+  uint64_t _[] = {
+      0, seed = commutative_hash_combine_value_generic(seed, hasher, value)...};
+  (void)_;
+  return seed;
+}
+
+template <typename T, typename... Ts>
+size_t hash_combine(const T& t, const Ts&... ts) noexcept(
+    noexcept(hash_combine_generic(StdHasher{}, t, ts...))) {
+  return hash_combine_generic(StdHasher{}, t, ts...);
+}
+
+template <typename... Value>
+uint64_t commutative_hash_combine(Value const&... value) {
+  return commutative_hash_combine_generic(0, Hash{}, value...);
+}
+} // namespace hash
 
 // recursion
 template <size_t index, typename... Ts>
@@ -598,7 +746,8 @@ struct hash<unsigned __int128>
 // items in the pair.
 template <typename T1, typename T2>
 struct hash<std::pair<T1, T2>> {
- public:
+  using folly_is_avalanching = std::true_type;
+
   size_t operator()(const std::pair<T1, T2>& x) const {
     return folly::hash::hash_combine(x.first, x.second);
   }
@@ -607,33 +756,26 @@ struct hash<std::pair<T1, T2>> {
 // Hash function for tuples. Requires default hash functions for all types.
 template <typename... Ts>
 struct hash<std::tuple<Ts...>> {
+ private:
+  using FirstT = std::decay_t<std::tuple_element_t<0, std::tuple<Ts..., bool>>>;
+
+ public:
+  using folly_is_avalanching = folly::bool_constant<(
+      sizeof...(Ts) != 1 ||
+      folly::IsAvalanchingHasher<std::hash<FirstT>, FirstT>::value)>;
+
   size_t operator()(std::tuple<Ts...> const& key) const {
     folly::TupleHasher<
-        std::tuple_size<std::tuple<Ts...>>::value - 1, // start index
+        sizeof...(Ts) - 1, // start index
         Ts...>
         hasher;
 
     return hasher(key);
   }
 };
-
 } // namespace std
 
 namespace folly {
-
-// These IsAvalanchingHasher<std::hash<T>> specializations refer to the
-// std::hash specializations defined in this file
-
-template <typename U1, typename U2, typename K>
-struct IsAvalanchingHasher<std::hash<std::pair<U1, U2>>, K> : std::true_type {};
-
-template <typename U, typename K>
-struct IsAvalanchingHasher<std::hash<std::tuple<U>>, K>
-    : IsAvalanchingHasher<std::hash<U>, U> {};
-
-template <typename U1, typename U2, typename... Us, typename K>
-struct IsAvalanchingHasher<std::hash<std::tuple<U1, U2, Us...>>, K>
-    : std::true_type {};
 
 // std::hash<std::string> is avalanching on libstdc++-v3 (code checked),
 // libc++ (code checked), and MSVC (based on online information).

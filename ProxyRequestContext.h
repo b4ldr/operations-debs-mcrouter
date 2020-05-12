@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <memory>
@@ -15,7 +15,8 @@
 
 #include "mcrouter/ProxyRequestPriority.h"
 #include "mcrouter/config-impl.h"
-#include "mcrouter/lib/mc/msg.h"
+#include "mcrouter/lib/PoolContext.h"
+#include "mcrouter/lib/carbon/Result.h"
 
 namespace facebook {
 namespace memcache {
@@ -32,12 +33,6 @@ class ProxyRoute;
 class ProxyBase;
 class CarbonRouterClientBase;
 class ShardSplitter;
-
-struct PoolContext {
-  folly::StringPiece poolName;
-  size_t indexInPool;
-  bool isShadow;
-};
 
 /**
  * This object is alive for the duration of user's request,
@@ -126,11 +121,11 @@ class ProxyRequestContext {
     requester_ = std::move(requester);
   }
 
-  void setFinalResult(mc_res_t result) {
+  void setFinalResult(carbon::Result result) {
     finalResult_ = result;
   }
 
-  mc_res_t finalResult() const {
+  carbon::Result finalResult() const {
     return finalResult_;
   }
 
@@ -141,7 +136,7 @@ class ProxyRequestContext {
    * Guaranteed to be called after enqueueReply_ (right after in sync mode).
    */
   void (*reqComplete_)(ProxyRequestContext& preq){nullptr};
-  mc_res_t finalResult_{mc_res_unknown};
+  carbon::Result finalResult_{carbon::Result::UNKNOWN};
   int32_t poolStatIndex_{-1};
   bool replied_{false};
 
@@ -210,6 +205,6 @@ class ProxyRequestContext {
   friend class ProxyBase;
 };
 
-} // mcrouter
-} // memcache
-} // facebook
+} // namespace mcrouter
+} // namespace memcache
+} // namespace facebook

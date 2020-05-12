@@ -1,11 +1,11 @@
 /*
- * Copyright 2014-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include <sys/types.h>
 
 #include <string>
@@ -419,6 +420,11 @@ TEST(IPAddress, CtorDefault) {
   EXPECT_EQ(IPAddressV4("0.0.0.0"), v4);
   IPAddressV6 v6;
   EXPECT_EQ(IPAddressV6("::0"), v6);
+  IPAddress v0;
+  EXPECT_EQ(IPAddress(), v0);
+  EXPECT_NE(v0, v4);
+  EXPECT_NE(v0, v6);
+  EXPECT_NE(v4, v6);
 }
 
 TEST(IPAddressV4, validate) {
@@ -542,6 +548,14 @@ TEST(IPAddress, CtorSockaddr) {
     addr.sin_addr = sin_addr;
 
     EXPECT_THROW(IPAddress((sockaddr*)&addr), IPAddressFormatException);
+  }
+  // test none address
+  {
+    IPAddress ipAddr;
+    EXPECT_TRUE(ipAddr.empty());
+    EXPECT_FALSE(ipAddr.isV4());
+    EXPECT_FALSE(ipAddr.isV6());
+    EXPECT_EQ("", ipAddr.str());
   }
 }
 
@@ -835,7 +849,7 @@ TEST(IPAddress, getIPv6For6To4) {
     auto ipv6 = ipv4.getIPv6For6To4();
     EXPECT_EQ(ipv6.type(), IPAddressV6::Type::T6TO4);
     auto ipv4New = ipv6.getIPv4For6To4();
-    EXPECT_TRUE(ipv4Str.compare(ipv4New.str()) == 0);
+    EXPECT_EQ(ipv4Str, ipv4New.str());
   }
 }
 
@@ -863,6 +877,7 @@ TEST(IPAddress, V6Types) {
         return "teredo";
       case IPAddressV6::Type::T6TO4:
         return "6to4";
+      case IPAddressV6::Type::NORMAL:
       default:
         return "default";
     }
@@ -908,13 +923,13 @@ TEST(IPAddress, ToLong) {
 
     auto ip2 = IPAddress::fromLongHBO(tc.second);
     EXPECT_TRUE(ip2.isV4());
-    EXPECT_TRUE(tc.first.compare(ip2.str()) == 0);
+    EXPECT_EQ(tc.first, ip2.str());
     EXPECT_EQ(tc.second, ip2.asV4().toLongHBO());
 
     auto nla = htonl(tc.second);
     auto ip3 = IPAddress::fromLong(nla);
     EXPECT_TRUE(ip3.isV4());
-    EXPECT_TRUE(tc.first.compare(ip3.str()) == 0);
+    EXPECT_EQ(tc.first, ip3.str());
     EXPECT_EQ(nla, ip3.asV4().toLong());
   }
 }
@@ -1234,33 +1249,33 @@ TEST(IPAddress, StringFormat) {
 
 TEST(IPAddress, getMacAddressFromLinkLocal) {
   IPAddressV6 ip6("fe80::f652:14ff:fec5:74d8");
-  EXPECT_TRUE(ip6.getMacAddressFromLinkLocal().hasValue());
+  EXPECT_TRUE(ip6.getMacAddressFromLinkLocal().has_value());
   EXPECT_EQ("f4:52:14:c5:74:d8", ip6.getMacAddressFromLinkLocal()->toString());
 }
 
 TEST(IPAddress, getMacAddressFromLinkLocal_Negative) {
   IPAddressV6 no_link_local_ip6("2803:6082:a2:4447::1");
-  EXPECT_FALSE(no_link_local_ip6.getMacAddressFromLinkLocal().hasValue());
+  EXPECT_FALSE(no_link_local_ip6.getMacAddressFromLinkLocal().has_value());
   no_link_local_ip6 = IPAddressV6("fe80::f652:14ff:ccc5:74d8");
-  EXPECT_FALSE(no_link_local_ip6.getMacAddressFromLinkLocal().hasValue());
+  EXPECT_FALSE(no_link_local_ip6.getMacAddressFromLinkLocal().has_value());
   no_link_local_ip6 = IPAddressV6("fe80::f652:14ff:ffc5:74d8");
-  EXPECT_FALSE(no_link_local_ip6.getMacAddressFromLinkLocal().hasValue());
+  EXPECT_FALSE(no_link_local_ip6.getMacAddressFromLinkLocal().has_value());
   no_link_local_ip6 = IPAddressV6("fe81::f652:14ff:ffc5:74d8");
-  EXPECT_FALSE(no_link_local_ip6.getMacAddressFromLinkLocal().hasValue());
+  EXPECT_FALSE(no_link_local_ip6.getMacAddressFromLinkLocal().has_value());
 }
 
 TEST(IPAddress, getMacAddressFromEUI64) {
   IPAddressV6 ip6("2401:db00:3020:51dc:4a57:ddff:fe04:5643");
-  EXPECT_TRUE(ip6.getMacAddressFromEUI64().hasValue());
+  EXPECT_TRUE(ip6.getMacAddressFromEUI64().has_value());
   EXPECT_EQ("48:57:dd:04:56:43", ip6.getMacAddressFromEUI64()->toString());
   ip6 = IPAddressV6("fe80::4a57:ddff:fe04:5643");
-  EXPECT_TRUE(ip6.getMacAddressFromEUI64().hasValue());
+  EXPECT_TRUE(ip6.getMacAddressFromEUI64().has_value());
   EXPECT_EQ("48:57:dd:04:56:43", ip6.getMacAddressFromEUI64()->toString());
 }
 
 TEST(IPAddress, getMacAddressFromEUI64_Negative) {
   IPAddressV6 not_eui64_ip6("2401:db00:3020:51dc:face:0000:009a:0000");
-  EXPECT_FALSE(not_eui64_ip6.getMacAddressFromEUI64().hasValue());
+  EXPECT_FALSE(not_eui64_ip6.getMacAddressFromEUI64().has_value());
 }
 
 TEST(IPAddress, LongestCommonPrefix) {

@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2017-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include <gtest/gtest.h>
 
 #include <folly/dynamic.h>
@@ -55,7 +55,7 @@ class TestJsonClient : public JsonClient {
 
 struct CarbonTestOnRequest {
   void onRequest(McServerRequestContext&& ctx, TestRequest&& request) {
-    TestReply reply(mc_res_ok);
+    TestReply reply(carbon::Result::OK);
     reply.valInt32() = request.testInt32() * 2;
     reply.valInt64() = request.testInt64() * 2;
     McServerRequestContext::reply(std::move(ctx), std::move(reply));
@@ -64,7 +64,7 @@ struct CarbonTestOnRequest {
       McServerRequestContext&& ctx,
       TestRequestStringKey&& /* request */) {
     McServerRequestContext::reply(
-        std::move(ctx), TestReplyStringKey(mc_res_notfound));
+        std::move(ctx), TestReplyStringKey(carbon::Result::NOTFOUND));
   }
 };
 
@@ -104,6 +104,7 @@ JsonClient::Options getClientOpts(
   JsonClient::Options opts;
   opts.port = port;
   opts.ignoreParsingErrors = ignoreParsingErrors;
+  opts.useSsl = useSsl;
   if (useSsl) {
     opts.useSsl = useSsl;
     opts.pemCaPath = kPemCaPath;
@@ -121,6 +122,15 @@ inline void checkIntField(
   ASSERT_EQ(1, json.count(name));
   ASSERT_TRUE(json[name].isInt());
   EXPECT_EQ(static_cast<int64_t>(expected), json[name].asInt());
+}
+
+inline void checkStringField(
+    const folly::dynamic& json,
+    folly::StringPiece name,
+    std::string expected) {
+  ASSERT_EQ(1, json.count(name));
+  ASSERT_TRUE(json[name].isString());
+  EXPECT_EQ(expected, json[name].asString());
 }
 
 } // anonymous namespace
@@ -144,7 +154,7 @@ TEST(JsonClient, sendRequests) {
   ASSERT_TRUE(result);
   ASSERT_TRUE(reply.isObject());
 
-  checkIntField(reply, "result", mc_res_ok);
+  checkStringField(reply, "result", carbon::resultToString(carbon::Result::OK));
   checkIntField(reply, "valInt32", 34);
   checkIntField(reply, "valInt64", 60);
 
@@ -171,7 +181,7 @@ TEST(JsonClient, sendRequestsWithSsl) {
   ASSERT_TRUE(result);
   ASSERT_TRUE(reply.isObject());
 
-  checkIntField(reply, "result", mc_res_ok);
+  checkStringField(reply, "result", carbon::resultToString(carbon::Result::OK));
   checkIntField(reply, "valInt32", 34);
   checkIntField(reply, "valInt64", 60);
 
@@ -204,11 +214,13 @@ TEST(JsonClient, sendRequests_Array) {
   ASSERT_TRUE(result);
   ASSERT_TRUE(replies.isArray());
 
-  checkIntField(replies[0], "result", mc_res_ok);
+  checkStringField(
+      replies[0], "result", carbon::resultToString(carbon::Result::OK));
   checkIntField(replies[0], "valInt32", 20);
   checkIntField(replies[0], "valInt64", 60);
 
-  checkIntField(replies[1], "result", mc_res_ok);
+  checkStringField(
+      replies[1], "result", carbon::resultToString(carbon::Result::OK));
   checkIntField(replies[1], "valInt32", 70);
   checkIntField(replies[1], "valInt64", 100);
 
@@ -250,7 +262,7 @@ TEST(CmdLineClient, sendRequests) {
 
   auto reply = folly::parseJson(out);
 
-  checkIntField(reply, "result", mc_res_ok);
+  checkStringField(reply, "result", carbon::resultToString(carbon::Result::OK));
   checkIntField(reply, "valInt32", 34);
   checkIntField(reply, "valInt64", 60);
 
