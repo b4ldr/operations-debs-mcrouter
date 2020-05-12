@@ -1,11 +1,11 @@
 /*
- * Copyright 2013-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,17 +16,50 @@
 
 #include <folly/Memory.h>
 
+#include <limits>
+#include <memory>
 #include <type_traits>
 #include <utility>
 
 #include <glog/logging.h>
 
+#include <folly/ConstexprMath.h>
 #include <folly/String.h>
 #include <folly/memory/Arena.h>
 #include <folly/portability/GMock.h>
 #include <folly/portability/GTest.h>
 
 using namespace folly;
+
+static constexpr std::size_t kTooBig = folly::constexpr_max(
+    std::size_t{std::numeric_limits<uint32_t>::max()},
+    std::size_t{1} << (8 * sizeof(std::size_t) - 14));
+
+TEST(allocateBytes, simple) {
+  auto p = allocateBytes(10);
+  EXPECT_TRUE(p != nullptr);
+  deallocateBytes(p, 10);
+}
+
+TEST(allocateBytes, zero) {
+  auto p = allocateBytes(0);
+  deallocateBytes(p, 0);
+}
+
+TEST(operatorNewDelete, zero) {
+  auto p = ::operator new(0);
+  EXPECT_TRUE(p != nullptr);
+  ::operator delete(p);
+}
+
+#if __cpp_sized_deallocation
+TEST(operatorNewDelete, sized_zero) {
+  std::size_t n = 0;
+  auto p = ::operator new(n);
+  EXPECT_TRUE(p != nullptr);
+  ::operator delete(p, n);
+}
+#endif
 
 TEST(aligned_malloc, examples) {
   auto trial = [](size_t align) {
@@ -86,7 +119,7 @@ TEST(SysAllocator, bad_alloc) {
   Alloc const alloc;
   std::vector<float, Alloc> nums(alloc);
   if (!kIsSanitize) {
-    EXPECT_THROW(nums.reserve(1ull << 50), std::bad_alloc);
+    EXPECT_THROW(nums.reserve(kTooBig), std::bad_alloc);
   }
 }
 
@@ -105,6 +138,18 @@ TEST(AlignedSysAllocator, allocate_unique_fixed) {
   EXPECT_EQ(0, std::uintptr_t(ptr.get()) % 1024);
 }
 
+TEST(AlignedSysAllocator, undersized_fixed) {
+  constexpr auto align = has_extended_alignment ? 1024 : max_align_v;
+  struct alignas(align) Big {
+    float value;
+  };
+  using Alloc = AlignedSysAllocator<Big, FixedAlign<sizeof(void*)>>;
+  Alloc const alloc;
+  auto ptr = allocate_unique<Big>(alloc, Big{3.});
+  EXPECT_EQ(3., ptr->value);
+  EXPECT_EQ(0, std::uintptr_t(ptr.get()) % align);
+}
+
 TEST(AlignedSysAllocator, vector_fixed) {
   using Alloc = AlignedSysAllocator<float, FixedAlign<1024>>;
   Alloc const alloc;
@@ -120,7 +165,7 @@ TEST(AlignedSysAllocator, bad_alloc_fixed) {
   Alloc const alloc;
   std::vector<float, Alloc> nums(alloc);
   if (!kIsSanitize) {
-    EXPECT_THROW(nums.reserve(1ull << 50), std::bad_alloc);
+    EXPECT_THROW(nums.reserve(kTooBig), std::bad_alloc);
   }
 }
 
@@ -141,6 +186,18 @@ TEST(AlignedSysAllocator, allocate_unique_default) {
   EXPECT_EQ(0, std::uintptr_t(ptr.get()) % 1024);
 }
 
+TEST(AlignedSysAllocator, undersized_default) {
+  constexpr auto align = has_extended_alignment ? 1024 : max_align_v;
+  struct alignas(align) Big {
+    float value;
+  };
+  using Alloc = AlignedSysAllocator<Big, DefaultAlign>;
+  Alloc const alloc(sizeof(void*));
+  auto ptr = allocate_unique<Big>(alloc, Big{3.});
+  EXPECT_EQ(3., ptr->value);
+  EXPECT_EQ(0, std::uintptr_t(ptr.get()) % align);
+}
+
 TEST(AlignedSysAllocator, vector_default) {
   using Alloc = AlignedSysAllocator<float>;
   Alloc const alloc(1024);
@@ -156,8 +213,15 @@ TEST(AlignedSysAllocator, bad_alloc_default) {
   Alloc const alloc(1024);
   std::vector<float, Alloc> nums(alloc);
   if (!kIsSanitize) {
-    EXPECT_THROW(nums.reserve(1ull << 50), std::bad_alloc);
+    EXPECT_THROW(nums.reserve(kTooBig), std::bad_alloc);
   }
+}
+
+TEST(AlignedSysAllocator, converting_constructor) {
+  using Alloc1 = AlignedSysAllocator<float>;
+  using Alloc2 = AlignedSysAllocator<double>;
+  Alloc1 const alloc1(1024);
+  Alloc2 const alloc2(alloc1);
 }
 
 TEST(allocate_sys_buffer, compiles) {
@@ -165,47 +229,230 @@ TEST(allocate_sys_buffer, compiles) {
   //  Freed at the end of the scope.
 }
 
-template <typename C>
-static void test_enable_shared_from_this(std::shared_ptr<C> sp) {
-  ASSERT_EQ(1l, sp.use_count());
+struct CountedAllocatorStats {
+  size_t deallocates = 0;
+};
 
-  // Test shared_from_this().
-  std::shared_ptr<C> sp2 = sp->shared_from_this();
-  ASSERT_EQ(sp, sp2);
+template <typename T>
+class CountedAllocator : public std::allocator<T> {
+ private:
+  CountedAllocatorStats* stats_;
 
-  // Test weak_from_this().
-  std::weak_ptr<C> wp = sp->weak_from_this();
-  ASSERT_EQ(sp, wp.lock());
-  sp.reset();
-  sp2.reset();
-  ASSERT_EQ(nullptr, wp.lock());
+ public:
+  explicit CountedAllocator(CountedAllocatorStats& stats) noexcept
+      : stats_(&stats) {}
+  void deallocate(T* p, size_t n) {
+    std::allocator<T>::deallocate(p, n);
+    ++stats_->deallocates;
+  }
+};
 
-  // Test shared_from_this() and weak_from_this() on object not owned by a
-  // shared_ptr. Undefined in C++14 but well-defined in C++17. Also known to
-  // work with libstdc++ >= 20150123. Feel free to add other standard library
-  // versions where the behavior is known.
-#if __cplusplus >= 201700L || \
-    __GLIBCXX__ >= 20150123L
-  C stack_resident;
-  ASSERT_THROW(stack_resident.shared_from_this(), std::bad_weak_ptr);
-  ASSERT_TRUE(stack_resident.weak_from_this().expired());
-#endif
+TEST(allocate_unique, ctor_failure) {
+  struct CtorThrows {
+    explicit CtorThrows(bool cond) {
+      if (cond) {
+        throw std::runtime_error("nope");
+      }
+    }
+  };
+  using Alloc = CountedAllocator<CtorThrows>;
+  using Deleter = allocator_delete<CountedAllocator<CtorThrows>>;
+  {
+    CountedAllocatorStats stats;
+    Alloc const alloc(stats);
+    EXPECT_EQ(0, stats.deallocates);
+    std::unique_ptr<CtorThrows, Deleter> ptr{nullptr, Deleter{alloc}};
+    ptr = allocate_unique<CtorThrows>(alloc, false);
+    EXPECT_NE(nullptr, ptr);
+    EXPECT_EQ(0, stats.deallocates);
+    ptr = nullptr;
+    EXPECT_EQ(nullptr, ptr);
+    EXPECT_EQ(1, stats.deallocates);
+  }
+  {
+    CountedAllocatorStats stats;
+    Alloc const alloc(stats);
+    EXPECT_EQ(0, stats.deallocates);
+    std::unique_ptr<CtorThrows, Deleter> ptr{nullptr, Deleter{alloc}};
+    EXPECT_THROW(
+        ptr = allocate_unique<CtorThrows>(alloc, true), std::runtime_error);
+    EXPECT_EQ(nullptr, ptr);
+    EXPECT_EQ(1, stats.deallocates);
+  }
 }
 
-TEST(enable_shared_from_this, compatible_with_std_enable_shared_from_this) {
-  // Compile-time compatibility.
-  class C_std : public std::enable_shared_from_this<C_std> {};
-  class C_folly : public folly::enable_shared_from_this<C_folly> {};
-  static_assert(
-    noexcept(std::declval<C_std>().shared_from_this()) ==
-    noexcept(std::declval<C_folly>().shared_from_this()), "");
-  static_assert(
-    noexcept(std::declval<C_std const>().shared_from_this()) ==
-    noexcept(std::declval<C_folly const>().shared_from_this()), "");
-  static_assert(noexcept(std::declval<C_folly>().weak_from_this()), "");
-  static_assert(noexcept(std::declval<C_folly const>().weak_from_this()), "");
+namespace {
+template <typename T>
+struct TestAlloc1 : SysAllocator<T> {
+  template <typename U, typename... Args>
+  void construct(U* p, Args&&... args) {
+    ::new (static_cast<void*>(p)) U(std::forward<Args>(args)...);
+  }
+};
 
-  // Runtime compatibility.
-  test_enable_shared_from_this(std::make_shared<C_folly>());
-  test_enable_shared_from_this(std::make_shared<C_folly const>());
+template <typename T>
+struct TestAlloc2 : TestAlloc1<T> {
+  template <typename U>
+  void destroy(U* p) {
+    p->~U();
+  }
+};
+
+template <typename T>
+struct TestAlloc3 : TestAlloc2<T> {
+  using folly_has_default_object_construct = std::true_type;
+};
+
+template <typename T>
+struct TestAlloc4 : TestAlloc3<T> {
+  using folly_has_default_object_destroy = std::true_type;
+};
+
+template <typename T>
+struct TestAlloc5 : SysAllocator<T> {
+  using folly_has_default_object_construct = std::true_type;
+  using folly_has_default_object_destroy = std::false_type;
+};
+} // namespace
+
+TEST(AllocatorObjectLifecycleTraits, compiles) {
+  using A = std::allocator<int>;
+  using S = std::string;
+
+  static_assert(
+      folly::AllocatorHasDefaultObjectConstruct<A, int, int>::value, "");
+  static_assert(folly::AllocatorHasDefaultObjectConstruct<A, S, S>::value, "");
+
+  static_assert(folly::AllocatorHasDefaultObjectDestroy<A, int>::value, "");
+  static_assert(folly::AllocatorHasDefaultObjectDestroy<A, S>::value, "");
+
+  static_assert(
+      folly::AllocatorHasDefaultObjectConstruct<
+          folly::AlignedSysAllocator<int>,
+          int,
+          int>::value,
+      "");
+  static_assert(
+      folly::AllocatorHasDefaultObjectConstruct<
+          folly::AlignedSysAllocator<int>,
+          S,
+          S>::value,
+      "");
+
+  static_assert(
+      folly::AllocatorHasDefaultObjectDestroy<
+          folly::AlignedSysAllocator<int>,
+          int>::value,
+      "");
+  static_assert(
+      folly::AllocatorHasDefaultObjectDestroy<
+          folly::AlignedSysAllocator<int>,
+          S>::value,
+      "");
+
+  static_assert(
+      !folly::AllocatorHasDefaultObjectConstruct<TestAlloc1<S>, S, S>::value,
+      "");
+  static_assert(
+      folly::AllocatorHasDefaultObjectDestroy<TestAlloc1<S>, S>::value, "");
+
+  static_assert(
+      !folly::AllocatorHasDefaultObjectConstruct<TestAlloc2<S>, S, S>::value,
+      "");
+  static_assert(
+      !folly::AllocatorHasDefaultObjectDestroy<TestAlloc2<S>, S>::value, "");
+
+  static_assert(
+      folly::AllocatorHasDefaultObjectConstruct<TestAlloc3<S>, S, S>::value,
+      "");
+  static_assert(
+      !folly::AllocatorHasDefaultObjectDestroy<TestAlloc3<S>, S>::value, "");
+
+  static_assert(
+      folly::AllocatorHasDefaultObjectConstruct<TestAlloc4<S>, S, S>::value,
+      "");
+  static_assert(
+      folly::AllocatorHasDefaultObjectDestroy<TestAlloc4<S>, S>::value, "");
+
+  static_assert(
+      folly::AllocatorHasDefaultObjectConstruct<TestAlloc5<S>, S, S>::value,
+      "");
+  static_assert(
+      !folly::AllocatorHasDefaultObjectDestroy<TestAlloc5<S>, S>::value, "");
+}
+
+template <typename T>
+struct ExpectingAlloc {
+  using value_type = T;
+
+  ExpectingAlloc(std::size_t expectedSize, std::size_t expectedCount)
+      : expectedSize_{expectedSize}, expectedCount_{expectedCount} {}
+
+  template <class U>
+  explicit ExpectingAlloc(ExpectingAlloc<U> const& other) noexcept
+      : expectedSize_{other.expectedSize_},
+        expectedCount_{other.expectedCount_} {}
+
+  T* allocate(std::size_t n) {
+    EXPECT_EQ(expectedSize_, sizeof(T));
+    EXPECT_EQ(expectedSize_, alignof(T));
+    EXPECT_EQ(expectedCount_, n);
+    return std::allocator<T>{}.allocate(n);
+  }
+
+  void deallocate(T* p, std::size_t n) {
+    std::allocator<T>{}.deallocate(p, n);
+  }
+
+  std::size_t expectedSize_;
+  std::size_t expectedCount_;
+};
+
+struct alignas(64) OverAlignedType {
+  std::array<char, 64> raw_;
+};
+
+TEST(allocateOverAligned, notActuallyOver) {
+  // allocates 6 bytes with alignment 4, should get turned into an
+  // allocation of 2 elements of something of size and alignment 4
+  ExpectingAlloc<char> a(4, 2);
+  auto p = folly::allocateOverAligned<decltype(a), 4>(a, 6);
+  EXPECT_EQ((reinterpret_cast<uintptr_t>(p) % 4), 0);
+  folly::deallocateOverAligned<decltype(a), 4>(a, p, 6);
+  EXPECT_EQ((folly::allocationBytesForOverAligned<decltype(a), 4>(6)), 8);
+}
+
+TEST(allocateOverAligned, manualOverStdAlloc) {
+  // allocates 6 bytes with alignment 64 using std::allocator, which will
+  // result in a call to aligned_malloc underneath.  We free one directly
+  // to check that this is not the padding path
+  std::allocator<short> a;
+  auto p = folly::allocateOverAligned<decltype(a), 64>(a, 3);
+  auto p2 = folly::allocateOverAligned<decltype(a), 64>(a, 3);
+  EXPECT_EQ((reinterpret_cast<uintptr_t>(p) % 64), 0);
+  folly::deallocateOverAligned<decltype(a), 64>(a, p, 3);
+  aligned_free(p2);
+  EXPECT_EQ((folly::allocationBytesForOverAligned<decltype(a), 64>(3)), 6);
+}
+
+TEST(allocateOverAligned, manualOverCustomAlloc) {
+  // allocates 6 byte with alignment 64 using non-standard allocator, which
+  // will result in an allocation of 64 + alignof(max_align_t) underneath.
+  ExpectingAlloc<short> a(
+      alignof(folly::max_align_t), 64 / alignof(folly::max_align_t) + 1);
+  auto p = folly::allocateOverAligned<decltype(a), 64>(a, 3);
+  EXPECT_EQ((reinterpret_cast<uintptr_t>(p) % 64), 0);
+  folly::deallocateOverAligned<decltype(a), 64>(a, p, 3);
+  EXPECT_EQ(
+      (folly::allocationBytesForOverAligned<decltype(a), 64>(3)),
+      64 + alignof(folly::max_align_t));
+}
+
+TEST(allocateOverAligned, defaultOverCustomAlloc) {
+  ExpectingAlloc<OverAlignedType> a(
+      alignof(folly::max_align_t), 128 / alignof(folly::max_align_t));
+  auto p = folly::allocateOverAligned(a, 1);
+  EXPECT_EQ((reinterpret_cast<uintptr_t>(p) % 64), 0);
+  folly::deallocateOverAligned(a, p, 1);
+  EXPECT_EQ(folly::allocationBytesForOverAligned<decltype(a)>(1), 128);
 }

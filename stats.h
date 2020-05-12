@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <string>
@@ -12,7 +12,7 @@
 
 #include <folly/Range.h>
 
-#include "mcrouter/lib/network/gen/Memcache.h"
+#include "mcrouter/lib/network/gen/MemcacheMessages.h"
 
 namespace facebook {
 namespace memcache {
@@ -61,7 +61,7 @@ enum stat_type_t {
 };
 
 enum stat_group_t {
-  mcproxy_stats = 0x1,
+  basic_stats = 0x1,
   detailed_stats = 0x2,
   cmd_error_stats = 0x20,
   ods_stats = 0x40,

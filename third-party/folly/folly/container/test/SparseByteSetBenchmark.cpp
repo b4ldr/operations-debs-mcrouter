@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -45,6 +45,7 @@ class BitSetWrapper {
   inline bool contains(uint8_t i) {
     return rep_[i];
   }
+
  private:
   bitset<256> rep_;
 };
@@ -63,6 +64,7 @@ class BoolArraySet {
   inline bool contains(uint8_t i) {
     return rep_[i];
   }
+
  private:
   bool rep_[256];
 };
@@ -81,70 +83,66 @@ void rand_bench(int iters, size_t size_add, size_t size_contains) {
     seq_contains.push_back(dist(rng));
   }
   braces.dismissing([&] {
-      while (iters--) {
-        Coll coll;
-        for (auto b : seq_add) {
-          coll.add(b);
-        }
-        bool q {};
-        for (auto b : seq_contains) {
-          q ^= coll.contains(b);
-        }
-        doNotOptimizeAway(q);
+    while (iters--) {
+      Coll coll;
+      for (auto b : seq_add) {
+        coll.add(b);
       }
+      bool q{};
+      for (auto b : seq_contains) {
+        q ^= coll.contains(b);
+      }
+      doNotOptimizeAway(q);
+    }
   });
 }
 
 void setup_rand_bench() {
   vector<pair<size_t, size_t>> rand_bench_params = {
-    {4, 4},
-    {4, 16},
-    {4, 64},
-    {4, 256},
-    {16, 4},
-    {16, 16},
-    {16, 64},
-    {16, 256},
-    {64, 4},
-    {64, 16},
-    {64, 64},
-    {64, 256},
-    {256, 4},
-    {256, 16},
-    {256, 64},
-    {256, 256},
+      {4, 4},
+      {4, 16},
+      {4, 64},
+      {4, 256},
+      {16, 4},
+      {16, 16},
+      {16, 64},
+      {16, 256},
+      {64, 4},
+      {64, 16},
+      {64, 64},
+      {64, 256},
+      {256, 4},
+      {256, 16},
+      {256, 64},
+      {256, 256},
   };
   for (auto kvp : rand_bench_params) {
     size_t size_add, size_contains;
     tie(size_add, size_contains) = kvp;
     addBenchmark(
         __FILE__,
-        sformat("bitset_rand_bench({}, {})",
-                size_add, size_contains).c_str(),
+        sformat("bitset_rand_bench({}, {})", size_add, size_contains).c_str(),
         [=](int iters) {
           rand_bench<BitSetWrapper>(iters, size_add, size_contains);
           return iters;
         });
     addBenchmark(
         __FILE__,
-        sformat("%bool_array_set_rand_bench({}, {})",
-                size_add, size_contains).c_str(),
+        sformat("%bool_array_set_rand_bench({}, {})", size_add, size_contains)
+            .c_str(),
         [=](int iters) {
           rand_bench<BoolArraySet>(iters, size_add, size_contains);
           return iters;
         });
     addBenchmark(
         __FILE__,
-        sformat("%sparse_byte_set_rand_bench({}, {})",
-                size_add, size_contains).c_str(),
+        sformat("%sparse_byte_set_rand_bench({}, {})", size_add, size_contains)
+            .c_str(),
         [=](int iters) {
           rand_bench<SparseByteSet>(iters, size_add, size_contains);
           return iters;
         });
-    addBenchmark(
-        __FILE__,
-        "-",
-        [](int) { return 0; });
+    addBenchmark(__FILE__, "-", [](int) { return 0; });
   }
 }
 

@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2017-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include <gtest/gtest.h>
 
 #include <folly/io/IOBuf.h>
@@ -20,7 +20,7 @@ using namespace carbon::test;
 namespace {
 
 void testBasic(bool scriptMode) {
-  McLeaseSetReply msg(mc_res_found);
+  McLeaseSetReply msg(carbon::Result::FOUND);
   msg.appSpecificErrorCode() = 17;
   msg.message() = "A message";
 

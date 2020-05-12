@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2016-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <folly/io/IOBuf.h>
@@ -101,6 +101,11 @@ class Lz4Immutable {
       const struct iovec* iov,
       size_t iovcnt,
       size_t uncompressedSize) const noexcept;
+
+  // Read-only access to the immutable dictionary.
+  const folly::IOBuf& dictionary() const {
+    return *state_.dictionary;
+  }
 
  private:
   // Compress 'source' into 'output' which has space for 'maxOutputSize' bytes.

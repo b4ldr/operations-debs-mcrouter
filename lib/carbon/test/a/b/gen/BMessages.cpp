@@ -18,11 +18,18 @@ namespace carbon {
 namespace test2 {
 namespace util {
 
-void SimpleStruct::serialize(carbon::CarbonProtocolWriter& writer) const {
-  writer.writeStructBegin();
-  writer.writeField(1 /* field id */, member1());
-  writer.writeStructEnd();
-  writer.writeStop();
+std::string enumSimpleEnumToString(SimpleEnum val) {
+  switch (val) {
+    case SimpleEnum::Twenty:
+      return "Twenty";
+    case SimpleEnum::Zero:
+      return "Zero";
+    case SimpleEnum::One:
+      return "One";
+    case SimpleEnum::Negative:
+      return "Negative";
+  }
+  return "<INVALID_OPTION>";
 }
 
 void SimpleStruct::deserialize(carbon::CarbonProtocolReader& reader) {
@@ -50,28 +57,6 @@ void SimpleStruct::deserialize(carbon::CarbonProtocolReader& reader) {
   reader.readStructEnd();
 }
 
-void SimpleUnion::serialize(carbon::CarbonProtocolWriter& writer) const {
-  writer.writeStructBegin();
-  switch (_which_) {
-    case 1: {
-      writer.writeFieldAlways(1 /* field id */, umember1());
-      break;
-    }
-    case 2: {
-      writer.writeFieldAlways(2 /* field id */, umember2());
-      break;
-    }
-    case 3: {
-      writer.writeFieldAlways(3 /* field id */, umember3());
-      break;
-    }
-    default:
-      break;
-  }
-  writer.writeStructEnd();
-  writer.writeStop();
-}
-
 void SimpleUnion::deserialize(carbon::CarbonProtocolReader& reader) {
   reader.readStructBegin();
   while (true) {
@@ -89,7 +74,7 @@ void SimpleUnion::deserialize(carbon::CarbonProtocolReader& reader) {
         break;
       }
       case 2: {
-        reader.readRawInto(emplace<2>());
+        reader.readRawInto(emplace<2>(), fieldType);
         break;
       }
       case 3: {
@@ -106,13 +91,6 @@ void SimpleUnion::deserialize(carbon::CarbonProtocolReader& reader) {
 }
 
 constexpr const char* const YetAnotherRequest::name;
-
-void YetAnotherRequest::serialize(carbon::CarbonProtocolWriter& writer) const {
-  writer.writeStructBegin();
-  writer.writeField(1 /* field id */, key());
-  writer.writeStructEnd();
-  writer.writeStop();
-}
 
 void YetAnotherRequest::deserialize(carbon::CarbonProtocolReader& reader) {
   reader.readStructBegin();
@@ -139,13 +117,6 @@ void YetAnotherRequest::deserialize(carbon::CarbonProtocolReader& reader) {
   reader.readStructEnd();
 }
 
-void YetAnotherReply::serialize(carbon::CarbonProtocolWriter& writer) const {
-  writer.writeStructBegin();
-  writer.writeField(1 /* field id */, result());
-  writer.writeStructEnd();
-  writer.writeStop();
-}
-
 void YetAnotherReply::deserialize(carbon::CarbonProtocolReader& reader) {
   reader.readStructBegin();
   while (true) {
@@ -170,7 +141,6 @@ void YetAnotherReply::deserialize(carbon::CarbonProtocolReader& reader) {
   }
   reader.readStructEnd();
 }
-
 } // namespace util
 } // namespace test2
 } // namespace carbon

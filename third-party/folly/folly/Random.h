@@ -1,11 +1,11 @@
 /*
- * Copyright 2011-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,6 +24,7 @@
 
 #include <folly/Portability.h>
 #include <folly/Traits.h>
+#include <folly/functional/Invoke.h>
 
 #if FOLLY_HAVE_EXTRANDOM_SFMT19937
 #include <ext/random>
@@ -65,9 +66,28 @@ class ThreadLocalPRNG {
 class Random {
  private:
   template <class RNG>
-  using ValidRNG = typename std::enable_if<
-      std::is_unsigned<typename std::result_of<RNG&()>::type>::value,
-      RNG>::type;
+  using ValidRNG = typename std::
+      enable_if<std::is_unsigned<invoke_result_t<RNG&>>::value, RNG>::type;
+
+  template <class T>
+  class SecureRNG {
+   public:
+    using result_type = typename std::enable_if<
+        std::is_integral<T>::value && !std::is_same<T, bool>::value,
+        T>::type;
+
+    result_type operator()() {
+      return Random::secureRandom<result_type>();
+    }
+
+    static constexpr result_type min() {
+      return std::numeric_limits<result_type>::min();
+    }
+
+    static constexpr result_type max() {
+      return std::numeric_limits<result_type>::max();
+    }
+  };
 
   template <class T>
   class SecureRNG {
@@ -100,7 +120,7 @@ class Random {
   /**
    * Get secure random bytes. (On Linux and OSX, this means /dev/urandom).
    */
-  static void secureRandom(void* data, size_t len);
+  static void secureRandom(void* data, size_t size);
 
   /**
    * Shortcut to get a secure random value of integral type.
@@ -317,8 +337,8 @@ class Random {
    */
   template <class RNG = ThreadLocalPRNG, class /* EnableIf */ = ValidRNG<RNG>>
   static bool oneIn(uint32_t n, RNG&& rng) {
-    if (n == 0) {
-      return false;
+    if (n < 2) {
+      return n;
     }
     return rand32(0, n, rng) == 0;
   }

@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2016-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 // Forward declaration
@@ -23,6 +23,11 @@ class NoopAdditionalLogger {
  public:
   explicit NoopAdditionalLogger(
       const facebook::memcache::mcrouter::ProxyRequestContext&) {}
+
+  template <class Request>
+  void logBeforeRequestSent(
+      const Request&,
+      const facebook::memcache::mcrouter::RequestLoggerContext&) {}
 
   template <class Request>
   void log(

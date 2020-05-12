@@ -1,11 +1,11 @@
 /*
- * Copyright 2014-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -39,7 +39,7 @@ class FOLLY_EXPORT AsyncSocketException : public std::runtime_error {
     INVALID_STATE = 10,
     SSL_ERROR = 12,
     COULD_NOT_BIND = 13,
-    SASL_HANDSHAKE_TIMEOUT = 14,
+    // SASL_HANDSHAKE_TIMEOUT = 14, // no longer used
     NETWORK_ERROR = 15,
     EARLY_DATA_REJECTED = 16,
   };
@@ -51,12 +51,6 @@ class FOLLY_EXPORT AsyncSocketException : public std::runtime_error {
       : std::runtime_error(getMessage(type, message, errnoCopy)),
         type_(type),
         errno_(errnoCopy) {}
-
-  /** Error code */
-  AsyncSocketExceptionType type_;
-
-  /** A copy of the errno. */
-  int errno_;
 
   AsyncSocketExceptionType getType() const noexcept {
     return type_;
@@ -76,6 +70,12 @@ class FOLLY_EXPORT AsyncSocketException : public std::runtime_error {
       AsyncSocketExceptionType type,
       const std::string& message,
       int errnoCopy);
+
+  /** Error code */
+  AsyncSocketExceptionType type_;
+
+  /** A copy of the errno. */
+  int errno_;
 };
 
 } // namespace folly

@@ -1,11 +1,11 @@
 /*
- * Copyright 2012-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -285,11 +285,15 @@ testWithLock() {
     EXPECT_EQ(1006, lockedObj->size());
     EXPECT_EQ(16, lockedObj->back());
   });
-  obj.withRLockPtr([](typename SynchType::ConstLockedPtr&& lockedObj) {
+  obj.withRLockPtr([](typename SynchType::RLockedPtr&& lockedObj) {
+    EXPECT_TRUE(
+        (std::is_const<std::remove_reference_t<decltype(*lockedObj)>>{}));
     EXPECT_EQ(1006, lockedObj->size());
     EXPECT_EQ(16, lockedObj->back());
   });
-  constObj.withRLockPtr([](typename SynchType::ConstLockedPtr&& lockedObj) {
+  constObj.withRLockPtr([](typename SynchType::ConstRLockedPtr&& lockedObj) {
+    EXPECT_TRUE(
+        (std::is_const<std::remove_reference_t<decltype(*lockedObj)>>{}));
     EXPECT_EQ(1006, lockedObj->size());
     EXPECT_EQ(16, lockedObj->back());
   });
@@ -414,6 +418,7 @@ testUnlock() {
     EXPECT_FALSE(lv.isNull());
     EXPECT_EQ(7, *lv);
   }
+}
 
   testUnlockCommon<Mutex>();
 }
@@ -454,38 +459,39 @@ testUnlock() {
 
 // Testing the deprecated SYNCHRONIZED and SYNCHRONIZED_CONST APIs
 template <class Mutex>
-void testDeprecated() {
+[[deprecated]] void testDeprecated() {
   folly::Synchronized<std::vector<int>, Mutex> obj;
 
-  obj->resize(1000);
+  obj.contextualLock()->resize(1000);
 
   auto obj2 = obj;
-  EXPECT_EQ(1000, obj2->size());
+  EXPECT_EQ(1000, obj2.contextualLock()->size());
 
-  SYNCHRONIZED (obj) {
+  SYNCHRONIZED(obj) {
     obj.push_back(10);
     EXPECT_EQ(1001, obj.size());
     EXPECT_EQ(10, obj.back());
-    EXPECT_EQ(1000, obj2->size());
+    EXPECT_EQ(1000, obj2.contextualLock()->size());
   }
 
-  SYNCHRONIZED_CONST (obj) {
+  SYNCHRONIZED_CONST(obj) {
     EXPECT_EQ(1001, obj.size());
   }
 
-  SYNCHRONIZED (lockedObj, *&obj) {
+  SYNCHRONIZED(lockedObj, *&obj) {
     lockedObj.front() = 2;
   }
 
-  EXPECT_EQ(1001, obj->size());
-  EXPECT_EQ(10, obj->back());
-  EXPECT_EQ(1000, obj2->size());
+  EXPECT_EQ(1001, obj.contextualLock()->size());
+  EXPECT_EQ(10, obj.contextualLock()->back());
+  EXPECT_EQ(1000, obj2.contextualLock()->size());
 
   EXPECT_EQ(FB_ARG_2_OR_1(1, 2), 2);
   EXPECT_EQ(FB_ARG_2_OR_1(1), 1);
 }
 
-template <class Mutex> void testConcurrency() {
+template <class Mutex>
+void testConcurrency() {
   folly::Synchronized<std::vector<int>, Mutex> v;
   static const size_t numThreads = 100;
   // Note: I initially tried using itersPerThread = 1000,
@@ -579,7 +585,8 @@ void testAcquireLockedWithConst() {
 }
 
 // Testing the deprecated SYNCHRONIZED_DUAL API
-template <class Mutex> void testDualLocking() {
+template <class Mutex>
+[[deprecated]] void testDualLocking() {
   folly::Synchronized<std::vector<int>, Mutex> v;
   folly::Synchronized<std::map<int, int>, Mutex> m;
 
@@ -611,7 +618,8 @@ template <class Mutex> void testDualLocking() {
 }
 
 // Testing the deprecated SYNCHRONIZED_DUAL API
-template <class Mutex> void testDualLockingWithConst() {
+template <class Mutex>
+[[deprecated]] void testDualLockingWithConst() {
   folly::Synchronized<std::vector<int>, Mutex> v;
   folly::Synchronized<std::map<int, int>, Mutex> m;
 
@@ -646,7 +654,7 @@ template <class Mutex> void testDualLockingWithConst() {
 template <class Mutex>
 void testTimed() {
   folly::Synchronized<std::vector<int>, Mutex> v;
-  folly::Synchronized<uint64_t, Mutex> numTimeouts;
+  folly::Synchronized<uint64_t, Mutex> numTimeouts{0};
 
   auto worker = [&](size_t threadIdx) {
     // Test directly using operator-> on the lock result
@@ -704,7 +712,7 @@ void testTimed() {
 template <class Mutex>
 void testTimedShared() {
   folly::Synchronized<std::vector<int>, Mutex> v;
-  folly::Synchronized<uint64_t, Mutex> numTimeouts;
+  folly::Synchronized<uint64_t, Mutex> numTimeouts{0};
 
   auto worker = [&](size_t threadIdx) {
     // Test directly using operator-> on the lock result
@@ -754,13 +762,14 @@ void testTimedShared() {
 }
 
 // Testing the deprecated TIMED_SYNCHRONIZED API
-template <class Mutex> void testTimedSynchronized() {
+template <class Mutex>
+[[deprecated]] void testTimedSynchronized() {
   folly::Synchronized<std::vector<int>, Mutex> v;
-  folly::Synchronized<uint64_t, Mutex> numTimeouts;
+  folly::Synchronized<uint64_t, Mutex> numTimeouts{0};
 
   auto worker = [&](size_t threadIdx) {
-    // Test operator->
-    v->push_back(2 * threadIdx);
+    // Test contextualLock()
+    v.contextualLock()->push_back(2 * threadIdx);
 
     // Aaand test the TIMED_SYNCHRONIZED macro
     for (;;) {
@@ -800,13 +809,14 @@ template <class Mutex> void testTimedSynchronized() {
 }
 
 // Testing the deprecated TIMED_SYNCHRONIZED_CONST API
-template <class Mutex> void testTimedSynchronizedWithConst() {
+template <class Mutex>
+[[deprecated]] void testTimedSynchronizedWithConst() {
   folly::Synchronized<std::vector<int>, Mutex> v;
-  folly::Synchronized<uint64_t, Mutex> numTimeouts;
+  folly::Synchronized<uint64_t, Mutex> numTimeouts{0};
 
   auto worker = [&](size_t threadIdx) {
-    // Test operator->
-    v->push_back(threadIdx);
+    // Test contextualLock()
+    v.contextualLock()->push_back(threadIdx);
 
     // Test TIMED_SYNCHRONIZED_CONST
     for (;;) {
@@ -852,13 +862,14 @@ template <class Mutex> void testTimedSynchronizedWithConst() {
             << *numTimeouts.contextualRLock() << " timeouts";
 }
 
-template <class Mutex> void testConstCopy() {
+template <class Mutex>
+void testConstCopy() {
   std::vector<int> input = {1, 2, 3};
   const folly::Synchronized<std::vector<int>, Mutex> v(input);
 
   std::vector<int> result;
 
-  v.copy(&result);
+  v.copyInto(result);
   EXPECT_EQ(input, result);
 
   result = v.copy();
@@ -873,7 +884,8 @@ struct NotCopiableNotMovable {
   NotCopiableNotMovable& operator=(NotCopiableNotMovable&&) = delete;
 };
 
-template <class Mutex> void testInPlaceConstruction() {
+template <class Mutex>
+void testInPlaceConstruction() {
   // This won't compile without in_place
   folly::Synchronized<NotCopiableNotMovable> a(folly::in_place, 5, "a");
 }
@@ -884,8 +896,8 @@ void testExchange() {
   folly::Synchronized<std::vector<int>, Mutex> v(input);
   std::vector<int> next = {4, 5, 6};
   auto prev = v.exchange(std::move(next));
-  EXPECT_EQ((std::vector<int>{1, 2, 3}), prev);
-  EXPECT_EQ((std::vector<int>{4, 5, 6}), v.copy());
+  EXPECT_EQ((std::vector<int>{{1, 2, 3}}), prev);
+  EXPECT_EQ((std::vector<int>{{4, 5, 6}}), v.copy());
 }
 } // namespace sync_tests
 } // namespace folly

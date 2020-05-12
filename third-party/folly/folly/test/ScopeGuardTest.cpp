@@ -1,11 +1,11 @@
 /*
- * Copyright 2011-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,8 +18,10 @@
 
 #include <glog/logging.h>
 
+#include <condition_variable>
 #include <functional>
 #include <stdexcept>
+#include <thread>
 
 #include <folly/portability/GTest.h>
 
@@ -132,7 +134,8 @@ TEST(ScopeGuard, DifferentWaysToBind) {
 
 TEST(ScopeGuard, GuardException) {
   EXPECT_DEATH(
-      makeGuard([] { throw std::runtime_error("dtors should never throw!"); }),
+      (void)makeGuard(
+          [] { throw std::runtime_error("dtors should never throw!"); }),
       "dtors should never throw!");
 }
 
@@ -228,7 +231,9 @@ TEST(ScopeGuard, TryCatchFinally) {
 TEST(ScopeGuard, TEST_SCOPE_EXIT) {
   int x = 0;
   {
-    SCOPE_EXIT { ++x; };
+    SCOPE_EXIT {
+      ++x;
+    };
     EXPECT_EQ(0, x);
   }
   EXPECT_EQ(1, x);
@@ -242,7 +247,9 @@ class Foo {
       auto e = std::current_exception();
       int test = 0;
       {
-        SCOPE_EXIT { ++test; };
+        SCOPE_EXIT {
+          ++test;
+        };
         EXPECT_EQ(0, test);
       }
       EXPECT_EQ(1, test);
@@ -265,8 +272,12 @@ void testScopeFailAndScopeSuccess(ErrorBehavior error, bool expectFail) {
   bool scopeSuccessExecuted = false;
 
   try {
-    SCOPE_FAIL { scopeFailExecuted = true; };
-    SCOPE_SUCCESS { scopeSuccessExecuted = true; };
+    SCOPE_FAIL {
+      scopeFailExecuted = true;
+    };
+    SCOPE_SUCCESS {
+      scopeSuccessExecuted = true;
+    };
 
     try {
       if (error == ErrorBehavior::HANDLED_ERROR) {
@@ -284,6 +295,30 @@ void testScopeFailAndScopeSuccess(ErrorBehavior error, bool expectFail) {
   EXPECT_EQ(!expectFail, scopeSuccessExecuted);
 }
 
+TEST(ScopeGuard, TEST_SCOPE_FAIL_EXCEPTION_PTR) {
+  bool catchExecuted = false;
+  bool failExecuted = false;
+
+  try {
+    SCOPE_FAIL {
+      failExecuted = true;
+    };
+
+    std::exception_ptr ep;
+    try {
+      throw std::runtime_error("test");
+    } catch (...) {
+      ep = std::current_exception();
+    }
+    std::rethrow_exception(ep);
+  } catch (const std::exception&) {
+    catchExecuted = true;
+  }
+
+  EXPECT_TRUE(catchExecuted);
+  EXPECT_TRUE(failExecuted);
+}
+
 TEST(ScopeGuard, TEST_SCOPE_FAIL_AND_SCOPE_SUCCESS) {
   testScopeFailAndScopeSuccess(ErrorBehavior::SUCCESS, false);
   testScopeFailAndScopeSuccess(ErrorBehavior::HANDLED_ERROR, false);
@@ -292,27 +327,32 @@ TEST(ScopeGuard, TEST_SCOPE_FAIL_AND_SCOPE_SUCCESS) {
 
 TEST(ScopeGuard, TEST_SCOPE_SUCCESS_THROW) {
   auto lambda = []() {
-    SCOPE_SUCCESS { throw std::runtime_error("ehm"); };
+    SCOPE_SUCCESS {
+      throw std::runtime_error("ehm");
+    };
   };
   EXPECT_THROW(lambda(), std::runtime_error);
 }
 
 TEST(ScopeGuard, TEST_THROWING_CLEANUP_ACTION) {
   struct ThrowingCleanupAction {
+    // clang-format off
     explicit ThrowingCleanupAction(int& scopeExitExecuted)
         : scopeExitExecuted_(scopeExitExecuted) {}
-    [[noreturn]]
-    ThrowingCleanupAction(const ThrowingCleanupAction& other)
+    [[noreturn]] ThrowingCleanupAction(const ThrowingCleanupAction& other)
         : scopeExitExecuted_(other.scopeExitExecuted_) {
       throw std::runtime_error("whoa");
     }
-    void operator()() { ++scopeExitExecuted_; }
+    // clang-format on
+    void operator()() {
+      ++scopeExitExecuted_;
+    }
 
    private:
     int& scopeExitExecuted_;
   };
   int scopeExitExecuted = 0;
   ThrowingCleanupAction onExit(scopeExitExecuted);
-  EXPECT_THROW(makeGuard(onExit), std::runtime_error);
+  EXPECT_THROW((void)makeGuard(onExit), std::runtime_error);
   EXPECT_EQ(scopeExitExecuted, 1);
 }

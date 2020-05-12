@@ -1,3 +1,17 @@
+# Copyright (c) Facebook, Inc. and its affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 include(CheckCXXSourceCompiles)
 include(CheckCXXSourceRuns)
 include(CheckFunctionExists)
@@ -6,11 +20,11 @@ include(CheckSymbolExists)
 include(CheckTypeSize)
 include(CheckCXXCompilerFlag)
 
-CHECK_INCLUDE_FILE_CXX(malloc.h FOLLY_HAVE_MALLOC_H)
-CHECK_INCLUDE_FILE_CXX(bits/c++config.h FOLLY_HAVE_BITS_CXXCONFIG_H)
-CHECK_INCLUDE_FILE_CXX(features.h FOLLY_HAVE_FEATURES_H)
-CHECK_INCLUDE_FILE_CXX(linux/membarrier.h FOLLY_HAVE_LINUX_MEMBARRIER_H)
-CHECK_INCLUDE_FILE_CXX(jemalloc/jemalloc.h FOLLY_USE_JEMALLOC)
+if (CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+  CHECK_INCLUDE_FILE_CXX(malloc_np.h FOLLY_USE_JEMALLOC)
+else()
+  CHECK_INCLUDE_FILE_CXX(jemalloc/jemalloc.h FOLLY_USE_JEMALLOC)
+endif()
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
   # clang only rejects unknown warning flags if -Werror=unknown-warning-option
@@ -19,7 +33,8 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
     -Werror=unknown-warning-option
     COMPILER_HAS_UNKNOWN_WARNING_OPTION)
   if (COMPILER_HAS_UNKNOWN_WARNING_OPTION)
-    list(APPEND CMAKE_REQUIRED_FLAGS -Werror=unknown-warning-option)
+    set(CMAKE_REQUIRED_FLAGS
+      "${CMAKE_REQUIRED_FLAGS} -Werror=unknown-warning-option")
   endif()
 
   CHECK_CXX_COMPILER_FLAG(-Wshadow-local COMPILER_HAS_W_SHADOW_LOCAL)
@@ -43,6 +58,13 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
     list(APPEND FOLLY_CXX_FLAGS -Wno-nullability-completeness)
   endif()
 
+  CHECK_CXX_COMPILER_FLAG(
+      -Winconsistent-missing-override
+      COMPILER_HAS_W_INCONSISTENT_MISSING_OVERRIDE)
+  if (COMPILER_HAS_W_INCONSISTENT_MISSING_OVERRIDE)
+    list(APPEND FOLLY_CXX_FLAGS -Wno-inconsistent-missing-override)
+  endif()
+
   CHECK_CXX_COMPILER_FLAG(-faligned-new COMPILER_HAS_F_ALIGNED_NEW)
   if (COMPILER_HAS_F_ALIGNED_NEW)
     list(APPEND FOLLY_CXX_FLAGS -faligned-new)
@@ -54,20 +76,30 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
   endif()
 endif()
 
+set(FOLLY_ORIGINAL_CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS}")
+string(REGEX REPLACE
+  "-std=(c|gnu)\\+\\+.."
+  ""
+  CMAKE_REQUIRED_FLAGS
+  "${CMAKE_REQUIRED_FLAGS}")
+
 check_symbol_exists(pthread_atfork pthread.h FOLLY_HAVE_PTHREAD_ATFORK)
 
 # Unfortunately check_symbol_exists() does not work for memrchr():
 # it fails complaining that there are multiple overloaded versions of memrchr()
 check_function_exists(memrchr FOLLY_HAVE_MEMRCHR)
+check_symbol_exists(accept4 sys/socket.h FOLLY_HAVE_ACCEPT4)
+check_symbol_exists(getrandom sys/random.h FOLLY_HAVE_GETRANDOM)
 check_symbol_exists(preadv sys/uio.h FOLLY_HAVE_PREADV)
 check_symbol_exists(pwritev sys/uio.h FOLLY_HAVE_PWRITEV)
 check_symbol_exists(clock_gettime time.h FOLLY_HAVE_CLOCK_GETTIME)
+check_symbol_exists(pipe2 unistd.h FOLLY_HAVE_PIPE2)
+check_symbol_exists(sendmmsg sys/socket.h FOLLY_HAVE_SENDMMSG)
+check_symbol_exists(recvmmsg sys/socket.h FOLLY_HAVE_RECVMMSG)
 
-check_function_exists(
-  cplus_demangle_v3_callback
-  FOLLY_HAVE_CPLUS_DEMANGLE_V3_CALLBACK
-)
 check_function_exists(malloc_usable_size FOLLY_HAVE_MALLOC_USABLE_SIZE)
+
+set(CMAKE_REQUIRED_FLAGS "${FOLLY_ORIGINAL_CMAKE_REQUIRED_FLAGS}")
 
 check_cxx_source_compiles("
   #pragma GCC diagnostic error \"-Wattributes\"
@@ -166,20 +198,17 @@ check_cxx_source_compiles("
   #if !_LIBCPP_VERSION
   #error No libc++
   #endif
-  void func() {}"
+  int main() { return 0; }"
   FOLLY_USE_LIBCPP
 )
 
-check_cxx_source_runs("
-  #include <string.h>
-  #include <errno.h>
-  int main(int argc, char** argv) {
-    char buf[1024];
-    buf[0] = 0;
-    int ret = strerror_r(ENOMEM, buf, sizeof(buf));
-    return ret;
-  }"
-  FOLLY_HAVE_XSI_STRERROR_R
+check_cxx_source_compiles("
+  #include <type_traits>
+  #if !__GLIBCXX__
+  #error No libstdc++
+  #endif
+  int main() { return 0; }"
+  FOLLY_USE_LIBSTDCPP
 )
 
 check_cxx_source_runs("
@@ -223,16 +252,3 @@ if (FOLLY_HAVE_LIBGFLAGS)
     set(FOLLY_GFLAGS_NAMESPACE google)
   endif()
 endif()
-
-set(FOLLY_USE_SYMBOLIZER OFF)
-CHECK_INCLUDE_FILE_CXX(elf.h FOLLY_HAVE_ELF_H)
-find_library(UNWIND_LIBRARIES NAMES unwind)
-if (UNWIND_LIBRARIES)
-  list(APPEND FOLLY_LINK_LIBRARIES ${UNWIND_LIBRARIES})
-  list(APPEND CMAKE_REQUIRED_LIBRARIES ${UNWIND_LIBRARIES})
-endif()
-check_function_exists(backtrace FOLLY_HAVE_BACKTRACE)
-if (FOLLY_HAVE_ELF_H AND FOLLY_HAVE_BACKTRACE AND LIBDWARF_FOUND)
-  set(FOLLY_USE_SYMBOLIZER ON)
-endif()
-message(STATUS "Setting FOLLY_USE_SYMBOLIZER: ${FOLLY_USE_SYMBOLIZER}")

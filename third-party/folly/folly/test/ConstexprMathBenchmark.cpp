@@ -1,11 +1,11 @@
 /*
- * Copyright 2018-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -156,38 +156,38 @@ void NoOverflowSub(size_t iterations, ValueT kMin, ValueT kMax) {
       Add,                                   \
       ValueT,                                \
       std::numeric_limits<ValueT>::min(),    \
-      std::numeric_limits<ValueT>::max());   \
+      std::numeric_limits<ValueT>::max())    \
   BENCHMARK_RELATIVE_NAMED_PARAM(            \
       NoOverflowAdd,                         \
       ValueT,                                \
       std::numeric_limits<ValueT>::min(),    \
-      std::numeric_limits<ValueT>::max());   \
+      std::numeric_limits<ValueT>::max())    \
   BENCHMARK_NAMED_PARAM(                     \
       Sub,                                   \
       ValueT,                                \
       std::numeric_limits<ValueT>::min(),    \
-      std::numeric_limits<ValueT>::max());   \
+      std::numeric_limits<ValueT>::max())    \
   BENCHMARK_RELATIVE_NAMED_PARAM(            \
       NoOverflowSub,                         \
       ValueT,                                \
       std::numeric_limits<ValueT>::min(),    \
       std::numeric_limits<ValueT>::max())
 
-GENERATE_BENCHMARKS_FOR_TYPE(int8_t);
+GENERATE_BENCHMARKS_FOR_TYPE(int8_t)
 BENCHMARK_DRAW_LINE();
-GENERATE_BENCHMARKS_FOR_TYPE(uint8_t);
+GENERATE_BENCHMARKS_FOR_TYPE(uint8_t)
 BENCHMARK_DRAW_LINE();
-GENERATE_BENCHMARKS_FOR_TYPE(int16_t);
+GENERATE_BENCHMARKS_FOR_TYPE(int16_t)
 BENCHMARK_DRAW_LINE();
-GENERATE_BENCHMARKS_FOR_TYPE(uint16_t);
+GENERATE_BENCHMARKS_FOR_TYPE(uint16_t)
 BENCHMARK_DRAW_LINE();
-GENERATE_BENCHMARKS_FOR_TYPE(int32_t);
+GENERATE_BENCHMARKS_FOR_TYPE(int32_t)
 BENCHMARK_DRAW_LINE();
-GENERATE_BENCHMARKS_FOR_TYPE(uint32_t);
+GENERATE_BENCHMARKS_FOR_TYPE(uint32_t)
 BENCHMARK_DRAW_LINE();
-GENERATE_BENCHMARKS_FOR_TYPE(int64_t);
+GENERATE_BENCHMARKS_FOR_TYPE(int64_t)
 BENCHMARK_DRAW_LINE();
-GENERATE_BENCHMARKS_FOR_TYPE(uint64_t);
+GENERATE_BENCHMARKS_FOR_TYPE(uint64_t)
 
 int main(int argc, char** argv) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);

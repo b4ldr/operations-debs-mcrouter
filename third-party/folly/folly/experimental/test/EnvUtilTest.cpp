@@ -1,11 +1,11 @@
 /*
- * Copyright 2017-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,9 @@
 #include <boost/algorithm/string.hpp>
 #include <folly/Memory.h>
 #include <folly/Subprocess.h>
+#include <folly/container/Array.h>
 #include <folly/portability/Fcntl.h>
+#include <folly/portability/GFlags.h>
 #include <folly/portability/GTest.h>
 #include <folly/portability/Stdlib.h>
 #include <glog/logging.h>
@@ -27,9 +29,9 @@
 #include <system_error>
 
 using namespace folly;
-using folly::test::EnvVarSaver;
 using folly::experimental::EnvironmentState;
 using folly::experimental::MalformedEnvironment;
+using folly::test::EnvVarSaver;
 
 DEFINE_string(
     env_util_subprocess_binary,
@@ -72,10 +74,10 @@ TEST(EnvVarSaverTest, Movable) {
   auto value = std::string{getenv(key)};
   Optional<EnvVarSaver> pSaver2;
   pSaver2.emplace(std::move(*pSaver1));
-  pSaver1.clear();
+  pSaver1.reset();
   PCHECK(0 == setenv(key, "blah", true));
   EXPECT_STREQ("blah", getenv(key));
-  pSaver2.clear();
+  pSaver2.reset();
   EXPECT_EQ(value, getenv(key));
 }
 
@@ -160,16 +162,18 @@ TEST(EnvironmentStateTest, forC) {
   (*env)["spork"] = "foon";
   EXPECT_STREQ("spork=foon", env.toPointerArray().get()[0]);
   EXPECT_EQ(nullptr, env.toPointerArray().get()[1]);
-  char const* program = fLS::FLAGS_env_util_subprocess_binary.c_str();
+  char* program = &fLS::FLAGS_env_util_subprocess_binary[0];
   pid_t pid;
+  auto argV = folly::make_array(program, nullptr);
   PCHECK(
-      0 == posix_spawn(
-               &pid,
-               program,
-               nullptr,
-               nullptr,
-               nullptr,
-               env.toPointerArray().get()));
+      0 ==
+      posix_spawn(
+          &pid,
+          program,
+          nullptr,
+          nullptr,
+          argV.data(),
+          env.toPointerArray().get()));
   int result;
   PCHECK(pid == waitpid(pid, &result, 0));
   EXPECT_EQ(0, result);

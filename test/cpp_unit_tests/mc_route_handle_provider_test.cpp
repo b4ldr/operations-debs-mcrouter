@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include <string>
 
 #include <gtest/gtest.h>
@@ -62,7 +62,10 @@ struct TestSetup {
       : router_(CarbonRouterInstance<McrouterRouterInfo>::init(
             "test_get_route",
             getOpts())),
-        poolFactory_(folly::dynamic::object(), router_->configApi()),
+        poolFactory_(
+            folly::dynamic::object(),
+            router_->configApi(),
+            folly::json::metadata_map{}),
         rhProvider_(*router_->getProxy(0), poolFactory_),
         rhFactory_(rhProvider_, 0) {}
 
@@ -92,7 +95,7 @@ struct TestSetup {
 TEST(McRouteHandleProviderTest, sanity) {
   auto rh = TestSetup().getRoute(kConstShard);
   EXPECT_TRUE(rh != nullptr);
-  EXPECT_EQ("error", rh->routeName());
+  EXPECT_EQ("error|log|mc_res_local_error", rh->routeName());
 }
 
 TEST(McRouteHandleProviderTest, invalid_func) {

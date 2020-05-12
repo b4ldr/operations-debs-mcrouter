@@ -1,11 +1,11 @@
 /*
- * Copyright 2017-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,7 +22,7 @@
 #include <folly/concurrency/AtomicSharedPtr.h>
 #include <folly/concurrency/CacheLocality.h>
 #include <folly/container/Enumerate.h>
-#include <folly/experimental/hazptr/hazptr.h>
+#include <folly/synchronization/Hazptr.h>
 
 namespace folly {
 
@@ -130,8 +130,8 @@ class AtomicCoreCachedSharedPtr {
   }
 
   std::shared_ptr<T> get() const {
-    folly::hazptr::hazptr_holder hazptr;
-    auto slots = hazptr.get_protected(slots_);
+    folly::hazptr_local<1> hazptr;
+    auto slots = hazptr[0].get_protected(slots_);
     if (!slots) {
       return nullptr;
     }
@@ -140,7 +140,7 @@ class AtomicCoreCachedSharedPtr {
 
  private:
   using Holder = std::shared_ptr<T>;
-  struct Slots : folly::hazptr::hazptr_obj_base<Slots> {
+  struct Slots : folly::hazptr_obj_base<Slots> {
     std::array<std::shared_ptr<T>, kNumSlots> slots_;
   };
   std::atomic<Slots*> slots_{nullptr};

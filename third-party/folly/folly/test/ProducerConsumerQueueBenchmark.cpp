@@ -1,11 +1,11 @@
 /*
- * Copyright 2013-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,7 +28,6 @@
 #include <folly/portability/GFlags.h>
 #include <folly/portability/PThread.h>
 #include <folly/stats/Histogram.h>
-#include <folly/stats/Histogram-defs.h>
 
 namespace {
 
@@ -43,12 +42,7 @@ typedef ProducerConsumerQueue<LatencyType> LatencyQueueType;
 template <class QueueType>
 struct ThroughputTest {
   explicit ThroughputTest(size_t size, int iters, int cpu0, int cpu1)
-  : queue_(size),
-    done_(false),
-    iters_(iters),
-    cpu0_(cpu0),
-    cpu1_(cpu1)
-    { }
+      : queue_(size), done_(false), iters_(iters), cpu0_(cpu0), cpu1_(cpu1) {}
 
   void producer() {
     if (cpu0_ > -1) {
@@ -59,7 +53,7 @@ struct ThroughputTest {
     }
     for (int i = 0; i < iters_; ++i) {
       ThroughputType item = i;
-      while (!queue_.write((ThroughputType) item)) {
+      while (!queue_.write((ThroughputType)item)) {
       }
     }
   }
@@ -89,15 +83,25 @@ struct ThroughputTest {
 template <class QueueType>
 struct LatencyTest {
   explicit LatencyTest(size_t size, int iters, int cpu0, int cpu1)
-  : queue_(size),
-    done_(false),
-    iters_(iters),
-    cpu0_(cpu0),
-    cpu1_(cpu1),
-    hist_(1, 0, 30)
-    {
-      computeTimeCost();
+      : queue_(size),
+        done_(false),
+        iters_(iters),
+        cpu0_(cpu0),
+        cpu1_(cpu1),
+        hist_(1, 0, 30) {
+    computeTimeCost();
+  }
+
+  static uint64_t timespecDiff(timespec end, timespec start) {
+    if (end.tv_sec == start.tv_sec) {
+      assert(end.tv_nsec >= start.tv_nsec);
+      return uint64_t(end.tv_nsec - start.tv_nsec);
     }
+    assert(end.tv_sec > start.tv_sec);
+    auto diff = uint64_t(end.tv_sec - start.tv_sec);
+    assert(diff < std::numeric_limits<uint64_t>::max() / 1000000000ULL);
+    return diff * 1000000000ULL + end.tv_nsec - start.tv_nsec;
+  }
 
   static uint64_t timespecDiff(timespec end, timespec start) {
     if (end.tv_sec == start.tv_sec) {
@@ -137,7 +141,7 @@ struct LatencyTest {
 
       timespec tv;
       clock_gettime(CLOCK_REALTIME, &tv);
-      while (!queue_.write((LatencyType) tv.tv_nsec)) {
+      while (!queue_.write((LatencyType)tv.tv_nsec)) {
       }
     }
   }
@@ -163,9 +167,7 @@ struct LatencyTest {
 
       // Naive log-scale bucketing.
       int bucket;
-      for (bucket = 0;
-           bucket <= 30 && (1 << bucket) <= diff;
-           ++bucket) {
+      for (bucket = 0; bucket <= 30 && (1 << bucket) <= diff; ++bucket) {
       }
       hist_.addValue(bucket - 1);
     }
@@ -187,12 +189,12 @@ struct LatencyTest {
 void BM_ProducerConsumer(int iters, int size) {
   BenchmarkSuspender susp;
   CHECK_GT(size, 0);
-  ThroughputTest<ThroughputQueueType> *test =
-    new ThroughputTest<ThroughputQueueType>(size, iters, -1, -1);
+  ThroughputTest<ThroughputQueueType>* test =
+      new ThroughputTest<ThroughputQueueType>(size, iters, -1, -1);
   susp.dismiss();
 
-  std::thread producer( [test] { test->producer(); } );
-  std::thread consumer( [test] { test->consumer(); } );
+  std::thread producer([test] { test->producer(); });
+  std::thread consumer([test] { test->consumer(); });
 
   producer.join();
   test->done_ = true;
@@ -203,12 +205,12 @@ void BM_ProducerConsumer(int iters, int size) {
 void BM_ProducerConsumerAffinity(int iters, int size) {
   BenchmarkSuspender susp;
   CHECK_GT(size, 0);
-  ThroughputTest<ThroughputQueueType> *test =
-    new ThroughputTest<ThroughputQueueType>(size, iters, 0, 1);
+  ThroughputTest<ThroughputQueueType>* test =
+      new ThroughputTest<ThroughputQueueType>(size, iters, 0, 1);
   susp.dismiss();
 
-  std::thread producer( [test] { test->producer(); } );
-  std::thread consumer( [test] { test->consumer(); } );
+  std::thread producer([test] { test->producer(); });
+  std::thread consumer([test] { test->consumer(); });
 
   producer.join();
   test->done_ = true;
@@ -219,12 +221,12 @@ void BM_ProducerConsumerAffinity(int iters, int size) {
 void BM_ProducerConsumerLatency(int /* iters */, int size) {
   BenchmarkSuspender susp;
   CHECK_GT(size, 0);
-  LatencyTest<LatencyQueueType> *test =
-    new LatencyTest<LatencyQueueType>(size, 100000, 0, 1);
+  LatencyTest<LatencyQueueType>* test =
+      new LatencyTest<LatencyQueueType>(size, 100000, 0, 1);
   susp.dismiss();
 
-  std::thread producer( [test] { test->producer(); } );
-  std::thread consumer( [test] { test->consumer(); } );
+  std::thread producer([test] { test->producer(); });
+  std::thread consumer([test] { test->consumer(); });
 
   producer.join();
   test->done_ = true;
@@ -233,12 +235,11 @@ void BM_ProducerConsumerLatency(int /* iters */, int size) {
   delete test;
 }
 
-
 BENCHMARK_DRAW_LINE();
 
-BENCHMARK_PARAM(BM_ProducerConsumer, 1048574);
-BENCHMARK_PARAM(BM_ProducerConsumerAffinity, 1048574);
-BENCHMARK_PARAM(BM_ProducerConsumerLatency, 1048574);
+BENCHMARK_PARAM(BM_ProducerConsumer, 1048574)
+BENCHMARK_PARAM(BM_ProducerConsumerAffinity, 1048574)
+BENCHMARK_PARAM(BM_ProducerConsumerLatency, 1048574)
 
 } // namespace
 

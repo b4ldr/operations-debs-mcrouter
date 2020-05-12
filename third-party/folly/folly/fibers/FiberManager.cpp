@@ -1,11 +1,11 @@
 /*
- * Copyright 2014-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,9 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "FiberManagerInternal.h"
 
-#include <signal.h>
+#include <folly/fibers/FiberManagerInternal.h>
+
+#include <csignal>
 
 #include <cassert>
 #include <stdexcept>
@@ -29,6 +30,7 @@
 #include <folly/SingletonThreadLocal.h>
 #include <folly/portability/SysSyscall.h>
 #include <folly/portability/Unistd.h>
+#include <folly/synchronization/SanitizeThread.h>
 
 #ifdef FOLLY_SANITIZE_ADDRESS
 
@@ -60,23 +62,37 @@ namespace fibers {
 static AsanStartSwitchStackFuncPtr getStartSwitchStackFunc();
 static AsanFinishSwitchStackFuncPtr getFinishSwitchStackFunc();
 static AsanUnpoisonMemoryRegionFuncPtr getUnpoisonMemoryRegionFunc();
-}
-}
+} // namespace fibers
+} // namespace folly
 
 #endif
+
+namespace std {
+template <>
+struct hash<folly::fibers::FiberManager::Options> {
+  ssize_t operator()(const folly::fibers::FiberManager::Options& opts) const {
+    return hash<decltype(opts.hash())>()(opts.hash());
+  }
+};
+} // namespace std
 
 namespace folly {
 namespace fibers {
 
-FOLLY_TLS FiberManager* FiberManager::currentFiberManager_ = nullptr;
+auto FiberManager::FrozenOptions::create(const Options& options) -> ssize_t {
+  return std::hash<Options>()(options);
+}
+
+/* static */ FiberManager*& FiberManager::getCurrentFiberManager() {
+  struct Tag {};
+  folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
+  return SingletonThreadLocal<FiberManager*, Tag>::get();
+}
 
 FiberManager::FiberManager(
     std::unique_ptr<LoopController> loopController,
     Options options)
-    : FiberManager(
-          LocalType<void>(),
-          std::move(loopController),
-          std::move(options)) {}
+    : FiberManager(LocalType<void>(), std::move(loopController), options) {}
 
 FiberManager::~FiberManager() {
   loopController_.reset();
@@ -105,7 +121,7 @@ Fiber* FiberManager::getFiber() {
   Fiber* fiber = nullptr;
 
   if (options_.fibersPoolResizePeriodMs > 0 && !fibersPoolResizerScheduled_) {
-    fibersPoolResizer_();
+    fibersPoolResizer_.run();
     fibersPoolResizerScheduled_ = true;
   }
 
@@ -150,8 +166,9 @@ void FiberManager::remoteReadyInsert(Fiber* fiber) {
   if (observer_) {
     observer_->runnable(reinterpret_cast<uintptr_t>(fiber));
   }
-  auto insertHead = [&]() { return remoteReadyQueue_.insertHead(fiber); };
-  loopController_->scheduleThreadSafe(std::ref(insertHead));
+  if (remoteReadyQueue_.insertHead(fiber)) {
+    loopController_->scheduleThreadSafe();
+  }
 }
 
 void FiberManager::setObserver(ExecutionObserver* observer) {
@@ -180,10 +197,10 @@ void FiberManager::doFibersPoolResizing() {
   maxFibersActiveLastPeriod_ = fibersActive_;
 }
 
-void FiberManager::FibersPoolResizer::operator()() {
+void FiberManager::FibersPoolResizer::run() {
   fiberManager_.doFibersPoolResizing();
-  fiberManager_.timeoutManager_->registerTimeout(
-      *this,
+  fiberManager_.loopController_->timer().scheduleTimeout(
+      this,
       std::chrono::milliseconds(
           fiberManager_.options_.fibersPoolResizePeriodMs));
 }

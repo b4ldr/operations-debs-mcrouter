@@ -1,11 +1,11 @@
 /*
- * Copyright 2014-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,10 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #pragma once
 
 #include <folly/Try.h>
 #include <folly/fibers/traits.h>
+#include <folly/functional/Invoke.h>
 
 namespace folly {
 namespace fibers {
@@ -89,13 +91,13 @@ class Promise {
 
   template <class F>
   typename std::enable_if<
-      std::is_convertible<typename std::result_of<F()>::type, T>::value &&
+      std::is_convertible<invoke_result_t<F>, T>::value &&
       !std::is_same<T, void>::value>::type
   fulfilHelper(F&& func);
 
   template <class F>
   typename std::enable_if<
-      std::is_same<typename std::result_of<F()>::type, void>::value &&
+      std::is_same<invoke_result_t<F>, void>::value &&
       std::is_same<T, void>::value>::type
   fulfilHelper(F&& func);
 };

@@ -1,11 +1,11 @@
 /*
- * Copyright 2012-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -65,9 +65,37 @@ TEST(MapUtil, get_or_throw_specified) {
 TEST(MapUtil, get_optional) {
   std::map<int, int> m;
   m[1] = 2;
-  EXPECT_TRUE(get_optional(m, 1).hasValue());
+  EXPECT_TRUE(get_optional(m, 1).has_value());
   EXPECT_EQ(2, get_optional(m, 1).value());
-  EXPECT_FALSE(get_optional(m, 2).hasValue());
+  EXPECT_FALSE(get_optional(m, 2).has_value());
+}
+
+TEST(MapUtil, get_optional_path_simple) {
+  using std::map;
+  map<int, map<int, map<int, map<int, int>>>> m{{1, {{2, {{3, {{4, 5}}}}}}}};
+  EXPECT_EQ(folly::Optional<int>(5), get_optional(m, 1, 2, 3, 4));
+  EXPECT_TRUE(get_optional(m, 1, 2, 3, 4));
+  EXPECT_FALSE(get_optional(m, 1, 2, 3, 0));
+  EXPECT_TRUE(get_optional(m, 1, 2, 3));
+  EXPECT_FALSE(get_optional(m, 1, 2, 0));
+  EXPECT_TRUE(get_optional(m, 1, 2));
+  EXPECT_FALSE(get_optional(m, 1, 0));
+  EXPECT_TRUE(get_optional(m, 1));
+  EXPECT_FALSE(get_optional(m, 0));
+}
+
+TEST(MapUtil, get_optional_path_mixed) {
+  using std::map;
+  using std::string;
+  using std::unordered_map;
+  unordered_map<string, map<int, map<string, int>>> m{{"a", {{1, {{"b", 2}}}}}};
+  EXPECT_EQ(folly::Optional<int>(2), get_optional(m, "a", 1, "b"));
+  EXPECT_TRUE(get_optional(m, "a", 1, "b"));
+  EXPECT_FALSE(get_optional(m, "b", 1, "b"));
+  EXPECT_FALSE(get_optional(m, "a", 2, "b"));
+  EXPECT_FALSE(get_optional(m, "a", 1, "c"));
+  EXPECT_TRUE(get_optional(m, "a", 1));
+  EXPECT_TRUE(get_optional(m, "a"));
 }
 
 TEST(MapUtil, get_ref_default) {
@@ -123,15 +151,14 @@ TEST(MapUtil, get_ptr_path_simple) {
 
 TEST(MapUtil, get_ptr_path_mixed) {
   using std::map;
-  using std::unordered_map;
   using std::string;
+  using std::unordered_map;
   unordered_map<string, map<int, map<string, int>>> m{{"a", {{1, {{"b", 7}}}}}};
   EXPECT_EQ(7, *get_ptr(m, "a", 1, "b"));
   EXPECT_TRUE(get_ptr(m, "a", 1, "b"));
   EXPECT_FALSE(get_ptr(m, "b", 1, "b"));
   EXPECT_FALSE(get_ptr(m, "a", 2, "b"));
   EXPECT_FALSE(get_ptr(m, "a", 1, "c"));
-  EXPECT_TRUE(get_ptr(m, "a", 1, "b"));
   EXPECT_TRUE(get_ptr(m, "a", 1));
   EXPECT_TRUE(get_ptr(m, "a"));
   const auto& cm = m;
@@ -188,8 +215,8 @@ TEST(MapUtil, get_default_path) {
 
 TEST(MapUtil, get_default_path_mixed) {
   using std::map;
-  using std::unordered_map;
   using std::string;
+  using std::unordered_map;
   map<int, unordered_map<string, StringPiece>> m;
   int key1 = 42;
   const string key2 = "hello";
@@ -213,8 +240,8 @@ TEST(MapUtil, get_ref_default_path) {
 
 TEST(MapUtil, get_ref_default_path_mixed) {
   using std::map;
-  using std::unordered_map;
   using std::string;
+  using std::unordered_map;
   map<int, unordered_map<string, StringPiece>> m;
   int key1 = 42;
   const string key2 = "hello";

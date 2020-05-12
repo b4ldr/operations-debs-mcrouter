@@ -1,11 +1,11 @@
 /*
- * Copyright 2012-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,7 +22,13 @@
 #include <memory>
 #include <string>
 
-#include <boost/random.hpp>
+#include <folly/Benchmark.h>
+#include <folly/FBVector.h>
+#include <folly/Traits.h>
+#include <folly/container/Foreach.h>
+#include <folly/portability/GFlags.h>
+#include <folly/small_vector.h>
+#include <folly/test/FBVectorTestUtil.h>
 
 #include <folly/FBVector.h>
 #include <folly/Traits.h>
@@ -110,6 +116,7 @@ int main(int argc, char** argv) {
   return 0;
 }
 
+// clang-format off
 /*
 ============================================================================
 buck-out/opt/gen/folly/test/fbvector_benchmark#gcc-5-glibc-2.23,private-headers/folly/test/FBVectorBenchmarks.cpp.hrelative  time/iter  iters/s
@@ -380,3 +387,4 @@ BM_pushBack_FBStringFBVector(102400)                         3.17ns  315.07M
 BM_pushBack_FBStringFBVector(1024000)                       25.88ns   38.65M
 ============================================================================
 */
+// clang-format on

@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,9 +16,8 @@
 
 #pragma once
 
+#include <cassert>
 #include <cstdint>
-
-#include <glog/logging.h>
 
 namespace folly {
 
@@ -51,7 +50,7 @@ class SparseByteSet {
   static constexpr uint16_t kCapacity = 256;
 
   //  No init of byte-arrays required!
-  SparseByteSet() : size_(0) { }
+  SparseByteSet() : size_(0) {}
 
   /***
    *  add(byte)
@@ -61,7 +60,7 @@ class SparseByteSet {
   inline bool add(uint8_t i) {
     bool r = !contains(i);
     if (r) {
-      DCHECK_LT(size_, kCapacity);
+      assert(size_ < kCapacity);
       dense_[size_] = i;
       sparse_[i] = uint8_t(size_);
       size_++;
@@ -79,8 +78,8 @@ class SparseByteSet {
   }
 
  private:
-  uint16_t size_;  // can't use uint8_t because it would overflow if all
-                   // possible values were inserted.
+  uint16_t size_; // can't use uint8_t because it would overflow if all
+                  // possible values were inserted.
   uint8_t sparse_[kCapacity];
   uint8_t dense_[kCapacity];
 };

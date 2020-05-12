@@ -31,7 +31,6 @@ using HelloGoodbyeRequestList = carbon::List<
     facebook::memcache::McShutdownRequest,
     facebook::memcache::McStatsRequest,
     facebook::memcache::McVersionRequest>;
-
 } // namespace detail
 
 template <class OnRequest>
@@ -43,9 +42,7 @@ class HelloGoodbyeRequestHandler
 
   template <class... Args>
   explicit HelloGoodbyeRequestHandler(Args&&... args)
-      : carbon::
-            CarbonRequestHandler<OnRequest, detail::HelloGoodbyeRequestList>(
-                std::forward<Args>(args)...) {}
+      : carbon::CarbonRequestHandler<OnRequest, detail::HelloGoodbyeRequestList>(
+            std::forward<Args>(args)...) {}
 };
-
 } // namespace hellogoodbye

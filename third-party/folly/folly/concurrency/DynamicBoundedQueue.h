@@ -1,11 +1,11 @@
 /*
- * Copyright 2017-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -601,7 +601,7 @@ class DynamicBoundedQueue {
       }
       if (MayBlock) {
         if (canBlock(weight, capacity)) {
-          waiting_.futexWaitUntil(WAITING, deadline);
+          detail::futexWaitUntil(&waiting_, WAITING, deadline);
         }
       } else {
         asm_volatile_pause();
@@ -645,7 +645,7 @@ class DynamicBoundedQueue {
     if (MayBlock) {
       std::atomic_thread_fence(std::memory_order_seq_cst);
       waiting_.store(NOTWAITING, std::memory_order_relaxed);
-      waiting_.futexWake();
+      detail::futexWake(&waiting_);
     }
   }
 

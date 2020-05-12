@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include "ConfigPreprocessor.h"
 
 #include <memory>
@@ -1023,6 +1023,76 @@ class ConfigPreprocessor::BuiltIns {
   }
 
   /**
+   * Return the result of A & B.
+   * Usage: @bitwiseAnd(A, B)
+   */
+  static dynamic bitwiseAndMacro(Context&& ctx) {
+    const auto& A = ctx.at("A");
+    const auto& B = ctx.at("B");
+    checkLogic(A.isInt(), "bitwiseAnd: A is not an integer");
+    checkLogic(B.isInt(), "bitwiseAnd: B is not an integer");
+    return A.getInt() & B.getInt();
+  }
+
+  /**
+   * return the result of A | B
+   * Usage: @bitwiseOr(A, B)
+   */
+  static dynamic bitwiseOrMacro(Context&& ctx) {
+    const auto& A = ctx.at("A");
+    const auto& B = ctx.at("B");
+    checkLogic(A.isInt(), "bitwiseOr: A is not an integer");
+    checkLogic(B.isInt(), "bitwiseOr: B is not an integer");
+    return A.getInt() | B.getInt();
+  }
+
+  /**
+   * Return the result of A ^ B
+   * Usage: @bitwiseXor(A, B)
+   */
+  static dynamic bitwiseXorMacro(Context&& ctx) {
+    const auto& A = ctx.at("A");
+    const auto& B = ctx.at("B");
+    checkLogic(A.isInt(), "bitwiseXor: A is not an integer");
+    checkLogic(B.isInt(), "bitwiseXor: B is not an integer");
+    return A.getInt() ^ B.getInt();
+  }
+
+  /**
+   * Return the result of A << B
+   * Usage: @bitwiseLeftShift(A, B)
+   */
+  static dynamic bitwiseLeftShiftMacro(Context&& ctx) {
+    const auto& A = ctx.at("A");
+    const auto& B = ctx.at("B");
+    checkLogic(A.isInt(), "bitwiseLeftShift: A is not an integer");
+    checkLogic(B.isInt(), "bitwiseLeftShift: B is not an integer");
+    return static_cast<uint64_t>(A.getInt()) << B.getInt();
+  }
+
+  /**
+   * Return the result of A >> B
+   * Usage: @bitwiseRightShift(A, B)
+   */
+  static dynamic bitwiseRightShiftMacro(Context&& ctx) {
+    const auto& A = ctx.at("A");
+    const auto& B = ctx.at("B");
+    checkLogic(A.isInt(), "bitwiseRightShift: A is not an integer");
+    checkLogic(B.isInt(), "bitwiseRightShift: B is not an integer");
+    return static_cast<uint64_t>(A.getInt()) >> B.getInt();
+  }
+
+  /**
+   * Returns the complement of A.
+   * Usage: @bitwiseNot(A)
+   */
+  static dynamic bitwiseNotMacro(Context&& ctx) {
+    const auto& A = ctx.at("A");
+    checkLogic(A.isInt(), "bitwiseNot: A is not an integer");
+    return ~A.getInt();
+  }
+
+  /**
    * Returns true if A && B. B is evaluated only if A is true.
    * A and B should be booleans.
    * Usage: @and(A,B)
@@ -1262,7 +1332,7 @@ class ConfigPreprocessor::BuiltIns {
    * explicitly.
    */
   static dynamic noop(dynamic&& json, const Context&) {
-    return json;
+    return std::move(json);
   }
 
   /**
@@ -1582,8 +1652,9 @@ class ConfigPreprocessor::BuiltIns {
 ConfigPreprocessor::ConfigPreprocessor(
     ImportResolverIf& importResolver,
     folly::StringKeyedUnorderedMap<dynamic> globals,
+    folly::json::metadata_map& configMetadataMap,
     size_t nestedLimit)
-    : nestedLimit_(nestedLimit) {
+    : configMetadataMap_(configMetadataMap), nestedLimit_(nestedLimit) {
   for (auto& it : globals) {
     addConst(it.first, std::move(it.second));
   }
@@ -1653,6 +1724,18 @@ ConfigPreprocessor::ConfigPreprocessor(
   addMacro("isString", {"value"}, &BuiltIns::isStringMacro);
 
   addMacro("less", {"A", "B"}, &BuiltIns::lessMacro);
+
+  addMacro("bitwiseAnd", {"A", "B"}, &BuiltIns::bitwiseAndMacro);
+
+  addMacro("bitwiseOr", {"A", "B"}, &BuiltIns::bitwiseOrMacro);
+
+  addMacro("bitwiseXor", {"A", "B"}, &BuiltIns::bitwiseXorMacro);
+
+  addMacro("bitwiseNot", {"A"}, &BuiltIns::bitwiseNotMacro);
+
+  addMacro("bitwiseLeftShift", {"A", "B"}, &BuiltIns::bitwiseLeftShiftMacro);
+
+  addMacro("bitwiseRightShift", {"A", "B"}, &BuiltIns::bitwiseRightShiftMacro);
 
   addMacro("and", {"A", "B"}, &BuiltIns::andMacro, false);
 
@@ -1917,6 +2000,24 @@ dynamic ConfigPreprocessor::expandMacros(dynamic json, const Context& context)
         checkLogic(nKey.isString(), "Expanded key is not a string");
         result.insert(
             std::move(nKey), expandMacros(std::move(value), localContext));
+        // Since new json is being created with expanded macros we need
+        // to re-populate the config metadata map with new dynamic objects
+        // created in the process.
+        const auto nKeyPtr = result.get_ptr(it.first);
+        const auto nKeyJsonPtr = json.get_ptr(it.first);
+        if (nKeyPtr && nKeyJsonPtr) {
+          const auto resMetadataPtr = configMetadataMap_.find(nKeyJsonPtr);
+          const auto jsonMetadataPtr = configMetadataMap_.find(nKeyPtr);
+          if (resMetadataPtr != configMetadataMap_.end()) {
+            // If it already exists in the map, replace it
+            // Otherwise, create an entry in the map
+            if (jsonMetadataPtr == configMetadataMap_.end()) {
+              configMetadataMap_.emplace(nKeyPtr, resMetadataPtr->second);
+            } else {
+              jsonMetadataPtr->second = resMetadataPtr->second;
+            }
+          }
+        }
       } catch (const std::logic_error& e) {
         throwLogic(
             "Raw object property '{}':\n{}", it.first.stringPiece(), e.what());
@@ -1993,11 +2094,13 @@ dynamic ConfigPreprocessor::getConfigWithoutMacros(
     StringPiece jsonC,
     ImportResolverIf& importResolver,
     folly::StringKeyedUnorderedMap<dynamic> globalParams,
+    folly::json::metadata_map* configMetadataMap,
     size_t nestedLimit) {
-  auto config = parseJsonString(stripComments(jsonC));
+  auto config = parseJsonString(stripComments(jsonC), configMetadataMap);
   checkLogic(config.isObject(), "config is not an object");
 
-  ConfigPreprocessor prep(importResolver, std::move(globalParams), nestedLimit);
+  ConfigPreprocessor prep(
+      importResolver, std::move(globalParams), *configMetadataMap, nestedLimit);
 
   // parse and add macros
   auto jmacros = config.get_ptr("macros");

@@ -1,11 +1,11 @@
 /*
- * Copyright 2011-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,8 +21,8 @@
 using namespace folly;
 
 TEST(DiscriminatedPtr, Basic) {
-  struct Foo { };
-  struct Bar { };
+  struct Foo {};
+  struct Bar {};
   typedef DiscriminatedPtr<void, int, Foo, Bar> Ptr;
 
   int a = 10;
@@ -45,7 +45,7 @@ TEST(DiscriminatedPtr, Basic) {
   EXPECT_EQ(&a, p.get<int>());
   EXPECT_EQ(&a, static_cast<const Ptr&>(p).get<int>());
   EXPECT_EQ(static_cast<void*>(nullptr), p.get_nothrow<void>());
-  EXPECT_THROW({p.get<void>();}, std::invalid_argument);
+  EXPECT_THROW({ p.get<void>(); }, std::invalid_argument);
 
   Foo foo;
   p.set(&foo);
@@ -66,12 +66,20 @@ TEST(DiscriminatedPtr, Basic) {
 }
 
 TEST(DiscriminatedPtr, Apply) {
-  struct Foo { };
+  struct Foo {};
   struct Visitor {
-    std::string operator()(int* /* ptr */) { return "int"; }
-    std::string operator()(const int* /* ptr */) { return "const int"; }
-    std::string operator()(Foo* /* ptr */) { return "Foo"; }
-    std::string operator()(const Foo* /* ptr */) { return "const Foo"; }
+    std::string operator()(int* /* ptr */) {
+      return "int";
+    }
+    std::string operator()(const int* /* ptr */) {
+      return "const int";
+    }
+    std::string operator()(Foo* /* ptr */) {
+      return "Foo";
+    }
+    std::string operator()(const Foo* /* ptr */) {
+      return "const Foo";
+    }
   };
 
   typedef DiscriminatedPtr<int, Foo> Ptr;
@@ -91,16 +99,24 @@ TEST(DiscriminatedPtr, Apply) {
   EXPECT_EQ("Foo", apply_visitor(Visitor(), std::move(p)));
 
   p.clear();
-  EXPECT_THROW({p.apply(Visitor());}, std::invalid_argument);
+  EXPECT_THROW({ p.apply(Visitor()); }, std::invalid_argument);
 }
 
 TEST(DiscriminatedPtr, ApplyVoid) {
-  struct Foo { };
+  struct Foo {};
   struct Visitor {
-    void operator()(int* /* ptr */) { result = "int"; }
-    void operator()(const int* /* ptr */) { result = "const int"; }
-    void operator()(Foo* /* ptr */) { result = "Foo"; }
-    void operator()(const Foo* /* ptr */) { result = "const Foo"; }
+    void operator()(int* /* ptr */) {
+      result = "int";
+    }
+    void operator()(const int* /* ptr */) {
+      result = "const int";
+    }
+    void operator()(Foo* /* ptr */) {
+      result = "Foo";
+    }
+    void operator()(const Foo* /* ptr */) {
+      result = "const Foo";
+    }
 
     std::string result;
   };
@@ -124,5 +140,5 @@ TEST(DiscriminatedPtr, ApplyVoid) {
   EXPECT_EQ("const Foo", v.result);
 
   p.clear();
-  EXPECT_THROW({p.apply(v);}, std::invalid_argument);
+  EXPECT_THROW({ p.apply(v); }, std::invalid_argument);
 }

@@ -42,6 +42,18 @@ struct DeleteLike<facebook::memcache::McDeleteRequest> {
 
 // GetLike
 template <>
+struct GetLike<facebook::memcache::McGatRequest> {
+  static const bool value = true;
+  typedef void* Type;
+};
+
+template <>
+struct GetLike<facebook::memcache::McGatsRequest> {
+  static const bool value = true;
+  typedef void* Type;
+};
+
+template <>
 struct GetLike<facebook::memcache::McGetRequest> {
   static const bool value = true;
   typedef void* Type;
@@ -107,5 +119,4 @@ struct UpdateLike<facebook::memcache::McSetRequest> {
   static const bool value = true;
   typedef void* Type;
 };
-
 } // namespace carbon

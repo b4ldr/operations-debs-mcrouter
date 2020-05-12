@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <sys/socket.h>
@@ -30,6 +30,7 @@ namespace mcrouter {
 
 #undef OPTIONS_FILE
 #undef OPTIONS_NAME
-}
-}
-} // facebook::memcache::mcrouter
+
+} // namespace mcrouter
+} // namespace memcache
+} // namespace facebook

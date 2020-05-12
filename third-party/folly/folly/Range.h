@@ -1,11 +1,11 @@
 /*
- * Copyright 2011-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,8 +25,6 @@
 #include <folly/portability/Constexpr.h>
 #include <folly/portability/String.h>
 
-#include <boost/operators.hpp>
-#include <glog/logging.h>
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -34,9 +32,14 @@
 #include <cstddef>
 #include <cstring>
 #include <iosfwd>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+
+#if FOLLY_HAS_STRING_VIEW
+#include <string_view> // @manual
+#endif
 
 #include <folly/CpuId.h>
 #include <folly/Likely.h>
@@ -46,7 +49,7 @@
 
 // Ignore shadowing warnings within this file, so includers can use -Wshadow.
 FOLLY_PUSH_WARNING
-FOLLY_GCC_DISABLE_WARNING("-Wshadow")
+FOLLY_GNU_DISABLE_WARNING("-Wshadow")
 
 namespace folly {
 
@@ -56,8 +59,9 @@ namespace folly {
 template <class T>
 struct IsSomeString : std::false_type {};
 
-template <>
-struct IsSomeString<std::string> : std::true_type {};
+template <typename Alloc>
+struct IsSomeString<std::basic_string<char, std::char_traits<char>, Alloc>>
+    : std::true_type {};
 
 template <class Iter>
 class Range;
@@ -108,32 +112,6 @@ inline size_t qfind_first_of(
  */
 namespace detail {
 
-/**
- * For random-access iterators, the value before is simply i[-1].
- */
-template <class Iter>
-typename std::enable_if<
-    std::is_same<
-        typename std::iterator_traits<Iter>::iterator_category,
-        std::random_access_iterator_tag>::value,
-    typename std::iterator_traits<Iter>::reference>::type
-value_before(Iter i) {
-  return i[-1];
-}
-
-/**
- * For all other iterators, we need to use the decrement operator.
- */
-template <class Iter>
-typename std::enable_if<
-    !std::is_same<
-        typename std::iterator_traits<Iter>::iterator_category,
-        std::random_access_iterator_tag>::value,
-    typename std::iterator_traits<Iter>::reference>::type
-value_before(Iter i) {
-  return *--i;
-}
-
 /*
  * Use IsCharPointer<T>::type to enable const char* or char*.
  * Use IsCharPointer<T>::const_type to enable only const char*.
@@ -166,7 +144,11 @@ struct IsCharPointer<const char*> {
  * wouldn't.)
  */
 template <class Iter>
-class Range : private boost::totally_ordered<Range<Iter>> {
+class Range {
+ private:
+  template <typename Alloc>
+  using string = std::basic_string<char, std::char_traits<char>, Alloc>;
+
  public:
   typedef std::size_t size_type;
   typedef Iter iterator;
@@ -206,9 +188,7 @@ class Range : private boost::totally_ordered<Range<Iter>> {
   // Works only for random-access iterators
   constexpr Range(Iter start, size_t size) : b_(start), e_(start + size) {}
 
-#if !__clang__ || __CLANG_PREREQ(3, 7) // Clang 3.6 crashes on this line
   /* implicit */ Range(std::nullptr_t) = delete;
-#endif
 
   constexpr /* implicit */ Range(Iter str)
       : b_(str), e_(str + constexpr_strlen(str)) {
@@ -217,12 +197,18 @@ class Range : private boost::totally_ordered<Range<Iter>> {
         "This constructor is only available for character ranges");
   }
 
-  template <class T = Iter, typename detail::IsCharPointer<T>::const_type = 0>
-  /* implicit */ Range(const std::string& str)
+  template <
+      class Alloc,
+      class T = Iter,
+      typename detail::IsCharPointer<T>::const_type = 0>
+  /* implicit */ Range(const string<Alloc>& str)
       : b_(str.data()), e_(b_ + str.size()) {}
 
-  template <class T = Iter, typename detail::IsCharPointer<T>::const_type = 0>
-  Range(const std::string& str, std::string::size_type startFrom) {
+  template <
+      class Alloc,
+      class T = Iter,
+      typename detail::IsCharPointer<T>::const_type = 0>
+  Range(const string<Alloc>& str, typename string<Alloc>::size_type startFrom) {
     if (UNLIKELY(startFrom > str.size())) {
       throw_exception<std::out_of_range>("index out of range");
     }
@@ -230,11 +216,14 @@ class Range : private boost::totally_ordered<Range<Iter>> {
     e_ = str.data() + str.size();
   }
 
-  template <class T = Iter, typename detail::IsCharPointer<T>::const_type = 0>
+  template <
+      class Alloc,
+      class T = Iter,
+      typename detail::IsCharPointer<T>::const_type = 0>
   Range(
-      const std::string& str,
-      std::string::size_type startFrom,
-      std::string::size_type size) {
+      const string<Alloc>& str,
+      typename string<Alloc>::size_type startFrom,
+      typename string<Alloc>::size_type size) {
     if (UNLIKELY(startFrom > str.size())) {
       throw_exception<std::out_of_range>("index out of range");
     }
@@ -402,8 +391,11 @@ class Range : private boost::totally_ordered<Range<Iter>> {
   Range& operator=(const Range& rhs) & = default;
   Range& operator=(Range&& rhs) & = default;
 
-  template <class T = Iter, typename detail::IsCharPointer<T>::const_type = 0>
-  Range& operator=(std::string&& rhs) = delete;
+  template <
+      class Alloc,
+      class T = Iter,
+      typename detail::IsCharPointer<T>::const_type = 0>
+  Range& operator=(string<Alloc>&& rhs) = delete;
 
   void clear() {
     b_ = Iter();
@@ -421,17 +413,15 @@ class Range : private boost::totally_ordered<Range<Iter>> {
   }
 
   // Works only for Range<const char*>
-  void reset(const std::string& str) {
+  template <typename Alloc>
+  void reset(const string<Alloc>& str) {
     reset(str.data(), str.size());
   }
 
   constexpr size_type size() const {
-    // It would be nice to assert(b_ <= e_) here.  This can be achieved even
-    // in a C++11 compatible constexpr function:
-    // http://ericniebler.com/2014/09/27/assert-and-constexpr-in-cxx11/
-    // Unfortunately current gcc versions have a bug causing it to reject
-    // this check in a constexpr function:
-    // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=71448
+#if __clang__ || !__GNUC__ || __GNUC__ >= 7
+    assert(b_ <= e_);
+#endif
     return size_type(e_ - b_);
   }
   constexpr size_type walk_size() const {
@@ -464,7 +454,7 @@ class Range : private boost::totally_ordered<Range<Iter>> {
   }
   value_type& back() {
     assert(b_ < e_);
-    return detail::value_before(e_);
+    return *std::prev(e_);
   }
   const value_type& front() const {
     assert(b_ < e_);
@@ -472,14 +462,130 @@ class Range : private boost::totally_ordered<Range<Iter>> {
   }
   const value_type& back() const {
     assert(b_ < e_);
-    return detail::value_before(e_);
+    return *std::prev(e_);
   }
 
-  template <typename Tgt>
-  auto to() const
-      -> decltype(Tgt(std::declval<Iter const&>(), std::declval<size_type>())) {
-    return Tgt(b_, size());
+ private:
+  // It would be nice to be able to implicit convert to any target type
+  // T for which either an (Iter, Iter) or (Iter, size_type) noexcept
+  // constructor was available, and explicitly convert to any target
+  // type for which those signatures were available but not noexcept.
+  // The problem is that this creates ambiguity when there is also a
+  // T constructor that takes a type U that is implicitly convertible
+  // from Range.
+  //
+  // To avoid ambiguity, we need to avoid having explicit operator T
+  // and implicit operator U coexist when T is constructible from U.
+  // U cannot be deduced when searching for operator T (and C++ won't
+  // perform an existential search for it), so we must limit the implicit
+  // target types to a finite set that we can enumerate.
+  //
+  // At the moment the set of implicit target types consists of just
+  // std::string_view (when it is available).
+#if FOLLY_HAS_STRING_VIEW
+  struct NotStringView {};
+  template <typename ValueType>
+  struct StringViewType
+      : std::conditional<
+            std::is_pod<std::remove_const_t<ValueType>>::value,
+            std::basic_string_view<std::remove_const_t<ValueType>>,
+            NotStringView> {};
+
+  template <typename Target>
+  struct IsConstructibleViaStringView
+      : Conjunction<
+            std::is_constructible<
+                _t<StringViewType<value_type>>,
+                Iter const&,
+                size_type>,
+            std::is_constructible<Target, _t<StringViewType<value_type>>>> {};
+#else
+  template <typename Target>
+  using IsConstructibleViaStringView = std::false_type;
+#endif
+
+ public:
+  /// explicit operator conversion to any compatible type
+  ///
+  /// A compatible type is one which is constructible with an iterator and a
+  /// size (preferred), or a pair of iterators (fallback), passed by const-ref.
+  ///
+  /// Participates in overload resolution precisely when the target type is
+  /// compatible. This allows std::is_constructible compile-time checks to work.
+  template <
+      typename Tgt,
+      std::enable_if_t<
+          std::is_constructible<Tgt, Iter const&, size_type>::value &&
+              !IsConstructibleViaStringView<Tgt>::value,
+          int> = 0>
+  constexpr explicit operator Tgt() const noexcept(
+      std::is_nothrow_constructible<Tgt, Iter const&, size_type>::value) {
+    return Tgt(b_, walk_size());
   }
+  template <
+      typename Tgt,
+      std::enable_if_t<
+          !std::is_constructible<Tgt, Iter const&, size_type>::value &&
+              std::is_constructible<Tgt, Iter const&, Iter const&>::value &&
+              !IsConstructibleViaStringView<Tgt>::value,
+          int> = 0>
+  constexpr explicit operator Tgt() const noexcept(
+      std::is_nothrow_constructible<Tgt, Iter const&, Iter const&>::value) {
+    return Tgt(b_, e_);
+  }
+
+#if FOLLY_HAS_STRING_VIEW
+  /// implicit operator conversion to std::string_view
+  template <
+      typename Tgt,
+      typename ValueType = value_type,
+      std::enable_if_t<
+          StrictConjunction<
+              std::is_same<Tgt, _t<StringViewType<ValueType>>>,
+              std::is_constructible<
+                  _t<StringViewType<ValueType>>,
+                  Iter const&,
+                  size_type>>::value,
+          int> = 0>
+  constexpr operator Tgt() const noexcept(
+      std::is_nothrow_constructible<Tgt, Iter const&, size_type>::value) {
+    return Tgt(b_, walk_size());
+  }
+#endif
+
+  /// explicit non-operator conversion to any compatible type
+  ///
+  /// A compatible type is one which is constructible with an iterator and a
+  /// size (preferred), or a pair of iterators (fallback), passed by const-ref.
+  ///
+  /// Participates in overload resolution precisely when the target type is
+  /// compatible. This allows is_invocable compile-time checks to work.
+  ///
+  /// Provided in addition to the explicit operator conversion to permit passing
+  /// additional arguments to the target type constructor. A canonical example
+  /// of an additional argument might be an allocator, where the target type is
+  /// some specialization of std::vector or std::basic_string in a context which
+  /// requires a non-default-constructed allocator.
+  template <typename Tgt, typename... Args>
+  constexpr std::enable_if_t<
+      std::is_constructible<Tgt, Iter const&, size_type>::value,
+      Tgt>
+  to(Args&&... args) const noexcept(
+      std::is_nothrow_constructible<Tgt, Iter const&, size_type, Args&&...>::
+          value) {
+    return Tgt(b_, walk_size(), static_cast<Args&&>(args)...);
+  }
+  template <typename Tgt, typename... Args>
+  constexpr std::enable_if_t<
+      !std::is_constructible<Tgt, Iter const&, size_type>::value &&
+          std::is_constructible<Tgt, Iter const&, Iter const&>::value,
+      Tgt>
+  to(Args&&... args) const noexcept(
+      std::is_nothrow_constructible<Tgt, Iter const&, Iter const&, Args&&...>::
+          value) {
+    return Tgt(b_, e_, static_cast<Args&&>(args)...);
+  }
+
   // Works only for Range<const char*> and Range<char*>
   std::string str() const {
     return to<std::string>();
@@ -492,7 +598,6 @@ class Range : private boost::totally_ordered<Range<Iter>> {
     return const_range_type(*this);
   }
 
-  // Works only for Range<const char*> and Range<char*>
   int compare(const const_range_type& o) const {
     const size_type tsize = this->size();
     const size_type osize = o.size();
@@ -510,12 +615,12 @@ class Range : private boost::totally_ordered<Range<Iter>> {
   }
 
   value_type& operator[](size_t i) {
-    DCHECK_GT(size(), i);
+    assert(i < size());
     return b_[i];
   }
 
   const value_type& operator[](size_t i) const {
-    DCHECK_GT(size(), i);
+    assert(i < size());
     return b_[i];
   }
 
@@ -551,8 +656,9 @@ class Range : private boost::totally_ordered<Range<Iter>> {
   // B) If you have to use this exact function then make your own hasher
   //    object and copy the body over (see thrift example: D3972362).
   //    https://github.com/facebook/fbthrift/commit/f8ed502e24ab4a32a9d5f266580
-  FOLLY_DEPRECATED("Replace with folly::Hash if the hash is not serialized")
-  uint32_t hash() const {
+  [[deprecated(
+      "Replace with folly::Hash if the hash is not serialized")]] uint32_t
+  hash() const {
     // Taken from fbi/nstring.h:
     //    Quick and dirty bernstein hash...fine for short ascii strings
     uint32_t hash = 5381;
@@ -573,13 +679,6 @@ class Range : private boost::totally_ordered<Range<Iter>> {
     if (UNLIKELY(n > size())) {
       throw_exception<std::out_of_range>("index out of range");
     }
-    e_ -= n;
-  }
-
-  Range subpiece(size_type first, size_type length = npos) const {
-    if (UNLIKELY(first > size())) {
-      throw_exception<std::out_of_range>("index out of range");
-    }
 
     return Range(b_ + first, std::min(length, size() - first));
   }
@@ -595,8 +694,27 @@ class Range : private boost::totally_ordered<Range<Iter>> {
     e_ -= n;
   }
 
+  Range subpiece(size_type first, size_type length = npos) const {
+    if (UNLIKELY(first > size())) {
+      throw_exception<std::out_of_range>("index out of range");
+    }
+
+    return Range(b_ + first, std::min(length, size() - first));
+  }
+
+  // unchecked versions
+  void uncheckedAdvance(size_type n) {
+    assert(n <= size());
+    b_ += n;
+  }
+
+  void uncheckedSubtract(size_type n) {
+    assert(n <= size());
+    e_ -= n;
+  }
+
   Range uncheckedSubpiece(size_type first, size_type length = npos) const {
-    DCHECK_LE(first, size());
+    assert(first <= size());
     return Range(b_ + first, std::min(length, size() - first));
   }
 
@@ -1082,8 +1200,28 @@ inline bool operator==(const Range<Iter>& lhs, const Range<Iter>& rhs) {
 }
 
 template <class Iter>
+inline bool operator!=(const Range<Iter>& lhs, const Range<Iter>& rhs) {
+  return !(operator==(lhs, rhs));
+}
+
+template <class Iter>
 inline bool operator<(const Range<Iter>& lhs, const Range<Iter>& rhs) {
   return lhs.compare(rhs) < 0;
+}
+
+template <class Iter>
+inline bool operator<=(const Range<Iter>& lhs, const Range<Iter>& rhs) {
+  return lhs.compare(rhs) <= 0;
+}
+
+template <class Iter>
+inline bool operator>(const Range<Iter>& lhs, const Range<Iter>& rhs) {
+  return lhs.compare(rhs) > 0;
+}
+
+template <class Iter>
+inline bool operator>=(const Range<Iter>& lhs, const Range<Iter>& rhs) {
+  return lhs.compare(rhs) >= 0;
 }
 
 /**
@@ -1108,17 +1246,29 @@ struct ComparableAsStringPiece {
  * operator== through conversion for Range<const char*>
  */
 template <class T, class U>
-_t<std::enable_if<detail::ComparableAsStringPiece<T, U>::value, bool>>
-operator==(const T& lhs, const U& rhs) {
+std::enable_if_t<detail::ComparableAsStringPiece<T, U>::value, bool> operator==(
+    const T& lhs,
+    const U& rhs) {
   return StringPiece(lhs) == StringPiece(rhs);
+}
+
+/**
+ * operator!= through conversion for Range<const char*>
+ */
+template <class T, class U>
+std::enable_if_t<detail::ComparableAsStringPiece<T, U>::value, bool> operator!=(
+    const T& lhs,
+    const U& rhs) {
+  return StringPiece(lhs) != StringPiece(rhs);
 }
 
 /**
  * operator< through conversion for Range<const char*>
  */
 template <class T, class U>
-_t<std::enable_if<detail::ComparableAsStringPiece<T, U>::value, bool>>
-operator<(const T& lhs, const U& rhs) {
+std::enable_if_t<detail::ComparableAsStringPiece<T, U>::value, bool> operator<(
+    const T& lhs,
+    const U& rhs) {
   return StringPiece(lhs) < StringPiece(rhs);
 }
 
@@ -1126,8 +1276,9 @@ operator<(const T& lhs, const U& rhs) {
  * operator> through conversion for Range<const char*>
  */
 template <class T, class U>
-_t<std::enable_if<detail::ComparableAsStringPiece<T, U>::value, bool>>
-operator>(const T& lhs, const U& rhs) {
+std::enable_if_t<detail::ComparableAsStringPiece<T, U>::value, bool> operator>(
+    const T& lhs,
+    const U& rhs) {
   return StringPiece(lhs) > StringPiece(rhs);
 }
 
@@ -1135,8 +1286,9 @@ operator>(const T& lhs, const U& rhs) {
  * operator< through conversion for Range<const char*>
  */
 template <class T, class U>
-_t<std::enable_if<detail::ComparableAsStringPiece<T, U>::value, bool>>
-operator<=(const T& lhs, const U& rhs) {
+std::enable_if_t<detail::ComparableAsStringPiece<T, U>::value, bool> operator<=(
+    const T& lhs,
+    const U& rhs) {
   return StringPiece(lhs) <= StringPiece(rhs);
 }
 
@@ -1144,8 +1296,9 @@ operator<=(const T& lhs, const U& rhs) {
  * operator> through conversion for Range<const char*>
  */
 template <class T, class U>
-_t<std::enable_if<detail::ComparableAsStringPiece<T, U>::value, bool>>
-operator>=(const T& lhs, const U& rhs) {
+std::enable_if_t<detail::ComparableAsStringPiece<T, U>::value, bool> operator>=(
+    const T& lhs,
+    const U& rhs) {
   return StringPiece(lhs) >= StringPiece(rhs);
 }
 
@@ -1354,17 +1507,19 @@ struct hasher;
 template <class T>
 struct hasher<
     folly::Range<T*>,
-    typename std::enable_if<std::is_pod<T>::value, void>::type> {
+    std::enable_if_t<std::is_integral<T>::value, void>> {
+  using folly_is_avalanching = std::true_type;
+
   size_t operator()(folly::Range<T*> r) const {
+    // std::is_integral<T> is too restrictive, but is sufficient to
+    // guarantee we can just hash all of the underlying bytes to get a
+    // suitable hash of T.  Something like absl::is_uniquely_represented<T>
+    // would be better.  std::is_pod is not enough, because POD types
+    // can contain pointers and padding.  Also, floating point numbers
+    // may be == without being bit-identical.
     return hash::SpookyHashV2::Hash64(r.begin(), r.size() * sizeof(T), 0);
   }
 };
-
-template <typename H, typename K>
-struct IsAvalanchingHasher;
-
-template <typename T, typename E, typename K>
-struct IsAvalanchingHasher<hasher<folly::Range<T*>, E>, K> : std::true_type {};
 
 /**
  * _sp is a user-defined literal suffix to make an appropriate Range
@@ -1379,6 +1534,14 @@ constexpr Range<char const*> operator"" _sp(
     size_t len) noexcept {
   return Range<char const*>(str, len);
 }
+
+#if __cpp_char8_t >= 201811L
+constexpr Range<char8_t const*> operator"" _sp(
+    char8_t const* str,
+    size_t len) noexcept {
+  return Range<char8_t const*>(str, len);
+}
+#endif
 
 constexpr Range<char16_t const*> operator"" _sp(
     char16_t const* str,
@@ -1404,4 +1567,14 @@ constexpr Range<wchar_t const*> operator"" _sp(
 
 FOLLY_POP_WARNING
 
-FOLLY_ASSUME_FBVECTOR_COMPATIBLE_1(folly::Range);
+FOLLY_ASSUME_FBVECTOR_COMPATIBLE_1(folly::Range)
+
+// Tell the range-v3 library that this type should satisfy
+// the view concept (a lightweight, non-owning range).
+namespace ranges {
+template <class T>
+extern const bool enable_view;
+
+template <class Iter>
+FOLLY_INLINE_VARIABLE constexpr bool enable_view<::folly::Range<Iter>> = true;
+} // namespace ranges

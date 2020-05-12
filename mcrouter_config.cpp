@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include <memory>
 
 #include <folly/FileUtil.h>
@@ -122,13 +122,7 @@ std::string getBinPath(folly::StringPiece name) {
   return "unknown";
 }
 
-std::string getDefaultPemCertPath() {
-  return "";
-}
-
-std::string getDefaultPemCertKey() {
-  return "";
-}
+void finalizeOptions(McrouterOptions&) {}
 
 folly::dynamic readStaticJsonFile(folly::StringPiece file) {
   std::string contents;
@@ -139,6 +133,6 @@ folly::dynamic readStaticJsonFile(folly::StringPiece file) {
   return folly::parseJson(contents);
 }
 
-} // mcrouter
-} // memcache
-} // facebook
+} // namespace mcrouter
+} // namespace memcache
+} // namespace facebook

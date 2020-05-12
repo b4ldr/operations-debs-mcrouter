@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2016, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include "mc_fbtrace_info.h"
 
 #include <assert.h>
@@ -14,6 +14,7 @@
 static mc_fbtrace_t* mc_fbtrace_incref(mc_fbtrace_t* fbt) {
   assert(fbt);
   int newrefcount = __sync_add_and_fetch(&fbt->_refcount, 1);
+  (void)newrefcount;
   assert(newrefcount > 0);
   return fbt;
 }
@@ -80,6 +81,7 @@ mc_fbtrace_info_t* mc_fbtrace_info_incref(mc_fbtrace_info_t* fbt_i) {
     return NULL;
   }
   int newrefcount = __sync_add_and_fetch(&fbt_i->_refcount, 1);
+  (void)newrefcount;
   assert(newrefcount > 0);
   return fbt_i;
 }

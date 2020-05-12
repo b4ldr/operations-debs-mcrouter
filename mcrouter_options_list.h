@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 // @nolint
 #ifndef MCROUTER_OPTION_GROUP
 #define MCROUTER_OPTION_GROUP(_sep)
@@ -303,17 +303,17 @@ MCROUTER_OPTION_INTEGER(
 
 MCROUTER_OPTION_STRING(
     pem_cert_path,
-    facebook::memcache::mcrouter::getDefaultPemCertPath(),
+    "", // this may get overwritten by finalizeOptions
     "pem-cert-path",
     no_short,
-    "Path of pem-style certificate for ssl")
+    "Path of pem-style client certificate for ssl.")
 
 MCROUTER_OPTION_STRING(
     pem_key_path,
-    facebook::memcache::mcrouter::getDefaultPemCertKey(),
+    "", // this may get overwritten by finalizeOptions
     "pem-key-path",
     no_short,
-    "Path of pem-style key for ssl")
+    "Path of pem-style client key for ssl.")
 
 MCROUTER_OPTION_STRING(
     pem_ca_path,
@@ -366,6 +366,20 @@ MCROUTER_OPTION_TOGGLE(
     "If enabled, limited number of SSL sessions will be cached")
 
 MCROUTER_OPTION_TOGGLE(
+    ssl_handshake_offload,
+    false,
+    "ssl-handshake-offload",
+    no_short,
+    "If enabled, SSL handshakes are offloaded to a separate threadpool")
+
+MCROUTER_OPTION_TOGGLE(
+    ssl_verify_peers,
+    false,
+    "ssl-verify-peers",
+    no_short,
+    "If enabled, clients will verify server certificates.")
+
+MCROUTER_OPTION_TOGGLE(
     enable_compression,
     false,
     "enable-compression",
@@ -389,6 +403,13 @@ MCROUTER_OPTION_TOGGLE(
     "disable-reload-configs",
     no_short,
     "")
+
+MCROUTER_OPTION_TOGGLE(
+    use_compact_serialization,
+    false,
+    "use-compact-serialization",
+    no_short,
+    "Use compact protocol for serialization")
 
 MCROUTER_OPTION_STRING(
     config,
@@ -461,7 +482,7 @@ MCROUTER_OPTION_TOGGLE(
     "group-remote-errors",
     no_short,
     "Groups all remote (i.e. non-local) errors together, returning a single "
-    "result for all of them: mc_res_remote_error")
+    "result for all of them: REMOTE_ERROR")
 
 MCROUTER_OPTION_TOGGLE(
     send_invalid_route_to_default,
@@ -484,6 +505,14 @@ MCROUTER_OPTION_INTEGER(
     "reconfiguration-delay-ms",
     no_short,
     "Delay between config files change and mcrouter reconfiguration.")
+
+MCROUTER_OPTION_INTEGER(
+    int,
+    post_reconfiguration_delay_ms,
+    0,
+    "post-reconfiguration-delay-ms",
+    no_short,
+    "Delay after a reconfiguration is complete.")
 
 MCROUTER_OPTION_STRING_MAP(
     config_params,
@@ -526,15 +555,6 @@ MCROUTER_OPTION_INTEGER(
     "timeouts-until-tko",
     no_short,
     "Mark as TKO after this many failures")
-
-MCROUTER_OPTION_INTEGER(
-    size_t,
-    maximum_soft_tkos,
-    40,
-    "maximum-soft-tkos",
-    no_short,
-    "The maximum number of machines we can mark TKO if they don't have a hard"
-    " failure.")
 
 MCROUTER_OPTION_TOGGLE(
     allow_only_gets,
@@ -591,6 +611,16 @@ MCROUTER_OPTION_INTEGER(
     "Maximum time in ms that a new request can wait in the queue before being"
     " discarded. Enabled only if value is non-zero and"
     " if proxy-max-throttled-requests is enabled.")
+
+MCROUTER_OPTION_INTEGER(
+    unsigned int,
+    connect_timeout_retries,
+    0,
+    "connect-timeout-retries",
+    no_short,
+    "The number of times to retry establishing a connection in case of a"
+    " connect timeout. We will just return the result back to the client after"
+    " either the connection is esblished, or we exhausted all retries.")
 
 MCROUTER_OPTION_GROUP("Custom Memory Allocation")
 
@@ -672,8 +702,19 @@ MCROUTER_OPTION_INTEGER(
     0,
     "collect-rxmit-stats-every-hz",
     no_short,
-    "Will calculate retransmits per kB after every set cycles."
+    "Will calculate retransmits per kB after every set cycles whenever a "
+    "timeout or deviation from average latency occurs."
     " If value is 0, calculation won't be done.")
+
+MCROUTER_OPTION_INTEGER(
+    uint64_t,
+    rxmit_latency_deviation_us,
+    0,
+    "rxmit-latency-deviation-us",
+    no_short,
+    "Latency deviation of request in microseconds from the average latency on "
+    "the connection will trigger recalculation of retransmits per kB. "
+    "If value is 0, calculation won't be done.")
 
 MCROUTER_OPTION_INTEGER(
     uint64_t,
@@ -730,6 +771,21 @@ MCROUTER_OPTION_TOGGLE(
     "enable-ssl-tfo",
     no_short,
     "enable TFO when connecting/accepting via SSL")
+
+MCROUTER_OPTION_TOGGLE(
+    tls_prefer_ocb_cipher,
+    false,
+    "tls-prefer-ocb-cipher",
+    no_short,
+    "Prefer AES-OCB cipher for TLSv1.3 connections if available")
+
+MCROUTER_OPTION_TOGGLE(
+    thread_affinity,
+    false,
+    "thread-affinity",
+    no_short,
+    "Enable deterministic selection of the proxy thread to lower the number of"
+    "connections between client and server.")
 
 #ifdef ADDITIONAL_OPTIONS_FILE
 #include ADDITIONAL_OPTIONS_FILE

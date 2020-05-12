@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 /**
@@ -38,10 +38,6 @@
  * in the uncontented case.
  */
 #include <stdint.h>
-
-#include "mcrouter/lib/fbi/decls.h"
-
-__BEGIN_DECLS
 
 typedef struct counting_sem_s {
   /**
@@ -81,5 +77,3 @@ int32_t counting_sem_lazy_nonblocking(counting_sem_t* sem, int32_t n);
  * Does nothing if n <= 0.
  */
 void counting_sem_post(counting_sem_t* sem, int32_t n);
-
-__END_DECLS

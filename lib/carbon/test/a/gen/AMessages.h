@@ -21,7 +21,6 @@
 #include <folly/Optional.h>
 #include <folly/io/IOBuf.h>
 #include <mcrouter/lib/carbon/CarbonProtocolReader.h>
-#include <mcrouter/lib/carbon/CarbonProtocolWriter.h>
 #include <mcrouter/lib/carbon/CommonSerializationTraits.h>
 #include <mcrouter/lib/carbon/Keys.h>
 #include <mcrouter/lib/carbon/ReplyCommon.h>
@@ -32,6 +31,7 @@
 #include <mcrouter/lib/carbon/Variant.h>
 
 #include "mcrouter/lib/carbon/test/a/b/gen/BMessages.h"
+#include "mcrouter/lib/carbon/test/a/gen/CMessages.h"
 #include "mcrouter/lib/carbon/test/b/gen/BMessages.h"
 
 namespace carbon {
@@ -54,7 +54,8 @@ class AnotherRequest : public carbon::RequestCommon {
   AnotherRequest& operator=(const AnotherRequest&) = default;
   AnotherRequest(AnotherRequest&&) = default;
   AnotherRequest& operator=(AnotherRequest&&) = default;
-  explicit AnotherRequest(folly::StringPiece sp) : key_(sp) {}
+  explicit AnotherRequest(folly::StringPiece sp)
+      : key_(sp) {}
   explicit AnotherRequest(folly::IOBuf&& carbonKey)
       : key_(std::move(carbonKey)) {}
 
@@ -62,6 +63,7 @@ class AnotherRequest : public carbon::RequestCommon {
     return key_;
   }
   carbon::Keys<folly::IOBuf>& key() {
+    markBufferAsDirty();
     return key_;
   }
   uint64_t flags() const {
@@ -70,8 +72,8 @@ class AnotherRequest : public carbon::RequestCommon {
   int32_t exptime() const {
     return 0;
   }
-
-  void serialize(carbon::CarbonProtocolWriter& writer) const;
+  template <class Writer>
+  void serialize(Writer&& writer) const;
 
   void deserialize(carbon::CarbonProtocolReader& reader);
 
@@ -97,7 +99,8 @@ class AnotherReply : public carbon::ReplyCommon {
   AnotherReply& operator=(const AnotherReply&) = default;
   AnotherReply(AnotherReply&&) = default;
   AnotherReply& operator=(AnotherReply&&) = default;
-  explicit AnotherReply(carbon::Result carbonResult) : result_(carbonResult) {}
+  explicit AnotherReply(carbon::Result carbonResult)
+      : result_(carbonResult) {}
 
   carbon::Result result() const {
     return result_;
@@ -112,7 +115,8 @@ class AnotherReply : public carbon::ReplyCommon {
     return 0;
   }
 
-  void serialize(carbon::CarbonProtocolWriter& writer) const;
+  template <class Writer>
+  void serialize(Writer&& writer) const;
 
   void deserialize(carbon::CarbonProtocolReader& reader);
 
@@ -122,9 +126,8 @@ class AnotherReply : public carbon::ReplyCommon {
   void visitFields(V&& v) const;
 
  private:
-  carbon::Result result_{mc_res_unknown};
+  carbon::Result result_{carbon::Result::UNKNOWN};
 };
-
 } // namespace test
 } // namespace carbon
 

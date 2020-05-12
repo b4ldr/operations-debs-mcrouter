@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2015-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include "FifoReader.h"
 
 #include <fcntl.h>
@@ -248,7 +248,7 @@ void FifoReaderManager::runScanDirectory() {
     auto fd = ::open(fifo.c_str(), O_RDONLY | O_NONBLOCK);
     if (fd >= 0) {
       auto pipeReader = folly::AsyncPipeReader::UniquePtr(
-          new folly::AsyncPipeReader(&evb_, fd));
+          new folly::AsyncPipeReader(&evb_, folly::NetworkSocket::fromFd(fd)));
       auto callback = std::make_unique<FifoReadCallback>(fifo, messageReady_);
       pipeReader->setReadCB(callback.get());
       fifoReaders_.emplace(

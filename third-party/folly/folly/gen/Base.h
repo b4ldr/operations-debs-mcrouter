@@ -1,11 +1,11 @@
 /*
- * Copyright 2014-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,8 +22,6 @@
 #include <memory>
 #include <random>
 #include <type_traits>
-#include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -52,7 +50,7 @@
  *   auto gen = from(names);
  *
  * Generators are composed by building new generators out of old ones through
- * the use of operators. These are reminicent of shell pipelines, and afford
+ * the use of operators. These are reminiscent of shell pipelines, and afford
  * similar composition. Lambda functions are used liberally to describe how to
  * handle individual values:
  *
@@ -86,8 +84,8 @@ namespace gen {
 class Less {
  public:
   template <class First, class Second>
-  auto operator()(const First& first, const Second& second) const ->
-  decltype(first < second) {
+  auto operator()(const First& first, const Second& second) const
+      -> decltype(first < second) {
     return first < second;
   }
 };
@@ -95,8 +93,8 @@ class Less {
 class Greater {
  public:
   template <class First, class Second>
-  auto operator()(const First& first, const Second& second) const ->
-  decltype(first > second) {
+  auto operator()(const First& first, const Second& second) const
+      -> decltype(first > second) {
     return first > second;
   }
 };
@@ -105,8 +103,8 @@ template <int n>
 class Get {
  public:
   template <class Value>
-  auto operator()(Value&& value) const ->
-  decltype(std::get<n>(std::forward<Value>(value))) {
+  auto operator()(Value&& value) const
+      -> decltype(std::get<n>(std::forward<Value>(value))) {
     return std::get<n>(std::forward<Value>(value));
   }
 };
@@ -115,12 +113,12 @@ template <class Class, class Result>
 class MemberFunction {
  public:
   typedef Result (Class::*MemberPtr)();
+
  private:
   MemberPtr member_;
+
  public:
-  explicit MemberFunction(MemberPtr member)
-    : member_(member)
-  {}
+  explicit MemberFunction(MemberPtr member) : member_(member) {}
 
   Result operator()(Class&& x) const {
     return (x.*member_)();
@@ -136,15 +134,15 @@ class MemberFunction {
 };
 
 template <class Class, class Result>
-class ConstMemberFunction{
+class ConstMemberFunction {
  public:
   typedef Result (Class::*MemberPtr)() const;
+
  private:
   MemberPtr member_;
+
  public:
-  explicit ConstMemberFunction(MemberPtr member)
-    : member_(member)
-  {}
+  explicit ConstMemberFunction(MemberPtr member) : member_(member) {}
 
   Result operator()(const Class& x) const {
     return (x.*member_)();
@@ -158,13 +156,13 @@ class ConstMemberFunction{
 template <class Class, class FieldType>
 class Field {
  public:
-  typedef FieldType (Class::*FieldPtr);
+  typedef FieldType Class::*FieldPtr;
+
  private:
   FieldPtr field_;
+
  public:
-  explicit Field(FieldPtr field)
-    : field_(field)
-  {}
+  explicit Field(FieldPtr field) : field_(field) {}
 
   const FieldType& operator()(const Class& x) const {
     return x.*field_;
@@ -190,8 +188,8 @@ class Field {
 class Move {
  public:
   template <class Value>
-  auto operator()(Value&& value) const ->
-  decltype(std::move(std::forward<Value>(value))) {
+  auto operator()(Value&& value) const
+      -> decltype(std::move(std::forward<Value>(value))) {
     return std::move(std::forward<Value>(value));
   }
 };
@@ -206,9 +204,7 @@ class Negate {
  public:
   Negate() = default;
 
-  explicit Negate(Predicate pred)
-    : pred_(std::move(pred))
-  {}
+  explicit Negate(Predicate pred) : pred_(std::move(pred)) {}
 
   template <class Arg>
   bool operator()(Arg&& arg) const {
@@ -273,7 +269,6 @@ struct ValueTypeOfRange {
   using RefType = decltype(*std::begin(std::declval<Container&>()));
   using StorageType = typename std::decay<RefType>::type;
 };
-
 
 /*
  * Sources
@@ -347,6 +342,9 @@ class Order;
 
 template <class Selector>
 class GroupBy;
+
+template <class Selector>
+class GroupByAdjacent;
 
 template <class Selector>
 class Distinct;
@@ -574,7 +572,7 @@ Map mapOp(Operator op) {
  */
 enum MemberType {
   Const,
-  Mutable
+  Mutable,
 };
 
 /**
@@ -585,14 +583,14 @@ enum MemberType {
 template <MemberType Constness>
 struct ExprIsConst {
   enum {
-    value = Constness == Const
+    value = Constness == Const,
   };
 };
 
 template <MemberType Constness>
 struct ExprIsMutable {
   enum {
-    value = Constness == Mutable
+    value = Constness == Mutable,
   };
 };
 
@@ -602,8 +600,8 @@ template <
     class Return,
     class Mem = ConstMemberFunction<Class, Return>,
     class Map = detail::Map<Mem>>
-typename std::enable_if<ExprIsConst<Constness>::value, Map>::type
-member(Return (Class::*member)() const) {
+typename std::enable_if<ExprIsConst<Constness>::value, Map>::type member(
+    Return (Class::*member)() const) {
   return Map(Mem(member));
 }
 
@@ -613,8 +611,8 @@ template <
     class Return,
     class Mem = MemberFunction<Class, Return>,
     class Map = detail::Map<Mem>>
-typename std::enable_if<ExprIsMutable<Constness>::value, Map>::type
-member(Return (Class::*member)()) {
+typename std::enable_if<ExprIsMutable<Constness>::value, Map>::type member(
+    Return (Class::*member)()) {
   return Map(Mem(member));
 }
 
@@ -668,10 +666,8 @@ template <
     class Selector = Identity,
     class Comparer = Less,
     class Order = detail::Order<Selector, Comparer>>
-Order orderBy(Selector selector = Selector(),
-              Comparer comparer = Comparer()) {
-  return Order(std::move(selector),
-               std::move(comparer));
+Order orderBy(Selector selector = Selector(), Comparer comparer = Comparer()) {
+  return Order(std::move(selector), std::move(comparer));
 }
 
 template <
@@ -684,6 +680,13 @@ Order orderByDescending(Selector selector = Selector()) {
 template <class Selector = Identity, class GroupBy = detail::GroupBy<Selector>>
 GroupBy groupBy(Selector selector = Selector()) {
   return GroupBy(std::move(selector));
+}
+
+template <
+    class Selector = Identity,
+    class GroupByAdjacent = detail::GroupByAdjacent<Selector>>
+GroupByAdjacent groupByAdjacent(Selector selector = Selector()) {
+  return GroupByAdjacent(std::move(selector));
 }
 
 template <
@@ -783,10 +786,8 @@ Composed all(Predicate pred = Predicate()) {
 }
 
 template <class Seed, class Fold, class FoldLeft = detail::FoldLeft<Seed, Fold>>
-FoldLeft foldl(Seed seed = Seed(),
-               Fold fold = Fold()) {
-  return FoldLeft(std::move(seed),
-                  std::move(fold));
+FoldLeft foldl(Seed seed = Seed(), Fold fold = Fold()) {
+  return FoldLeft(std::move(seed), std::move(fold));
 }
 
 template <class Reducer, class Reduce = detail::Reduce<Reducer>>

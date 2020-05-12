@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2016-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <stdint.h>
@@ -19,12 +19,13 @@
 #include <folly/io/Cursor.h>
 #include <folly/io/IOBuf.h>
 #include <folly/small_vector.h>
+#include <thrift/lib/cpp2/FieldRef.h>
 
 #include "mcrouter/lib/carbon/CarbonProtocolCommon.h"
 #include "mcrouter/lib/carbon/CarbonProtocolWriter.h"
+#include "mcrouter/lib/carbon/CommonSerializationTraits.h"
 #include "mcrouter/lib/carbon/Fields.h"
 #include "mcrouter/lib/carbon/Result.h"
-#include "mcrouter/lib/carbon/SerializationTraits.h"
 #include "mcrouter/lib/carbon/Util.h"
 #include "mcrouter/lib/fbi/cpp/util.h"
 
@@ -40,14 +41,12 @@ class CarbonProtocolReader {
     cursor_ = c;
   }
 
-  const CarbonCursor& cursor() const {
+  CarbonCursor& cursor() {
     return cursor_;
   }
 
   void readField(bool& b, FieldType fieldType) {
-    DCHECK(fieldType == FieldType::True || fieldType == FieldType::False)
-        << "Invalid fieldType: " << static_cast<uint8_t>(fieldType);
-    b = fieldType == FieldType::True;
+    readRawInto(b, fieldType);
   }
 
   void readField(folly::Optional<bool>& data, FieldType fieldType) {
@@ -59,9 +58,28 @@ class CarbonProtocolReader {
     data = folly::Optional<T>(readRaw<T>());
   }
 
+  void readField(
+      apache::thrift::optional_field_ref<bool&> data,
+      FieldType fieldType) {
+    data = fieldType == FieldType::True;
+  }
+
+  template <class T>
+  void readField(
+      apache::thrift::optional_field_ref<T&> data,
+      FieldType /* fieldType */) {
+    data = readRaw<T>();
+  }
+
   template <class T>
   void readField(T& t, FieldType /* fieldType */) {
     readRawInto(t);
+  }
+
+  void readRawInto(bool& b, FieldType fieldType) {
+    DCHECK(fieldType == FieldType::True || fieldType == FieldType::False)
+        << "Invalid fieldType: " << static_cast<uint8_t>(fieldType);
+    b = fieldType == FieldType::True;
   }
 
   template <class T>
@@ -208,7 +226,7 @@ class CarbonProtocolReader {
 
   void readRawInto(Result& r) {
     static_assert(
-        sizeof(Result) == sizeof(mc_res_t),
+        sizeof(Result) == sizeof(carbon::Result),
         "Carbon currently assumes sizeof(Result) == sizeof(int16_t)");
     r = static_cast<Result>(readRaw<int16_t>());
   }
@@ -227,8 +245,10 @@ class CarbonProtocolReader {
   }
 
   void readStructEnd() {
-    lastFieldId_ = nestedStructFieldIds_.back();
-    nestedStructFieldIds_.pop_back();
+    if (!nestedStructFieldIds_.empty()) {
+      lastFieldId_ = nestedStructFieldIds_.back();
+      nestedStructFieldIds_.pop_back();
+    }
   }
 
   std::pair<std::pair<FieldType, FieldType>, uint32_t>
@@ -325,4 +345,4 @@ class CarbonProtocolReader {
   FieldType boolFieldType_;
 };
 
-} // carbon
+} // namespace carbon

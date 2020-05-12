@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// Copyright 2013-present Facebook. All Rights Reserved.
+
 // @author: Pavlo Kushnir (pavlo)
 
 #pragma once
@@ -27,8 +27,8 @@ namespace folly {
 template <class Alloc>
 StringPiece stringPieceDup(StringPiece piece, const Alloc& alloc) {
   auto size = piece.size();
-  auto keyDup = typename Alloc::template rebind<char>::other(alloc)
-    .allocate(size);
+  auto keyDup =
+      typename Alloc::template rebind<char>::other(alloc).allocate(size);
   if (size) {
     memcpy(
         keyDup, piece.data(), size * sizeof(typename StringPiece::value_type));
@@ -38,8 +38,8 @@ StringPiece stringPieceDup(StringPiece piece, const Alloc& alloc) {
 
 template <class Alloc>
 void stringPieceDel(StringPiece piece, const Alloc& alloc) {
-  typename Alloc::template rebind<char>::other(alloc)
-    .deallocate(const_cast<char*>(piece.data()), piece.size());
+  typename Alloc::template rebind<char>::other(alloc).deallocate(
+      const_cast<char*>(piece.data()), piece.size());
 }
 
 } // namespace folly

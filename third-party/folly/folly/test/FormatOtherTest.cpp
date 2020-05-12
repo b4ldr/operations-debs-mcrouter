@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,6 +23,7 @@
 #include <folly/Portability.h>
 #include <folly/dynamic.h>
 #include <folly/json.h>
+#include <folly/portability/GFlags.h>
 #include <folly/portability/GTest.h>
 #include <folly/small_vector.h>
 
@@ -44,8 +45,10 @@ TEST(FormatOther, file) {
     {
       FILE* fp = fdopen(fds[1], "wb");
       PCHECK(fp);
-      SCOPE_EXIT { fclose(fp); };
-      writeTo(fp, format("{} {}", 42, 23));  // <= 512 bytes (PIPE_BUF)
+      SCOPE_EXIT {
+        fclose(fp);
+      };
+      writeTo(fp, format("{} {}", 42, 23)); // <= 512 bytes (PIPE_BUF)
     }
 
     char buf[512];
@@ -106,7 +109,7 @@ TEST(FormatOther, small_vector) {
   testFormatSeq<small_vector<int, 2>>();
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
   testing::InitGoogleTest(&argc, argv);
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   return RUN_ALL_TESTS();

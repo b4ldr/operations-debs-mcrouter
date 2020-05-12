@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2017-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -19,7 +19,7 @@
 #include "mcrouter/options.h"
 #include "mcrouter/routes/McRouteHandleProvider.h"
 #include "mcrouter/routes/ShardSelectionRouteFactory.h"
-#include "mcrouter/routes/test/ShardSelectionRouteTestUtil.h"
+#include "mcrouter/routes/test/RouteHandleTestBase.h"
 
 using namespace facebook::memcache::mcrouter;
 using namespace hellogoodbye;
@@ -53,7 +53,7 @@ class BasicShardSelector {
 };
 
 class ShardSelectionRouteTest
-    : public ShardSelectionRouteTestUtil<HelloGoodbyeRouterInfo> {
+    : public RouteHandleTestBase<HelloGoodbyeRouterInfo> {
  public:
   HelloGoodbyeRouterInfo::RouteHandlePtr getShardSelectionRoute(
       folly::StringPiece jsonStr) {
@@ -183,7 +183,7 @@ TEST_F(ShardSelectionRouteTest, createMissingHost) {
     std::string errorMsg = e.what();
     EXPECT_EQ(
         "ShardSelectionRoute: 'shards' must have the same number of entries "
-        "as servers in 'pool'",
+        "as servers in 'pool'. Servers size: 1. Shards size: 2.",
         errorMsg);
   }
 }
@@ -214,7 +214,7 @@ TEST_F(ShardSelectionRouteTest, createMissingHostString) {
     std::string errorMsg = e.what();
     EXPECT_EQ(
         "ShardSelectionRoute: 'shards' must have the same number of entries "
-        "as servers in 'pool'",
+        "as servers in 'pool'. Servers size: 1. Shards size: 2.",
         errorMsg);
   }
 }
@@ -244,7 +244,7 @@ TEST_F(ShardSelectionRouteTest, createMissingShardList) {
     std::string errorMsg = e.what();
     EXPECT_EQ(
         "ShardSelectionRoute: 'shards' must have the same number of entries "
-        "as servers in 'pool'",
+        "as servers in 'pool'. Servers size: 2. Shards size: 1.",
         errorMsg);
   }
 }
@@ -274,7 +274,7 @@ TEST_F(ShardSelectionRouteTest, createMissingShardListString) {
     std::string errorMsg = e.what();
     EXPECT_EQ(
         "ShardSelectionRoute: 'shards' must have the same number of entries "
-        "as servers in 'pool'",
+        "as servers in 'pool'. Servers size: 2. Shards size: 1.",
         errorMsg);
   }
 }
@@ -355,10 +355,15 @@ TEST_F(ShardSelectionRouteTest, createValidShardList) {
 TEST_F(ShardSelectionRouteTest, route) {
   constexpr folly::StringPiece kSelectionRouteConfig = R"(
   {
-    "pool": [
-      "NullRoute",
-      "ErrorRoute"
-    ],
+    "pool": {
+      "type": "Pool",
+      "name": "SamplePool1",
+      "servers": [
+        {"type": "NullRoute"},
+        {"type": "ErrorRoute"}
+      ],
+      "protocol": "caret"
+    },
     "shards": [
       [1, 3, 5],
       [2, 4, 6]
@@ -374,40 +379,45 @@ TEST_F(ShardSelectionRouteTest, route) {
 
   req.shardId() = 1;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_notfound, reply.result());
+  EXPECT_EQ(carbon::Result::NOTFOUND, reply.result());
 
   req.shardId() = 2;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_local_error, reply.result());
+  EXPECT_EQ(carbon::Result::LOCAL_ERROR, reply.result());
 
   req.shardId() = 3;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_notfound, reply.result());
+  EXPECT_EQ(carbon::Result::NOTFOUND, reply.result());
 
   req.shardId() = 4;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_local_error, reply.result());
+  EXPECT_EQ(carbon::Result::LOCAL_ERROR, reply.result());
 
   req.shardId() = 5;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_notfound, reply.result());
+  EXPECT_EQ(carbon::Result::NOTFOUND, reply.result());
 
   req.shardId() = 6;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_local_error, reply.result());
+  EXPECT_EQ(carbon::Result::LOCAL_ERROR, reply.result());
 }
 
 TEST_F(ShardSelectionRouteTest, routeString) {
   constexpr folly::StringPiece kSelectionRouteConfig = R"(
   {
-    "pool": [
-      "NullRoute",
-      "ErrorRoute"
-    ],
-    "shards": [
-      "1, 3, 5",
-      "2, 4, 6"
-    ]
+    "pool": {
+      "type": "Pool",
+      "name": "SamplePool1",
+      "servers": [
+        {"type": "NullRoute"},
+        {"type": "ErrorRoute"}
+      ],
+      "protocol": "caret",
+      "shards": [
+        "1, 3, 5",
+        "2, 4, 6"
+      ]
+    }
   }
   )";
 
@@ -419,40 +429,45 @@ TEST_F(ShardSelectionRouteTest, routeString) {
 
   req.shardId() = 1;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_notfound, reply.result());
+  EXPECT_EQ(carbon::Result::NOTFOUND, reply.result());
 
   req.shardId() = 2;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_local_error, reply.result());
+  EXPECT_EQ(carbon::Result::LOCAL_ERROR, reply.result());
 
   req.shardId() = 3;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_notfound, reply.result());
+  EXPECT_EQ(carbon::Result::NOTFOUND, reply.result());
 
   req.shardId() = 4;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_local_error, reply.result());
+  EXPECT_EQ(carbon::Result::LOCAL_ERROR, reply.result());
 
   req.shardId() = 5;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_notfound, reply.result());
+  EXPECT_EQ(carbon::Result::NOTFOUND, reply.result());
 
   req.shardId() = 6;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_local_error, reply.result());
+  EXPECT_EQ(carbon::Result::LOCAL_ERROR, reply.result());
 }
 
 TEST_F(ShardSelectionRouteTest, outOfRange) {
   constexpr folly::StringPiece kSelectionRouteConfig = R"(
   {
-    "pool": [
-      "NullRoute",
-      "NullRoute"
-    ],
-    "shards": [
-      [1],
-      [2]
-    ]
+    "pool": {
+      "type": "Pool",
+      "name": "SamplePool1",
+      "servers": [
+        {"type": "NullRoute"},
+        {"type": "NullRoute"}
+      ],
+      "protocol": "caret",
+      "shards": [
+        [1],
+        [2]
+      ]
+    }
   }
   )";
 
@@ -464,24 +479,29 @@ TEST_F(ShardSelectionRouteTest, outOfRange) {
 
   req.shardId() = 1;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_notfound, reply.result());
+  EXPECT_EQ(carbon::Result::NOTFOUND, reply.result());
 
   req.shardId() = 2;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_notfound, reply.result());
+  EXPECT_EQ(carbon::Result::NOTFOUND, reply.result());
 
   req.shardId() = 3;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_local_error, reply.result());
+  EXPECT_EQ(carbon::Result::LOCAL_ERROR, reply.result());
 }
 
 TEST_F(ShardSelectionRouteTest, outOfRangeString) {
   constexpr folly::StringPiece kSelectionRouteConfig = R"(
   {
-    "pool": [
-      "NullRoute",
-      "NullRoute"
-    ],
+    "pool": {
+      "type": "Pool",
+      "name": "SamplePool1",
+      "servers": [
+        {"type": "NullRoute"},
+        {"type": "NullRoute"}
+      ],
+      "protocol": "caret"
+    },
     "shards": [
       "1",
       "2"
@@ -497,28 +517,33 @@ TEST_F(ShardSelectionRouteTest, outOfRangeString) {
 
   req.shardId() = 1;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_notfound, reply.result());
+  EXPECT_EQ(carbon::Result::NOTFOUND, reply.result());
 
   req.shardId() = 2;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_notfound, reply.result());
+  EXPECT_EQ(carbon::Result::NOTFOUND, reply.result());
 
   req.shardId() = 3;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_local_error, reply.result());
+  EXPECT_EQ(carbon::Result::LOCAL_ERROR, reply.result());
 }
 
 TEST_F(ShardSelectionRouteTest, customOutOfRangeRoute) {
   constexpr folly::StringPiece kSelectionRouteConfig = R"(
   {
-    "pool": [
-      "NullRoute",
-      "NullRoute"
-    ],
-    "shards": [
-      [1],
-      [2]
-    ],
+    "pool": {
+      "type": "Pool",
+      "name": "SamplePool1",
+      "servers": [
+        {"type": "NullRoute"},
+        {"type": "NullRoute"}
+      ],
+      "protocol": "caret",
+      "shards": [
+        [1],
+        [2]
+      ]
+    },
     "out_of_range": "ErrorRoute|Cool message!"
   }
   )";
@@ -531,25 +556,30 @@ TEST_F(ShardSelectionRouteTest, customOutOfRangeRoute) {
 
   req.shardId() = 1;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_notfound, reply.result());
+  EXPECT_EQ(carbon::Result::NOTFOUND, reply.result());
 
   req.shardId() = 2;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_notfound, reply.result());
+  EXPECT_EQ(carbon::Result::NOTFOUND, reply.result());
 
   req.shardId() = 3;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_local_error, reply.result());
+  EXPECT_EQ(carbon::Result::LOCAL_ERROR, reply.result());
   EXPECT_EQ("Cool message!", reply.message());
 }
 
 TEST_F(ShardSelectionRouteTest, customOutOfRangeRouteString) {
   constexpr folly::StringPiece kSelectionRouteConfig = R"(
   {
-    "pool": [
-      "NullRoute",
-      "NullRoute"
-    ],
+    "pool": {
+      "type": "Pool",
+      "name": "SamplePool1",
+      "servers": [
+        {"type": "NullRoute"},
+        {"type": "NullRoute"}
+      ],
+      "protocol": "caret"
+    },
     "shards": [
       "1",
       "2"
@@ -566,15 +596,15 @@ TEST_F(ShardSelectionRouteTest, customOutOfRangeRouteString) {
 
   req.shardId() = 1;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_notfound, reply.result());
+  EXPECT_EQ(carbon::Result::NOTFOUND, reply.result());
 
   req.shardId() = 2;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_notfound, reply.result());
+  EXPECT_EQ(carbon::Result::NOTFOUND, reply.result());
 
   req.shardId() = 3;
   reply = rh->route(req);
-  EXPECT_EQ(mc_res_notfound, reply.result());
+  EXPECT_EQ(carbon::Result::NOTFOUND, reply.result());
 }
 
 } // namespace mcrouter

@@ -1,4 +1,5 @@
 namespace hellogoodbye;
+thrift_namespace hellogoodbye.thrift;
 
 import "mcrouter/lib/network/Common.idl"
 
@@ -13,6 +14,7 @@ request HelloRequest {
 
 reply HelloReply {
   1: Result result;
+  2: std::string message;
 };
 
 request GoodbyeRequest {
@@ -31,7 +33,8 @@ reply GoodbyeReply {
 
 service {
   additional_route_handles: [
-    DuplicateRoute @ "mcrouter/lib/carbon/example/DuplicateRoute.h"
+    DuplicateRoute @ "mcrouter/lib/carbon/example/DuplicateRoute.h",
+    CarbonLookasideRoute @ "mcrouter/lib/carbon/example/CarbonLookasideRoute.h"
   ];
   gen_client_tool: true;
 };

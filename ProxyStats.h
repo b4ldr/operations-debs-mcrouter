@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2016-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <mutex>
@@ -38,6 +38,26 @@ class ProxyStats {
 
   ExponentialSmoothData<64>& durationUs() {
     return durationUs_;
+  }
+
+  ExponentialSmoothData<64>& durationGetUs() {
+    return durationGetUs_;
+  }
+
+  ExponentialSmoothData<64>& durationUpdateUs() {
+    return durationUpdateUs_;
+  }
+
+  /**
+   * Tells the interval (in seconds) between closing a connection due to lack
+   * of activity and opening it again.
+   */
+  ExponentialSmoothData<64>& inactiveConnectionClosedIntervalSec() {
+    return inactiveConnectionClosedIntervalSec_;
+  }
+
+  ExponentialSmoothData<64>& asyncLogDurationUs() {
+    return asyncLogDurationUs_;
   }
 
   size_t numBinsUsed() const {
@@ -164,6 +184,15 @@ class ProxyStats {
   std::vector<PoolStats> poolStats_;
 
   ExponentialSmoothData<64> durationUs_;
+  // Duration microseconds, broken down by get-like request type
+  ExponentialSmoothData<64> durationGetUs_;
+  // Duration microseconds, broken down by update-like request type
+  ExponentialSmoothData<64> durationUpdateUs_;
+
+  ExponentialSmoothData<64> inactiveConnectionClosedIntervalSec_;
+
+  // Time spent for asynclog spooling
+  ExponentialSmoothData<64> asyncLogDurationUs_;
 
   // we are wasting some memory here to get faster mapping from stat name to
   // statsBin_[] and statsNumWithinWindow_[] entry. i.e., the statsBin_[]
@@ -199,6 +228,7 @@ class ProxyStats {
    */
   size_t numBinsUsed_{0};
 };
-}
-}
-} // facebook::memcache::mcrouter
+
+} // namespace mcrouter
+} // namespace memcache
+} // namespace facebook

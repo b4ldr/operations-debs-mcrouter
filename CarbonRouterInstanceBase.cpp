@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2016-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include "CarbonRouterInstanceBase.h"
 
 #include <memory>
@@ -63,10 +63,15 @@ std::string statsUpdateFunctionName(folly::StringPiece routerName) {
       "carbon-stats-update-fn-", routerName, "-", uniqueId.fetch_add(1));
 }
 
+McrouterOptions finalizeOpts(McrouterOptions&& opts) {
+  facebook::memcache::mcrouter::finalizeOptions(opts);
+  return std::move(opts);
+}
+
 } // anonymous namespace
 
 CarbonRouterInstanceBase::CarbonRouterInstanceBase(McrouterOptions inputOptions)
-    : opts_(std::move(inputOptions)),
+    : opts_(finalizeOpts(std::move(inputOptions))),
       pid_(getpid()),
       configApi_(createConfigApi(opts_)),
       rtVarsData_(std::make_shared<ObservableRuntimeVars>()),

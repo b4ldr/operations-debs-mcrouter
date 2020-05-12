@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include "FileDataProvider.h"
 
 #include <poll.h>
@@ -14,6 +14,7 @@
 #include <boost/filesystem/operations.hpp>
 #include <boost/filesystem/path.hpp>
 #include <boost/system/error_code.hpp>
+#include <glog/logging.h>
 
 #include <folly/FileUtil.h>
 #include <folly/Format.h>
@@ -21,6 +22,11 @@
 using boost::filesystem::complete;
 using boost::filesystem::path;
 using boost::filesystem::read_symlink;
+
+DEFINE_bool(
+    mcrouter_enable_inotify_watch,
+    true,
+    "Enable inotify watch on config file");
 
 namespace facebook {
 namespace memcache {
@@ -84,7 +90,9 @@ FileDataProvider::FileDataProvider(std::string filePath)
     throw std::runtime_error("File path empty");
   }
 
-  updateInotifyWatch();
+  if (FLAGS_mcrouter_enable_inotify_watch) {
+    updateInotifyWatch();
+  }
 }
 
 std::string FileDataProvider::load() const {

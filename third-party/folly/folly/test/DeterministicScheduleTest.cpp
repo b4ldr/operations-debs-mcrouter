@@ -1,11 +1,11 @@
 /*
- * Copyright 2013-present Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -91,9 +91,7 @@ TEST(DeterministicSchedule, buggyAdd) {
         } while (true);
       }); // thread lambda
     } // for t
-    for (auto& t : threads) {
-      DeterministicSchedule::join(t);
-    }
+    DeterministicSchedule::joinAll(threads);
     if (!bug) {
       EXPECT_EQ(test.load(), baseline.load());
     } else {
@@ -235,17 +233,18 @@ DEFINE_bool(bug, false, "Introduce bug");
 #define AUX_UPDATE() (aux_->lastUpdate_ = aux_->step_ + 1)
 
 /** Macro for inline definition of auxiliary actions */
-#define AUX_ACT(act)                          \
-  do {                                        \
-    AUX_THR(func_) = __func__;                \
-    AUX_THR(line_) = __LINE__;                \
-    AuxAct auxfn(                             \
-      [&](bool success) {                     \
-        if (success) {}                       \
-        if (true) {act}                       \
-      }                                       \
-    );                                        \
-    DeterministicSchedule::setAuxAct(auxfn);  \
+#define AUX_ACT(act)                         \
+  do {                                       \
+    AUX_THR(func_) = __func__;               \
+    AUX_THR(line_) = __LINE__;               \
+    AuxAct auxfn([&](bool success) {         \
+      if (success) {                         \
+      }                                      \
+      if (true) {                            \
+        act                                  \
+      }                                      \
+    });                                      \
+    DeterministicSchedule::setAuxAct(auxfn); \
   } while (0)
 
 /** Alias for original class */
@@ -257,12 +256,10 @@ template <typename T>
 struct AnnotatedAtomicCounter : public Base<T> {
   /** Manage DSched auxChk */
   void setAuxChk() {
-    AuxChk auxfn(
-      [&](uint64_t step) {
-        auxLog(step);
-        auxCheck();
-      }
-    );
+    AuxChk auxfn([&](uint64_t step) {
+      auxLog(step);
+      auxCheck();
+    });
     DeterministicSchedule::setAuxChk(auxfn);
   }
 
@@ -366,6 +363,53 @@ TEST(DeterministicSchedule, global_invariants) {
     annotated.clearAuxChk();
     delete aux_;
   }
+}
+
+struct DSchedTimestampTest : public DSchedTimestamp {
+  explicit DSchedTimestampTest(size_t v) : DSchedTimestamp(v) {}
+};
+
+TEST(DeterministicSchedule, thread_timestamps) {
+  ThreadTimestamps tss;
+  DSchedThreadId tid0(0);
+  DSchedThreadId tid1(1);
+
+  ASSERT_FALSE(tss.atLeastAsRecentAs(tid0, DSchedTimestampTest(1)));
+
+  tss.setIfNotPresent(tid0, DSchedTimestampTest(1));
+  ASSERT_TRUE(tss.atLeastAsRecentAs(tid0, DSchedTimestampTest(1)));
+  ASSERT_FALSE(tss.atLeastAsRecentAs(tid0, DSchedTimestampTest(2)));
+  ASSERT_FALSE(tss.atLeastAsRecentAs(tid1, DSchedTimestampTest(1)));
+
+  tss.setIfNotPresent(tid0, DSchedTimestampTest(2));
+  ASSERT_FALSE(tss.atLeastAsRecentAs(tid0, DSchedTimestampTest(2)));
+
+  auto ts = tss.advance(tid0);
+  ASSERT_TRUE(ts.atLeastAsRecentAs(DSchedTimestampTest(2)));
+  ASSERT_FALSE(ts.atLeastAsRecentAs(DSchedTimestampTest(3)));
+  ASSERT_TRUE(tss.atLeastAsRecentAs(tid0, DSchedTimestampTest(2)));
+  ASSERT_FALSE(tss.atLeastAsRecentAs(tid1, DSchedTimestampTest(1)));
+
+  ThreadTimestamps tss2;
+  tss2.setIfNotPresent(tid1, DSchedTimestampTest(3));
+  ASSERT_FALSE(tss2.atLeastAsRecentAs(tid1, DSchedTimestampTest(4)));
+  ASSERT_TRUE(tss2.atLeastAsRecentAs(tid1, DSchedTimestampTest(3)));
+
+  ASSERT_FALSE(tss.atLeastAsRecentAsAny(tss2));
+  tss.sync(tss2);
+  ASSERT_TRUE(tss.atLeastAsRecentAs(tid1, DSchedTimestampTest(3)));
+  ASSERT_FALSE(tss.atLeastAsRecentAs(tid1, DSchedTimestampTest(4)));
+
+  ThreadTimestamps tss3;
+  tss3.setIfNotPresent(tid1, DSchedTimestampTest(4));
+  ASSERT_TRUE(tss3.atLeastAsRecentAsAny(tss2));
+  ASSERT_FALSE(tss2.atLeastAsRecentAsAny(tss3));
+
+  ThreadTimestamps tss4, tss5;
+  tss4.setIfNotPresent(DSchedThreadId(10), DSchedTimestampTest(5));
+  tss5.setIfNotPresent(DSchedThreadId(11), DSchedTimestampTest(5));
+  ASSERT_FALSE(tss4.atLeastAsRecentAsAny(tss5));
+  ASSERT_FALSE(tss5.atLeastAsRecentAsAny(tss4));
 }
 
 int main(int argc, char** argv) {

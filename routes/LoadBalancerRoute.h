@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2017-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <algorithm>
@@ -19,7 +19,7 @@
 #include "mcrouter/McrouterFiberContext.h"
 #include "mcrouter/config.h"
 #include "mcrouter/lib/HashUtil.h"
-#include "mcrouter/lib/Operation.h"
+#include "mcrouter/lib/Reply.h"
 #include "mcrouter/lib/RouteHandleTraverser.h"
 #include "mcrouter/lib/WeightedCh3HashFunc.h"
 #include "mcrouter/lib/routes/NullRoute.h"
@@ -66,12 +66,11 @@ class LoadBalancerRoute {
    * @param children                List of children route handles.
    * @param salt                    salt
    * @param loadTtl                 TTL for load in micro seconds
-   * @param defaultServerLoad       default server load upon TLL expiration
    * @param failoverCount           Number of times to route the request.
    *                                1 means no failover (just route once).
    *                                The value will be capped to
    *                                std::min(failoverCount, children.size())
-   * @param algorithm               AlgorithmType
+   * @param algorithm               Load balancing algorithm to use.
    * @param seed                    seed for random number generator used in
    *                                the two random choices algorithm.
    */
@@ -79,17 +78,15 @@ class LoadBalancerRoute {
       std::vector<std::shared_ptr<RouteHandleIf>> children,
       std::string salt,
       std::chrono::microseconds loadTtl,
-      ServerLoad defaultServerLoad,
       size_t failoverCount,
       AlgorithmType algorithm = AlgorithmType::WEIGHTED_HASHING,
       uint32_t seed = nowUs())
       : children_(std::move(children)),
         salt_(std::move(salt)),
         loadTtl_(loadTtl),
-        defaultLoadComplement_(
-            defaultServerLoad.complement().percentLoad() / 100),
         failoverCount_(std::min(failoverCount, children_.size())),
         loadComplements_(children_.size(), 1.0),
+        medianLoadScratch_(children_.size()),
         expTimes_(children_.size(), std::chrono::microseconds(0)),
         gen_(seed),
         algorithm_(algorithm) {
@@ -97,11 +94,11 @@ class LoadBalancerRoute {
   }
 
   template <class Request>
-  void traverse(
+  bool traverse(
       const Request& req,
       const RouteHandleTraverser<RouteHandleIf>& t) const {
     // Walk all children
-    t(children_, req);
+    return t(children_, req);
   }
 
   template <class Request>
@@ -134,10 +131,11 @@ class LoadBalancerRoute {
 
     // Reset expried loads.
     const int64_t now = nowUs();
+    auto loadMedian = getLoadComplementsMedian();
     for (size_t i = 0; i < children_.size(); i++) {
       if (expTimes_[i].count() != 0 && expTimes_[i].count() <= now) {
         expTimes_[i] = std::chrono::microseconds(0);
-        loadComplements_[i] = defaultLoadComplement_;
+        loadComplements_[i] = loadMedian;
         if (auto& ctx = mcrouter::fiber_local<RouterInfo>::getSharedCtx()) {
           ctx->proxy().stats().increment(load_balancer_load_reset_count_stat);
         }
@@ -151,16 +149,16 @@ class LoadBalancerRoute {
   const std::vector<std::shared_ptr<RouteHandleIf>> children_;
   const std::string salt_;
   // Default TTL of a serer load. Indicates the time after which a server load
-  // value is reset to 'defaultLoadComplement_' value.
+  // value is reset to the getLoadComplementsMedian() value.
   const std::chrono::microseconds loadTtl_{100000};
-  // Value to which server load is reset when it's value expires.
-  const double defaultLoadComplement_{0.5};
   // Number of times to retry on error.
   const size_t failoverCount_{1};
 
   // 1-complement of the server load (i.e. 1 - serverLoad) of each of the
   // children.
   std::vector<double> loadComplements_;
+  // Scratch space for computing the median of loadComplements_.
+  std::vector<double> medianLoadScratch_;
   // Point in time when the loadComplement becomes too old to be trusted.
   std::vector<std::chrono::microseconds> expTimes_;
   // Random Number generator used for TwoRandomChoices algorithm
@@ -183,15 +181,14 @@ class LoadBalancerRoute {
           if (!load.isZero()) {
             loadComplements_[idx] = load.complement().percentLoad() / 100;
 
-            // mark the current load of the server for expiration only if it is
-            // more than default server load.
-            // (using '<' below because loadComplements_ is actually the
-            // complement of the load)
-            if (loadComplements_[idx] < defaultLoadComplement_) {
-              expTimes_[idx] =
-                  std::chrono::microseconds(nowUs() + loadTtl_.count());
-            }
+            // For consistency with the two random choice algorithm, we set
+            // expiration timers in all cases. We should be able to avoid
+            // extreme server load flucatuations on expiration timers now that
+            // we are using a median.
+            expTimes_[idx] =
+                std::chrono::microseconds(nowUs() + loadTtl_.count());
           }
+          carbon::setIsFailoverIfPresent(reply, isFailover);
           return reply;
         });
   }
@@ -209,19 +206,35 @@ class LoadBalancerRoute {
     loadComplements_[idxs.first] = load.complement().percentLoad() / 100;
 
     auto now = nowUs();
-    // Mark the current load of the server for expiration only if it is
-    // more than default server load
-    if (loadComplements_[idxs.first] < defaultLoadComplement_) {
-      expTimes_[idxs.first] = std::chrono::microseconds(now + loadTtl_.count());
-    }
+
+    // In the two random choice algorithm the highest load server will never
+    // have a request routed to it regardless of which two random pairs are
+    // chosen unless the primary choice fails. Because of this, we introduce an
+    // expiration timer which resets the load to a reasonable default (median
+    // load) to bring this previously high load server which is no longer
+    // receiving requests back into the viable candidate pool after having some
+    // time to cool off. Previously we were only setting the expiration timer
+    // only if load > default. However, this made us vulnerable to edge cases
+    // where we could have a server A such that load(A) < Median-Load so it's
+    // expiration timer would not get set. However, the median could change as
+    // load on other servers changes such that load(A) > Media-Load in the
+    // future. Server A could become the highest loaded server and be
+    // permanently excluded from the viable candidate set. To avoid situations
+    // like this we set the expiration timer in all cases. Notice that servers
+    // with low load (below the median) are unlikely to have their load
+    // inadvertently bumped up because the algorithm will favor routes to low
+    // load servers and continuously update their load based on replies. This
+    // means we mostly only need to worry how the expiration timer affects
+    // servers with a high load which we are not routing many/any requests to.
+    expTimes_[idxs.first] = std::chrono::microseconds(now + loadTtl_.count());
 
     // If the second entry, which had higher load that the first entry, has
     // already expired, reset the expiry time to zero and set the load to
-    // the defaultLoadComplement_.
+    // getLoadComplementsMedian().
     if (expTimes_[idxs.second].count() != 0 &&
         expTimes_[idxs.second].count() <= now) {
       expTimes_[idxs.second] = std::chrono::microseconds(0);
-      loadComplements_[idxs.second] = defaultLoadComplement_;
+      loadComplements_[idxs.second] = getLoadComplementsMedian();
       if (auto& ctx = mcrouter::fiber_local<RouterInfo>::getSharedCtx()) {
         ctx->proxy().stats().increment(load_balancer_load_reset_count_stat);
       }
@@ -237,13 +250,13 @@ class LoadBalancerRoute {
       folly::StringPiece salt) const {
     size_t n = 0;
     if (salt.empty()) {
-      n = weightedCh3Hash(req.key().routingKey(), weights);
+      n = WeightedCh3HashFunc::hash(req.key().routingKey(), weights);
     } else {
       n = hashWithSalt(
           req.key().routingKey(),
           salt,
           [&weights](const folly::StringPiece sp) {
-            return weightedCh3Hash(sp, weights);
+            return WeightedCh3HashFunc::hash(sp, weights);
           });
     }
     if (UNLIKELY(n >= children_.size())) {
@@ -287,6 +300,20 @@ class LoadBalancerRoute {
       return selectWeightedHashingInternal(req, weights, salt);
     });
   }
+
+  double getLoadComplementsMedian() {
+    // There are usually < 16 servers so the entire load complements vector
+    // fits inside at MOST three cache lines. This is likely better than using
+    // ordered sets to track a median.
+    std::copy(
+        loadComplements_.begin(),
+        loadComplements_.end(),
+        medianLoadScratch_.begin());
+    auto begin = medianLoadScratch_.begin();
+    auto median = begin + medianLoadScratch_.size() / 2;
+    std::nth_element(begin, median, medianLoadScratch_.end());
+    return *median;
+  }
 };
 
 template <class RouterInfo>
@@ -295,76 +322,91 @@ template <class RouterInfo>
 constexpr folly::StringPiece LoadBalancerRoute<RouterInfo>::kTwoRandomChoices;
 
 template <class RouterInfo>
-typename RouterInfo::RouteHandlePtr createLoadBalancerRoute(
-    const folly::dynamic& json,
-    std::vector<typename RouterInfo::RouteHandlePtr> rh) {
-  assert(json.isObject());
+struct LoadBalancerRouteOptions {
+  folly::StringPiece salt;
+  std::chrono::microseconds loadTtl{100 * 1000}; // 100 milliseconds
+  size_t failoverCount{1};
+  typename LoadBalancerRoute<RouterInfo>::AlgorithmType algorithm{
+      LoadBalancerRoute<RouterInfo>::AlgorithmType::WEIGHTED_HASHING};
+};
 
-  if (rh.size() == 0) {
-    return createNullRoute<typename RouterInfo::RouteHandleIf>();
-  }
+template <class RouterInfo>
+LoadBalancerRouteOptions<RouterInfo> parseLoadBalancerRouteJson(
+    const folly::dynamic& json) {
+  LoadBalancerRouteOptions<RouterInfo> options;
 
-  if (rh.size() == 1) {
-    return std::move(rh[0]);
-  }
-
-  std::string salt;
   if (auto jSalt = json.get_ptr("salt")) {
     checkLogic(jSalt->isString(), "LoadBalancerRoute: salt is not a string");
-    salt = jSalt->getString();
+    options.salt = jSalt->stringPiece();
   }
-  std::chrono::microseconds loadTtl(100 * 1000); // 100 milli seconds
+
   if (auto jLoadTtl = json.get_ptr("load_ttl_ms")) {
     checkLogic(
         jLoadTtl->isInt(), "LoadBalancerRoute: load_ttl_ms is not an integer");
-    loadTtl = std::chrono::duration_cast<std::chrono::microseconds>(
+    options.loadTtl = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::milliseconds(jLoadTtl->getInt()));
   }
-  auto defaultServerLoad = ServerLoad::fromPercentLoad(50);
-  if (auto jDefServerLoad = json.get_ptr("default_server_load_percent")) {
-    checkLogic(
-        jDefServerLoad->isInt(),
-        "LoadBalancerRoute: default server load percent is not an integer");
-    auto defServerLoad = jDefServerLoad->getInt();
-    checkLogic(
-        defServerLoad >= 0 && defServerLoad <= 100,
-        "LoadBalancerRoute: default_server_load_percent must be"
-        " an integer between 0 and 100");
-    defaultServerLoad = ServerLoad::fromPercentLoad(defServerLoad);
-  }
-  size_t failoverCount = 1;
+
   if (auto jFailoverCount = json.get_ptr("failover_count")) {
     checkLogic(
         jFailoverCount->isInt(),
         "LoadBalancerRoute: failover_count is not an integer");
-    failoverCount = jFailoverCount->getInt();
+    options.failoverCount = jFailoverCount->getInt();
   }
-  auto algorithm =
-      LoadBalancerRoute<RouterInfo>::AlgorithmType::WEIGHTED_HASHING;
-  std::string algorithmStr;
-  /* Optional and will default to weighted hashing */
+
   if (auto jAlgorithm = json.get_ptr("algorithm")) {
     checkLogic(
         jAlgorithm->isString(), "LoadBalancerRoute: algorithm is not a string");
-    algorithmStr = jAlgorithm->getString();
+    std::string algorithmStr = jAlgorithm->getString();
     if (algorithmStr == LoadBalancerRoute<RouterInfo>::kWeightedHashing) {
-      algorithm =
+      options.algorithm =
           LoadBalancerRoute<RouterInfo>::AlgorithmType::WEIGHTED_HASHING;
     } else if (
         algorithmStr == LoadBalancerRoute<RouterInfo>::kTwoRandomChoices) {
-      algorithm =
+      options.algorithm =
           LoadBalancerRoute<RouterInfo>::AlgorithmType::TWO_RANDOM_CHOICES;
     } else {
       throwLogic("Unknown algorithm: {}", algorithmStr);
     }
   }
+
+  return options;
+}
+
+template <class RouterInfo>
+typename RouterInfo::RouteHandlePtr createLoadBalancerRoute(
+    std::vector<typename RouterInfo::RouteHandlePtr> children,
+    const LoadBalancerRouteOptions<RouterInfo>& options) {
+  if (children.size() == 0) {
+    return createNullRoute<typename RouterInfo::RouteHandleIf>();
+  }
+  if (children.size() == 1) {
+    return std::move(children[0]);
+  }
+
   return makeRouteHandleWithInfo<RouterInfo, LoadBalancerRoute>(
-      std::move(rh),
-      std::move(salt),
-      loadTtl,
-      defaultServerLoad,
-      failoverCount,
-      algorithm);
+      std::move(children),
+      options.salt.str(),
+      options.loadTtl,
+      options.failoverCount,
+      options.algorithm);
+}
+
+template <class RouterInfo>
+typename RouterInfo::RouteHandlePtr createLoadBalancerRoute(
+    const folly::dynamic& json,
+    std::vector<typename RouterInfo::RouteHandlePtr> children) {
+  assert(json.isObject());
+
+  if (children.size() == 0) {
+    return createNullRoute<typename RouterInfo::RouteHandleIf>();
+  }
+  if (children.size() == 1) {
+    return std::move(children[0]);
+  }
+
+  return createLoadBalancerRoute<RouterInfo>(
+      std::move(children), parseLoadBalancerRouteJson<RouterInfo>(json));
 }
 
 template <class RouterInfo>

@@ -1,17 +1,16 @@
 /*
- *  Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #pragma once
 
 #include <memory>
 #include <string>
 #include <vector>
 
-#include "mcrouter/lib/Operation.h"
 #include "mcrouter/lib/Reply.h"
 #include "mcrouter/lib/RouteHandleTraverser.h"
 #include "mcrouter/lib/config/RouteHandleBuilder.h"
@@ -36,8 +35,10 @@ struct NullRoute {
   }
 
   template <class Request>
-  void traverse(const Request&, const RouteHandleTraverser<RouteHandleIf>&)
-      const {}
+  bool traverse(const Request&, const RouteHandleTraverser<RouteHandleIf>&)
+      const {
+    return false;
+  }
 
   template <class Request>
   static ReplyT<Request> route(const Request& req) {
@@ -69,6 +70,6 @@ std::shared_ptr<RouteHandleIf> makeNullOrSingletonRoute(
   return std::move(rh[0]);
 }
 
-} // mcrouter
-}
-} // facebook::memcache
+} // namespace mcrouter
+} // namespace memcache
+} // namespace facebook

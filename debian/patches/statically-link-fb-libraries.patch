@@ -5,34 +5,33 @@ Author: Giuseppe Lavagetto <glavagetto@wikimedia.org>
 Forwarded: No
 Last-Update: 2017-03-28
 
-index edd4201..a42c893 100644
-Index: b/configure.ac
+Index: mcrouter-0.41.0/mcrouter/configure.ac
 ===================================================================
---- a/configure.ac	2018-03-28 18:56:02.569241211 +0200
-+++ b/configure.ac	2018-03-28 18:56:53.060767512 +0200
-@@ -111,14 +111,7 @@
- AC_CHECK_LIB([z], [gzread], [], [AC_MSG_ERROR([Unable to find zlib])])
- AC_CHECK_LIB([double-conversion],[ceil],[],[AC_MSG_ERROR(
+--- mcrouter-0.41.0.orig/mcrouter/configure.ac
++++ mcrouter-0.41.0/mcrouter/configure.ac
+@@ -123,14 +123,10 @@
               [Please install double-conversion library])])
+ AC_CHECK_LIB([dl], [dlopen], [])
+ AC_CHECK_LIB([iberty], [cplus_demangle_v3_callback], [])
 -AC_CHECK_LIB([folly],[getenv],[],[AC_MSG_ERROR(
 -             [Please install the folly library])])
+ AC_CHECK_LIB([sodium],[sodium_init],[],[AC_MSG_ERROR(
+              [Please install the libsodium library])])
+ AC_CHECK_LIB([fizz],[getenv],[],[AC_MSG_ERROR(
+              [Please install the fizz library])])
 -AC_CHECK_HEADER([folly/Likely.h], [], [AC_MSG_ERROR(
--[Couldn't find folly, please download from https://github.com/facebook/folly]
--)], [])
--AC_CHECK_LIB([wangle], [getenv], [], [AC_MSG_ERROR(
--             [Please install the wangle library])])
--
-+AC_CHECK_LIB([dl], [dlopen], [])
- # Checks for typedefs, structures, and compiler characteristics.
- AC_HEADER_STDBOOL
- AC_C_CONST
-@@ -154,7 +147,8 @@
- 
+-                [Could not find folly, please download from https://github.com/facebook/folly])], [])
+
+ # Commenting out the wangle dependency from here, because there is a tricky
+ # inter-library dependency that resolves with the right order of LDFLAGS, and
+@@ -173,8 +169,8 @@
+
  LIBS="$LIBS $BOOST_LDFLAGS $BOOST_CONTEXT_LIB $BOOST_FILESYSTEM_LIB \
        $BOOST_PROGRAM_OPTIONS_LIB $BOOST_SYSTEM_LIB $BOOST_REGEX_LIB \
--      $BOOST_THREAD_LIB -lpthread -pthread"
-+      $BOOST_THREAD_LIB -lpthread -pthread -l:libwangle.a -l:libfolly.a \
-+      -liberty -lunwind"
- 
+-      $BOOST_THREAD_LIB -lpthread -pthread -ldl -lunwind \
+-      -lbz2 -llz4 -llzma -lsnappy -lzstd"
++      $BOOST_THREAD_LIB -lpthread -pthread -ldl -lunwind -l:libwangle.a\
++      -lbz2 -llz4 -llzma -lsnappy -lzstd -liberty"
+
  AM_PATH_PYTHON([2.6],, [:])
  AM_CONDITIONAL([HAVE_PYTHON], [test "$PYTHON" != :])

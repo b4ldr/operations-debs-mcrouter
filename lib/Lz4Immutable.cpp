@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2016-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
- *  This source code is licensed under the MIT license found in the LICENSE
- *  file in the root directory of this source tree.
- *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 #include "Lz4Immutable.h"
 
 #include <folly/Format.h>
@@ -162,7 +162,7 @@ uint16_t peekLE(const IovecCursor& cursor) {
  * @param diff  Result of XOR between two numbers.
  * @return      The number of bytes that are common in the two numbers.
  */
-size_t numCommonBytes(register size_t diff) {
+size_t numCommonBytes(size_t diff) {
 #if (defined(__clang__) || ((__GNUC__ * 100 + __GNUC_MINOR__) >= 304))
   if (folly::Endian::order == folly::Endian::Order::LITTLE) {
     // __builtin_ctzll returns the number of trailling zeros in the binary
@@ -307,6 +307,7 @@ size_t Lz4Immutable::compressCommon(
   // Lower and upper limit to where the output buffer can go.
   const uint8_t* const outputStart = output;
   const uint8_t* const outputLimit = output + maxOutputSize;
+  (void)outputLimit;
 
   // Controls the compression main loop.
   bool running = true;
@@ -500,6 +501,7 @@ std::unique_ptr<folly::IOBuf> Lz4Immutable::decompress(
   // Lower and upper limit to where the output buffer can go.
   const uint8_t* outputStart = output;
   const uint8_t* outputLimit = output + uncompressedSize;
+  (void)outputLimit;
 
   IovecCursor source(iov, iovcnt);
   IovecCursor match = dicCursor;
